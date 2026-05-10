@@ -529,6 +529,10 @@ function Game:mousepressed(x, y, button, istouch, presses)
   self.stateGraph:mousepressed(x, y, button, istouch, presses)
 end
 
+function Game:mousereleased(x, y, button, istouch, presses)
+  self.stateGraph:mousereleased(x, y, button, istouch, presses)
+end
+
 function Game:textinput(text)
   self.stateGraph:textinput(text)
 end

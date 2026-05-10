@@ -31,6 +31,12 @@ function love.mousepressed(x, y, button, istouch, presses)
   end
 end
 
+function love.mousereleased(x, y, button, istouch, presses)
+  if app and app.mousereleased then
+    app:mousereleased(x, y, button, istouch, presses)
+  end
+end
+
 function love.textinput(text)
   if app and app.textinput then
     app:textinput(text)

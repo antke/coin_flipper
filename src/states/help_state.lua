@@ -37,8 +37,8 @@ local SECTIONS = {
     title = "Controls",
     lines = {
       "Menu: Start Run opens Run Setup, Continue Run resumes a save, and Collection / Records / Meta / Help stay available.",
-      "Loadout: click coins and slot buttons or use arrow keys plus number keys.",
-      "Stage: choose Heads/Tails, resolve the batch, or use visible buttons.",
+      "Loadout: click a coin for the next slot, drag to a slot, or click a filled slot to clear it.",
+      "Stage: click Heads or Tails once to call and flip the full batch.",
       "Reward / Encounter / Shop / Meta: click options or use number keys plus the labeled shortcuts on screen.",
       "Pause: press Esc or P during a run to resume, save and quit, or abandon the run.",
     },

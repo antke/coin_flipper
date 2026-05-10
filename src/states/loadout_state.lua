@@ -13,20 +13,10 @@ local Validator = require("src.core.validator")
 local LoadoutState = {}
 LoadoutState.__index = LoadoutState
 
-local COLLECTION_BUTTON_HEIGHT = 30
-local COLLECTION_BUTTON_GAP = 6
-local SCROLL_BUTTON_HEIGHT = 24
-
-local function getWrappedLineCount(text, width)
-  local font = love.graphics.getFont()
-  local _, wrapped = font:getWrap(tostring(text or ""), math.max(1, width))
-  return math.max(1, #wrapped)
-end
-
-local function getPreviewCardHeight(card, width)
-  local descriptionLines = getWrappedLineCount(card.description, math.max(1, width - 18))
-  return 24 + (descriptionLines * Theme.spacing.lineHeight) + 8
-end
+local COLLECTION_CARD_WIDTH = 158
+local COLLECTION_CARD_HEIGHT = 104
+local COLLECTION_CARD_GAP = 12
+local SCROLL_BUTTON_WIDTH = 30
 
 function LoadoutState.new()
   return setmetatable({
@@ -37,11 +27,33 @@ function LoadoutState.new()
     statusMessage = "",
     collectionButtons = {},
     actionButtons = {},
+    slotRects = {},
+    dragCoinId = nil,
+    dragStartX = nil,
+    dragStartY = nil,
+    detailCoinId = nil,
   }, LoadoutState)
 end
 
-local function getVisibleRowCount(height)
-  return math.max(1, math.floor((height + COLLECTION_BUTTON_GAP) / (COLLECTION_BUTTON_HEIGHT + COLLECTION_BUTTON_GAP)))
+local function getDistanceSquared(x1, y1, x2, y2)
+  local dx = (x2 or 0) - (x1 or 0)
+  local dy = (y2 or 0) - (y1 or 0)
+  return (dx * dx) + (dy * dy)
+end
+
+local function getVisibleCardCount(width)
+  return math.max(1, math.floor((width + COLLECTION_CARD_GAP) / (COLLECTION_CARD_WIDTH + COLLECTION_CARD_GAP)))
+end
+
+local function drawNumberBadge(app, number, x, y, size)
+  size = size or 24
+  love.graphics.setColor(0.03, 0.04, 0.07, 1.0)
+  love.graphics.circle("fill", x + (size / 2), y + (size / 2), size / 2)
+  Theme.applyColor(Theme.colors.accent)
+  love.graphics.circle("line", x + (size / 2), y + (size / 2), size / 2)
+  love.graphics.setFont(app.fonts.small)
+  Theme.applyColor(Theme.colors.text)
+  love.graphics.printf(tostring(number), x, y + math.floor((size - app.fonts.small:getHeight()) / 2), size, "center")
 end
 
 function LoadoutState:clampCollectionOffset(app, visibleRows)
@@ -66,21 +78,18 @@ function LoadoutState:getLayout(app)
   local gap = Theme.spacing.blockGap
   local width = love.graphics.getWidth()
   local height = love.graphics.getHeight()
-  local panelY = 96
+  local panelY = 82
   local footerMetrics = Layout.getFooterMetrics(height, {
     buttonHeight = 38,
-    buttonRows = 3,
+    buttonRows = 1,
     statusHeight = 44,
     extraSpacing = Theme.spacing.statusPadding,
   })
   local availableHeight = math.max(220, footerMetrics.contentBottomY - panelY)
-  local collectionWidth = 420
-  local rightX = padding + collectionWidth + gap
-  local rightWidth = width - rightX - padding
-  local topRightHeight = math.floor((availableHeight - gap) * 0.56)
-  local bottomRightY = panelY + topRightHeight + gap
-  local bottomRightHeight = availableHeight - topRightHeight - gap
-  local bottomPanelWidth = math.floor((rightWidth - gap) / 2)
+  local contentWidth = width - (padding * 2)
+  local topHeight = math.min(170, math.floor(availableHeight * 0.34))
+  local slotY = panelY + topHeight + gap
+  local slotHeight = availableHeight - topHeight - gap
 
   return {
     padding = padding,
@@ -91,13 +100,10 @@ function LoadoutState:getLayout(app)
     panelY = panelY,
     footerMetrics = footerMetrics,
     availableHeight = availableHeight,
-    collectionWidth = collectionWidth,
-    rightX = rightX,
-    rightWidth = rightWidth,
-    topRightHeight = topRightHeight,
-    bottomRightY = bottomRightY,
-    bottomRightHeight = bottomRightHeight,
-    bottomPanelWidth = bottomPanelWidth,
+    contentWidth = contentWidth,
+    topHeight = topHeight,
+    slotY = slotY,
+    slotHeight = slotHeight,
   }
 end
 
@@ -186,10 +192,30 @@ function LoadoutState:getSelectionStatusMessage(app, reconciliation)
     return "Persisted build was reconciled. Review the slot notes before starting."
   end
 
-  return string.format(
-    "Click a coin or use arrow keys, then use slot buttons or 1-%d to assign. Enter starts the stage.",
-    app.runState.maxActiveCoinSlots
-  )
+  return "Click coin = next slot. Drag coin = chosen slot. Click slot = clear."
+end
+
+function LoadoutState:getFirstOpenSlot(app)
+  for slotIndex = 1, app.runState.maxActiveCoinSlots do
+    if not self.selectionSlots[slotIndex] then
+      return slotIndex
+    end
+  end
+
+  return nil
+end
+
+function LoadoutState:assignCoinToNextOpenSlot(app, coinId)
+  local slotIndex = self:getFirstOpenSlot(app)
+
+  if not slotIndex then
+    self.statusMessage = "Build full. Drop on a slot to replace, or click a slot to clear."
+    return false, "no_open_slot"
+  end
+
+  self.selectionSlots = LoadoutSystem.assignCoinToSlot(app.runState, self.selectionSlots, coinId, slotIndex)
+  self.statusMessage = string.format("Added %s to slot %d.", app:getCoinName(coinId), slotIndex)
+  return true
 end
 
 function LoadoutState:scrollCollection(app, direction)
@@ -239,19 +265,18 @@ end
 
 function LoadoutState:buildCollectionButtons(app, area)
   local buttons = {}
-  local buttonHeight = COLLECTION_BUTTON_HEIGHT
-  local gap = COLLECTION_BUTTON_GAP
-  local overflow = #app.runState.collectionCoinIds > getVisibleRowCount(area.height)
-  local currentY = area.y
-  local listHeight = area.height
+  local gap = COLLECTION_CARD_GAP
+  local overflow = #app.runState.collectionCoinIds > getVisibleCardCount(area.width)
+  local listX = area.x
+  local listWidth = area.width
 
   if overflow then
     table.insert(buttons, {
       x = area.x,
-      y = currentY,
-      width = area.width,
-      height = SCROLL_BUTTON_HEIGHT,
-      label = "Scroll Up",
+      y = area.y + math.floor((COLLECTION_CARD_HEIGHT - 42) / 2),
+      width = SCROLL_BUTTON_WIDTH,
+      height = 42,
+      label = "<",
       variant = "warning",
       disabled = self.collectionScrollOffset <= 1,
       onClick = function()
@@ -259,34 +284,38 @@ function LoadoutState:buildCollectionButtons(app, area)
       end,
     })
 
-    currentY = currentY + SCROLL_BUTTON_HEIGHT + gap
-    listHeight = listHeight - ((SCROLL_BUTTON_HEIGHT + gap) * 2)
+    listX = listX + SCROLL_BUTTON_WIDTH + gap
+    listWidth = listWidth - ((SCROLL_BUTTON_WIDTH + gap) * 2)
   end
 
-  local visibleRows = getVisibleRowCount(listHeight)
-  self.collectionVisibleRows = visibleRows
-  self:ensureSelectedCoinVisible(app, visibleRows)
+  local visibleCards = getVisibleCardCount(listWidth)
+  self.collectionVisibleRows = visibleCards
+  self:ensureSelectedCoinVisible(app, visibleCards)
 
   local startIndex = self.collectionScrollOffset
-  local endIndex = math.min(#app.runState.collectionCoinIds, startIndex + visibleRows - 1)
+  local endIndex = math.min(#app.runState.collectionCoinIds, startIndex + visibleCards - 1)
 
   for index = startIndex, endIndex do
     local coinId = app.runState.collectionCoinIds[index]
 
     local equippedMarker = ""
+    local equippedSlotIndex = nil
 
     for slot = 1, app.runState.maxActiveCoinSlots do
       if self.selectionSlots[slot] == coinId then
         equippedMarker = string.format(" [slot %d]", slot)
+        equippedSlotIndex = slot
         break
       end
     end
 
     table.insert(buttons, {
-      x = area.x,
-      y = currentY,
-      width = area.width,
-      height = buttonHeight,
+      x = listX + ((index - startIndex) * (COLLECTION_CARD_WIDTH + gap)),
+      y = area.y,
+      width = COLLECTION_CARD_WIDTH,
+      height = COLLECTION_CARD_HEIGHT,
+      coinId = coinId,
+      equippedSlotIndex = equippedSlotIndex,
       label = string.format("%s%s", app:getCoinName(coinId), equippedMarker),
       focused = index == self.selectedCollectionIndex,
       variant = index == self.selectedCollectionIndex and "primary" or "default",
@@ -295,17 +324,15 @@ function LoadoutState:buildCollectionButtons(app, area)
         return true
       end,
     })
-
-    currentY = currentY + buttonHeight + gap
   end
 
   if overflow then
     table.insert(buttons, {
-      x = area.x,
-      y = area.y + area.height - SCROLL_BUTTON_HEIGHT,
-      width = area.width,
-      height = SCROLL_BUTTON_HEIGHT,
-      label = "Scroll Down",
+      x = area.x + area.width - SCROLL_BUTTON_WIDTH,
+      y = area.y + math.floor((COLLECTION_CARD_HEIGHT - 42) / 2),
+      width = SCROLL_BUTTON_WIDTH,
+      height = 42,
+      label = ">",
       variant = "warning",
       disabled = endIndex >= #app.runState.collectionCoinIds,
       onClick = function()
@@ -318,47 +345,95 @@ function LoadoutState:buildCollectionButtons(app, area)
   return buttons
 end
 
+function LoadoutState:drawCollectionCards(app, buttons, mouseX, mouseY)
+  for _, button in ipairs(buttons or {}) do
+    if button.coinId then
+      local coin = Coins.getById(button.coinId)
+      local hovered = mouseX and mouseY and Button.containsPoint(button, mouseX, mouseY)
+      local selected = button.focused or hovered
+
+      love.graphics.setColor(0.04, 0.05, 0.08, 0.94)
+      love.graphics.rectangle("fill", button.x, button.y, button.width, button.height)
+      Theme.applyColor(selected and Theme.colors.accent or Theme.colors.panelBorder)
+      love.graphics.setLineWidth(selected and 3 or 1)
+      love.graphics.rectangle("line", button.x, button.y, button.width, button.height)
+      love.graphics.setLineWidth(1)
+
+      CoinArt.draw(button.coinId, button.x + math.floor((button.width - 56) / 2), button.y + 12, 56, {
+        selected = selected,
+        tilt = selected and -0.05 or 0.02,
+      })
+
+      love.graphics.setFont(app.fonts.body)
+      Theme.applyColor(Theme.colors.text)
+      love.graphics.printf(coin and coin.name or button.coinId, button.x + 8, button.y + 74, button.width - 16, "center")
+
+      if button.equippedSlotIndex then
+        drawNumberBadge(app, button.equippedSlotIndex, button.x + button.width - 32, button.y + 8, 24)
+      end
+    else
+      Button.drawTextButton(button.x, button.y, button.width, button.height, button.label, {
+        disabled = button.disabled,
+        variant = button.variant,
+      })
+    end
+  end
+end
+
+function LoadoutState:getCoinButtonAtPoint(x, y)
+  for _, button in ipairs(self.collectionButtons or {}) do
+    if button.coinId and Button.containsPoint(button, x, y) then
+      return button
+    end
+  end
+
+  return nil
+end
+
+function LoadoutState:drawCoinDetailOverlay(app, coinId, x, y)
+  local coin = coinId and Coins.getById(coinId) or nil
+
+  if not coin then
+    return
+  end
+
+  local width = 330
+  local height = 150
+  local screenWidth = love.graphics.getWidth()
+  local screenHeight = love.graphics.getHeight()
+  local overlayX = math.min(x + 18, screenWidth - width - Theme.spacing.screenPadding)
+  local overlayY = math.min(y + 18, screenHeight - height - Theme.spacing.screenPadding)
+
+  overlayX = math.max(Theme.spacing.screenPadding, overlayX)
+  overlayY = math.max(Theme.spacing.screenPadding, overlayY)
+
+  love.graphics.setColor(0.03, 0.04, 0.07, 0.96)
+  love.graphics.rectangle("fill", overlayX + 4, overlayY + 4, width, height)
+  love.graphics.setColor(0.08, 0.10, 0.15, 0.98)
+  love.graphics.rectangle("fill", overlayX, overlayY, width, height)
+  Theme.applyColor(Theme.colors.accent)
+  love.graphics.setLineWidth(2)
+  love.graphics.rectangle("line", overlayX, overlayY, width, height)
+  love.graphics.setLineWidth(1)
+
+  CoinArt.draw(coin, overlayX + 14, overlayY + 18, 62, { selected = true, tilt = -0.04 })
+  love.graphics.setFont(app.fonts.body)
+  Theme.applyColor(Theme.colors.text)
+  love.graphics.print(string.format("%s (%s)", coin.name, coin.rarity), overlayX + 90, overlayY + 16)
+  love.graphics.setFont(app.fonts.small)
+  Theme.applyColor(Theme.colors.mutedText)
+  love.graphics.printf(coin.description, overlayX + 90, overlayY + 42, width - 106, "left")
+  Theme.applyColor(Theme.colors.warning)
+  love.graphics.printf(string.format("Tags: %s", table.concat(coin.tags or {}, ", ")), overlayX + 14, overlayY + 118, width - 28, "left")
+end
+
 function LoadoutState:buildActionButtons(app, layout)
   local padding = layout.padding
   local gap = Theme.spacing.itemGap
-  local maxSlots = app.runState.maxActiveCoinSlots
   local rowWidth = layout.width - (padding * 2)
-  local slotButtonWidth = math.floor((rowWidth - (gap * math.max(0, maxSlots - 1))) / maxSlots)
   local buttonHeight = layout.footerMetrics.buttonHeight
   local actionY = layout.footerMetrics.buttonY
-  local clearY = actionY - layout.footerMetrics.rowGap - buttonHeight
-  local assignY = clearY - layout.footerMetrics.rowGap - buttonHeight
   local buttons = {}
-  local selectedCoinId = app.runState.collectionCoinIds[self.selectedCollectionIndex]
-
-  for slotIndex = 1, maxSlots do
-    local buttonX = padding + ((slotIndex - 1) * (slotButtonWidth + gap))
-
-    table.insert(buttons, {
-      x = buttonX,
-      y = assignY,
-      width = slotButtonWidth,
-      height = buttonHeight,
-      label = string.format("Set Slot %d", slotIndex),
-      variant = "primary",
-      disabled = not selectedCoinId,
-      onClick = function()
-        return self:assignSelectedCoinToSlot(app, slotIndex)
-      end,
-    })
-
-    table.insert(buttons, {
-      x = buttonX,
-      y = clearY,
-      width = slotButtonWidth,
-      height = buttonHeight,
-      label = string.format("Clear %d", slotIndex),
-      variant = "warning",
-      onClick = function()
-        return self:clearSelectedSlot(app, slotIndex)
-      end,
-    })
-  end
 
   local actionWidth = math.floor((rowWidth - (gap * 2)) / 3)
 
@@ -367,7 +442,7 @@ function LoadoutState:buildActionButtons(app, layout)
     y = actionY,
     width = actionWidth,
     height = buttonHeight,
-    label = "Back to Menu",
+    label = "< MENU",
     variant = "warning",
     onClick = function()
       return app.stateGraph:request("cancel_to_menu")
@@ -379,7 +454,7 @@ function LoadoutState:buildActionButtons(app, layout)
     y = actionY,
     width = actionWidth,
     height = buttonHeight,
-    label = "Reset Build",
+    label = "RESET",
     variant = "default",
     onClick = function()
       return self:resetSelection(app)
@@ -391,7 +466,7 @@ function LoadoutState:buildActionButtons(app, layout)
     y = actionY,
     width = actionWidth,
     height = buttonHeight,
-    label = "Start Stage",
+    label = "START",
     variant = "success",
     onClick = function()
       return self:tryStartStage(app)
@@ -490,203 +565,188 @@ end
 
 function LoadoutState:draw(app)
   local currentCoinId = app.runState.collectionCoinIds[self.selectedCollectionIndex]
-  local currentCoin = Coins.getById(currentCoinId)
   local layout = self:getLayout(app)
   local stagePreview = app:getPlannedStagePreviewData()
   local stageDefinition = stagePreview.stageDefinition
   local selectedBuildKey = self:formatBuildSummary(self.selectionSlots, app.runState.maxActiveCoinSlots)
   local reconciledBuildKey = self.reconciliation and self:formatBuildSummary(self.reconciliation.selectionSlots, app.runState.maxActiveCoinSlots) or nil
+  local stageTitle = stageDefinition and (stageDefinition.label or stageDefinition.name or stageDefinition.id) or "Loadout"
+  local ruleCount = #(stagePreview.cards or {})
 
   love.graphics.setFont(app.fonts.heading)
   Theme.applyColor(Theme.colors.text)
-  love.graphics.print(stageDefinition and stageDefinition.label or "Loadout", layout.padding, layout.headerY)
+  love.graphics.print(string.format("Round %d/%d  %s", app.runState.roundIndex, app.config.totalStageCount(), stageTitle), layout.padding, layout.headerY)
   love.graphics.setFont(app.fonts.body)
   Theme.applyColor(Theme.colors.mutedText)
-  love.graphics.print(string.format("Round %d of %d", app.runState.roundIndex, app.config.totalStageCount()), layout.padding, layout.headerY + 30)
+  love.graphics.printf(
+    string.format(
+      "Target %d  |  Flips %d  |  Rules %s",
+      stageDefinition and stageDefinition.targetScore or 0,
+      stagePreview.flipsPerStage or 0,
+      ruleCount > 0 and tostring(ruleCount) or "none"
+    ),
+    layout.padding,
+    layout.headerY + 6,
+    layout.contentWidth,
+    "right"
+  )
 
-  Panel.draw(layout.padding, layout.panelY, layout.collectionWidth, layout.availableHeight, "Collection")
-  Panel.draw(layout.rightX, layout.panelY, layout.rightWidth, layout.topRightHeight, "Current Build")
-  Panel.draw(layout.rightX, layout.bottomRightY, layout.bottomPanelWidth, layout.bottomRightHeight, "Coin Details")
-  Panel.draw(layout.rightX + layout.bottomPanelWidth + layout.gap, layout.bottomRightY, layout.bottomPanelWidth, layout.bottomRightHeight, stagePreview.title)
+  Panel.draw(layout.padding, layout.panelY, layout.contentWidth, layout.topHeight, "Choose Coin")
+  Panel.draw(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Slots")
 
-  local collectionArea = Panel.getContentArea(layout.padding, layout.panelY, layout.collectionWidth, layout.availableHeight, "Collection")
-  local buildArea = Panel.getContentArea(layout.rightX, layout.panelY, layout.rightWidth, layout.topRightHeight, "Current Build")
-  local detailArea = Panel.getContentArea(layout.rightX, layout.bottomRightY, layout.bottomPanelWidth, layout.bottomRightHeight, "Coin Details")
-  local previewArea = Panel.getContentArea(layout.rightX + layout.bottomPanelWidth + layout.gap, layout.bottomRightY, layout.bottomPanelWidth, layout.bottomRightHeight, stagePreview.title)
+  local collectionArea = Panel.getContentArea(layout.padding, layout.panelY, layout.contentWidth, layout.topHeight, "Choose Coin")
+  local buildArea = Panel.getContentArea(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Slots")
 
   love.graphics.setFont(app.fonts.body)
   local mouseX, mouseY = love.mouse.getPosition()
-  Button.drawButtons(self:buildCollectionButtons(app, collectionArea), mouseX, mouseY)
+  local collectionButtons = self:buildCollectionButtons(app, collectionArea)
+  self:drawCollectionCards(app, collectionButtons, mouseX, mouseY)
+  local hoveredCoinButton = self:getCoinButtonAtPoint(mouseX, mouseY)
 
   local slotLines = {
-    string.format("Max active slots: %d", app.runState.maxActiveCoinSlots),
-    string.format("Current selection: %s", selectedBuildKey ~= "" and selectedBuildKey or "(empty)"),
-    string.format("Filled slots: %d", Loadout.countEquipped(self.selectionSlots, app.runState.maxActiveCoinSlots)),
-    "",
+    string.format("%d/%d slots", Loadout.countEquipped(self.selectionSlots, app.runState.maxActiveCoinSlots), app.runState.maxActiveCoinSlots),
+    "Click slot: clear | Drop coin: place",
   }
 
   if reconciledBuildKey and reconciledBuildKey ~= selectedBuildKey then
-    table.insert(slotLines, 2, string.format("Starting build after reconciliation: %s", reconciledBuildKey ~= "" and reconciledBuildKey or "(empty)"))
+    table.insert(slotLines, string.format("Reconciled: %s", reconciledBuildKey ~= "" and reconciledBuildKey or "(empty)"))
   end
 
-  for _, line in ipairs(self:getReconciliationLines(app)) do
-    table.insert(slotLines, line)
-  end
-
-  table.insert(slotLines, "")
-
-  for slotIndex = 1, app.runState.maxActiveCoinSlots do
-    local coinId = self.selectionSlots[slotIndex]
-    table.insert(slotLines, string.format("Slot %d: %s", slotIndex, coinId and app:getCoinName(coinId) or "(empty)"))
-  end
-
-  local slotCardHeight = 92
+  local slotCardHeight = math.min(150, buildArea.height - 42)
   local slotGap = Theme.spacing.itemGap
   local slotCardWidth = math.floor((buildArea.width - (slotGap * math.max(0, app.runState.maxActiveCoinSlots - 1))) / app.runState.maxActiveCoinSlots)
+  self.slotRects = {}
+  local slotsY = buildArea.y + 34
 
   for slotIndex = 1, app.runState.maxActiveCoinSlots do
     local coinId = self.selectionSlots[slotIndex]
     local cardX = buildArea.x + ((slotIndex - 1) * (slotCardWidth + slotGap))
-    local cardY = buildArea.y
+    local cardY = slotsY
     local selected = coinId ~= nil and coinId == currentCoinId
 
-    love.graphics.setColor(Theme.colors.panel[1], Theme.colors.panel[2], Theme.colors.panel[3], 0.88)
-    love.graphics.rectangle("fill", cardX, cardY, slotCardWidth, slotCardHeight, 10, 10)
+    self.slotRects[slotIndex] = { x = cardX, y = cardY, width = slotCardWidth, height = slotCardHeight }
+
+    love.graphics.setColor(0.04, 0.05, 0.08, 0.94)
+    love.graphics.rectangle("fill", cardX, cardY, slotCardWidth, slotCardHeight)
     Theme.applyColor(selected and Theme.colors.accent or Theme.colors.panelBorder)
-    love.graphics.setLineWidth(selected and 2 or 1)
-    love.graphics.rectangle("line", cardX, cardY, slotCardWidth, slotCardHeight, 10, 10)
+    love.graphics.setLineWidth(selected and 3 or 2)
+    love.graphics.rectangle("line", cardX, cardY, slotCardWidth, slotCardHeight)
     love.graphics.setLineWidth(1)
 
     if coinId then
-      CoinArt.drawCard(coinId, cardX + math.floor((slotCardWidth - 62) / 2), cardY + 6, 62, 62, {
+      local coin = Coins.getById(coinId)
+      local iconSize = math.min(82, slotCardHeight - 42)
+      local iconX = cardX + 26
+      local iconY = cardY + math.floor((slotCardHeight - iconSize) / 2)
+
+      CoinArt.draw(coinId, iconX, iconY, iconSize, {
         selected = selected,
         tilt = selected and -0.04 or 0.025,
       })
+
+      love.graphics.setFont(app.fonts.body)
+      Theme.applyColor(Theme.colors.text)
+      love.graphics.printf(coin and coin.name or coinId, cardX + 126, cardY + 26, slotCardWidth - 146, "left")
+      love.graphics.setFont(app.fonts.small)
+      Theme.applyColor(Theme.colors.mutedText)
+      love.graphics.printf(coin and coin.description or "", cardX + 126, cardY + 54, slotCardWidth - 146, "left")
     else
       Theme.applyColor(Theme.colors.panelBorder)
-      love.graphics.rectangle("line", cardX + math.floor((slotCardWidth - 44) / 2), cardY + 10, 44, 44, 8, 8)
+      love.graphics.rectangle("line", cardX + math.floor((slotCardWidth - 44) / 2), cardY + 10, 44, 44)
       Theme.applyColor(Theme.colors.mutedText)
-      love.graphics.printf("?", cardX, cardY + 22, slotCardWidth, "center")
+      love.graphics.printf("DROP", cardX, cardY + 22, slotCardWidth, "center")
     end
 
-    love.graphics.setFont(app.fonts.small)
-    Theme.applyColor(Theme.colors.mutedText)
-    love.graphics.printf(string.format("Slot %d", slotIndex), cardX + 6, cardY + 60, slotCardWidth - 12, "center")
+    drawNumberBadge(app, slotIndex, cardX + 10, cardY + 10, 24)
   end
 
-  Layout.drawWrappedLines(
-    slotLines,
-    buildArea.x,
-    buildArea.y + slotCardHeight + Theme.spacing.itemGap,
-    buildArea.width,
-    Theme.colors.text,
-    Theme.spacing.lineHeight,
-    buildArea.height - slotCardHeight - Theme.spacing.itemGap
-  )
-
-  local detailLines = {}
-
-  if currentCoin then
-    detailLines = {
-      string.format("%s (%s)", currentCoin.name, currentCoin.rarity),
-      currentCoin.description,
-      "",
-      string.format("Tags: %s", table.concat(currentCoin.tags or {}, ", ")),
-    }
-  else
-    detailLines = { "No coin highlighted." }
-  end
-
-  local detailTextY = detailArea.y
-  local detailTextHeight = detailArea.height
-
-  if currentCoin then
-    local artSize = math.min(96, math.max(60, math.floor(detailArea.width * 0.28)))
-    CoinArt.draw(currentCoin, detailArea.x + math.floor((detailArea.width - artSize) / 2), detailArea.y, artSize, {
-      selected = true,
-      tilt = -0.08,
-    })
-    detailTextY = detailArea.y + artSize + Theme.spacing.itemGap
-    detailTextHeight = detailArea.height - artSize - Theme.spacing.itemGap
-  end
-
-  Layout.drawWrappedLines(
-    detailLines,
-    detailArea.x,
-    detailTextY,
-    detailArea.width,
-    Theme.colors.text,
-    Theme.spacing.lineHeight,
-    detailTextHeight
-  )
-
-  local previewLinesHeight = 0
-  for _, line in ipairs(stagePreview.lines or {}) do
-    previewLinesHeight = previewLinesHeight + (getWrappedLineCount(line, previewArea.width) * Theme.spacing.lineHeight)
-  end
-
-  previewLinesHeight = previewLinesHeight + Theme.spacing.itemGap
-  local previewTextBottom = math.min(previewArea.height, previewLinesHeight)
-
-  Layout.drawWrappedLines(
-    stagePreview.lines,
-    previewArea.x,
-    previewArea.y,
-    previewArea.width,
-    Theme.colors.text,
-    Theme.spacing.lineHeight,
-    math.min(previewArea.height, previewTextBottom)
-  )
-
-  local cardY = previewArea.y + previewTextBottom
-  local remainingCardHeight = previewArea.height - previewTextBottom
-
-  for _, card in ipairs(stagePreview.cards or {}) do
-    local cardHeight = getPreviewCardHeight(card, previewArea.width)
-
-    if cardY + cardHeight > (previewArea.y + previewArea.height) then
-      break
-    end
-
-    love.graphics.setColor(Theme.colors.panel[1], Theme.colors.panel[2], Theme.colors.panel[3], 0.98)
-    love.graphics.rectangle("fill", previewArea.x, cardY, previewArea.width, cardHeight, 10, 10)
-    love.graphics.setColor(Theme.colors.panelBorder[1], Theme.colors.panelBorder[2], Theme.colors.panelBorder[3], 1.0)
-    love.graphics.rectangle("line", previewArea.x, cardY, previewArea.width, cardHeight, 10, 10)
-    Theme.applyColor(stagePreview.isBoss and Theme.colors.danger or Theme.colors.accent)
-    love.graphics.rectangle("fill", previewArea.x, cardY, 8, cardHeight, 10, 10)
-    love.graphics.setFont(app.fonts.body)
-    Theme.applyColor(Theme.colors.text)
-    love.graphics.print(card.name, previewArea.x + 16, cardY + 6)
-    Theme.applyColor(Theme.colors.mutedText)
-    love.graphics.printf(card.description, previewArea.x + 16, cardY + 24, previewArea.width - 24, "left")
-
-    cardY = cardY + cardHeight + Theme.spacing.itemGap
-    remainingCardHeight = previewArea.height - (cardY - previewArea.y)
-
-    if remainingCardHeight <= 0 then
-      break
-    end
-  end
+  Layout.drawWrappedLines(slotLines, buildArea.x, buildArea.y, buildArea.width, Theme.colors.text, Theme.spacing.lineHeight, 34)
 
   Theme.applyColor(Theme.colors.warning)
   love.graphics.printf(self.statusMessage, layout.padding, layout.height - layout.footerMetrics.statusHeight + Theme.spacing.statusPadding, layout.width - (layout.padding * 2), "left")
 
   Button.drawButtons(self:buildActionButtons(app, layout), mouseX, mouseY)
+
+  local detailCoinId = hoveredCoinButton and hoveredCoinButton.coinId or self.detailCoinId
+
+  if detailCoinId then
+    self:drawCoinDetailOverlay(app, detailCoinId, mouseX, mouseY)
+  end
+
+  if self.dragCoinId then
+    local movedFarEnough = getDistanceSquared(self.dragStartX, self.dragStartY, mouseX, mouseY) > 64
+
+    if movedFarEnough then
+      CoinArt.draw(self.dragCoinId, mouseX - 28, mouseY - 28, 56, { selected = true, tilt = -0.06 })
+    end
+  end
+end
+
+function LoadoutState:getSlotAtPoint(x, y)
+  for slotIndex, rect in ipairs(self.slotRects or {}) do
+    if x >= rect.x and x <= (rect.x + rect.width) and y >= rect.y and y <= (rect.y + rect.height) then
+      return slotIndex
+    end
+  end
+
+  return nil
 end
 
 function LoadoutState:mousepressed(app, x, y, button)
+  local layout = self:getLayout(app)
+  local collectionArea = Panel.getContentArea(layout.padding, layout.panelY, layout.contentWidth, layout.topHeight, "Choose Coin")
+  local collectionButtons = self:buildCollectionButtons(app, collectionArea)
+
+  if button == 2 then
+    local coinButton = self:getCoinButtonAtPoint(x, y)
+    self.detailCoinId = coinButton and coinButton.coinId or nil
+    return
+  end
+
   if button ~= 1 then
     return
   end
 
-  local layout = self:getLayout(app)
-  local collectionArea = Panel.getContentArea(layout.padding, layout.panelY, layout.collectionWidth, layout.availableHeight, "Collection")
+  local slotIndex = self:getSlotAtPoint(x, y)
 
-  if Button.handleMousePressed(self:buildCollectionButtons(app, collectionArea), x, y) then
+  if slotIndex then
+    self:clearSelectedSlot(app, slotIndex)
+    return
+  end
+
+  local handled, _, clickedButton = Button.handleMousePressed(collectionButtons, x, y)
+
+  if handled then
+    if clickedButton and clickedButton.coinId then
+      self.dragCoinId = clickedButton.coinId
+      self.dragStartX = x
+      self.dragStartY = y
+    end
+
     return
   end
 
   Button.handleMousePressed(self:buildActionButtons(app, layout), x, y)
+end
+
+function LoadoutState:mousereleased(app, x, y, button)
+  if button ~= 1 or not self.dragCoinId then
+    return
+  end
+
+  local coinId = self.dragCoinId
+  local wasClick = getDistanceSquared(self.dragStartX, self.dragStartY, x, y) <= 64
+  self.dragCoinId = nil
+  self.dragStartX = nil
+  self.dragStartY = nil
+  local slotIndex = self:getSlotAtPoint(x, y)
+
+  if slotIndex then
+    self.selectionSlots = LoadoutSystem.assignCoinToSlot(app.runState, self.selectionSlots, coinId, slotIndex)
+    self.statusMessage = string.format("Placed %s in slot %d.", app:getCoinName(coinId), slotIndex)
+  elseif wasClick then
+    self:assignCoinToNextOpenSlot(app, coinId)
+  end
 end
 
 return LoadoutState

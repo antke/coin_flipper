@@ -138,6 +138,12 @@ function StateGraph:mousepressed(x, y, button, istouch, presses)
   end
 end
 
+function StateGraph:mousereleased(x, y, button, istouch, presses)
+  if self.current and self.current.mousereleased then
+    self.current:mousereleased(self.app, x, y, button, istouch, presses)
+  end
+end
+
 function StateGraph:textinput(text)
   if self.current and self.current.textinput then
     self.current:textinput(self.app, text)

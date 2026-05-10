@@ -24,6 +24,8 @@ function StageState.new()
   return setmetatable({
     statusMessage = "",
     buttons = {},
+    helpDialogOpen = false,
+    coinRowReveal = nil,
     reveal = nil,
   }, StageState)
 end
@@ -66,6 +68,17 @@ function StageState:startReveal(app, batchResult)
   }
 end
 
+function StageState:startCoinRowReveal(app, batchResult)
+  local coinCount = #(batchResult.perCoin or {})
+
+  self.coinRowReveal = {
+    batchId = batchResult.batchId,
+    elapsed = 0,
+    revealDuration = app.config.get("ui.batchRevealDuration", 0.75),
+    coinCount = coinCount,
+  }
+end
+
 function StageState:completeReveal(app)
   if not self:isRevealActive() then
     return false, "reveal_not_active"
@@ -101,6 +114,16 @@ function StageState:selectCall(app, call)
   return true
 end
 
+function StageState:callAndResolve(app, call)
+  local ok, reason = self:selectCall(app, call)
+
+  if not ok then
+    return false, reason
+  end
+
+  return self:tryResolveBatch(app)
+end
+
 function StageState:tryResolveBatch(app)
   if self:isRevealActive() then
     return self:completeReveal(app)
@@ -119,20 +142,27 @@ function StageState:tryResolveBatch(app)
   end
 
   self.statusMessage = string.format(
-    "Resolved batch %d. Reveal in progress. Stage score %d/%d. Flips remaining: %d.",
+    "Resolved batch %d. Stage score %d/%d. Flips remaining: %d.",
     batchResult.batchId,
     app.stageState.stageScore,
     app.stageState.targetScore,
     app.stageState.flipsRemaining
   )
 
-  self:startReveal(app, batchResult)
+  self:startCoinRowReveal(app, batchResult)
+
+  if batchResult.status ~= "active" then
+    self:startReveal(app, batchResult)
+  else
+    self.reveal = nil
+  end
+
   return true, batchResult
 end
 
 function StageState:buildButtons(app, x, y, width)
   local gap = Theme.spacing.itemGap
-  local buttonWidth = math.floor((width - (gap * 2)) / 3)
+  local buttonWidth = math.floor((width - gap) / 2)
   local buttonHeight = 42
   local stageActive = self:isStageActive(app)
   local revealActive = self:isRevealActive()
@@ -143,12 +173,12 @@ function StageState:buildButtons(app, x, y, width)
       y = y,
       width = buttonWidth,
       height = buttonHeight,
-      label = "Call Heads",
+      label = "HEADS",
       variant = app.selectedCall == "heads" and "primary" or "default",
       focused = app.selectedCall == "heads",
       disabled = not stageActive or revealActive,
       onClick = function()
-        return self:selectCall(app, "heads")
+        return self:callAndResolve(app, "heads")
       end,
     },
     {
@@ -156,62 +186,384 @@ function StageState:buildButtons(app, x, y, width)
       y = y,
       width = buttonWidth,
       height = buttonHeight,
-      label = "Call Tails",
+      label = "TAILS",
       variant = app.selectedCall == "tails" and "primary" or "default",
       focused = app.selectedCall == "tails",
       disabled = not stageActive or revealActive,
       onClick = function()
-        return self:selectCall(app, "tails")
-      end,
-    },
-    {
-      x = x + ((buttonWidth + gap) * 2),
-      y = y,
-      width = buttonWidth,
-      height = buttonHeight,
-      label = revealActive and (self.reveal and self.reveal.stageStatus ~= "active" and "Continue" or "Skip Reveal") or "Resolve Batch",
-      variant = revealActive and "warning" or "success",
-      disabled = not stageActive and not revealActive,
-      onClick = function()
-        return self:tryResolveBatch(app)
+        return self:callAndResolve(app, "tails")
       end,
     },
   }
+
+  if revealActive then
+    self.buttons = {
+      {
+        x = x,
+        y = y,
+        width = width,
+        height = buttonHeight,
+        label = self.reveal and self.reveal.stageStatus ~= "active" and "CONTINUE" or "CONTINUE",
+        variant = "warning",
+        onClick = function()
+          return self:tryResolveBatch(app)
+        end,
+      },
+    }
+  end
 
   return self.buttons
 end
 
 function StageState:getButtonLayout(app)
   local padding = Theme.spacing.screenPadding
-  local gap = Theme.spacing.blockGap
   local width = love.graphics.getWidth()
   local height = love.graphics.getHeight()
-  local topY = 84
-  local availableHeight = height - topY - padding
-  local topHeight = math.floor((availableHeight - gap) * 0.44)
-  local bottomY = topY + topHeight + gap
-  local bottomHeight = availableHeight - topHeight - gap
-  local bottomArea = Panel.getContentArea(padding, bottomY, width - (padding * 2), bottomHeight, "Breakdown + Controls")
-  local footerMetrics = Layout.getFooterMetrics(bottomArea.height, {
-    bottomPadding = 0,
-    extraSpacing = 0,
-  })
 
   return {
-    x = bottomArea.x,
-    y = bottomArea.y + footerMetrics.buttonY,
-    width = bottomArea.width,
-    textHeight = math.max(0, footerMetrics.contentBottomY),
+    x = padding,
+    y = height - padding - 42,
+    width = width - (padding * 2),
   }
+end
+
+function StageState:getHelpButtonLayout()
+  local padding = Theme.spacing.screenPadding
+  local size = 40
+  local width = love.graphics.getWidth()
+
+  return {
+    x = width - padding - size,
+    y = padding,
+    width = size,
+    height = size,
+    label = "?",
+    variant = self.helpDialogOpen and "primary" or "default",
+    onClick = function()
+      self.helpDialogOpen = not self.helpDialogOpen
+      return true
+    end,
+  }
+end
+
+function StageState:getHelpDialogLines(app)
+  local lines = {
+    "You are trying to hit the target score before flips run out.",
+    "Pick HEADS or TAILS. Each pick resolves the full equipped coin batch.",
+    "Matching coins add score through the current scoring rules.",
+    "",
+    "Current Breakdown:",
+  }
+
+  for _, line in ipairs(app:getScoreBreakdownLines(10)) do
+    table.insert(lines, line)
+  end
+
+  table.insert(lines, "")
+  table.insert(lines, "Controls:")
+  table.insert(lines, "- Click HEADS or TAILS: call and flip")
+  table.insert(lines, "- Left / H: call HEADS and flip")
+  table.insert(lines, "- Right / T: call TAILS and flip")
+  table.insert(lines, "- Space / Enter: skip reveal")
+  table.insert(lines, "- Esc: close this dialog")
+
+  if app:isDevControlsEnabled() then
+    table.insert(lines, "- F3: toggle debug overlay")
+  end
+
+  for _, line in ipairs(app:getDebugControlLines()) do
+    table.insert(lines, line)
+  end
+
+  return lines
+end
+
+function StageState:getHelpDialogLayout()
+  local width = love.graphics.getWidth()
+  local height = love.graphics.getHeight()
+  local padding = Theme.spacing.screenPadding
+  local dialogWidth = math.min(700, math.max(280, width - (padding * 4)))
+  local dialogHeight = math.min(460, math.max(260, height - (padding * 4)))
+
+  return {
+    x = math.floor((width - dialogWidth) / 2),
+    y = math.floor((height - dialogHeight) / 2),
+    width = dialogWidth,
+    height = dialogHeight,
+  }
+end
+
+function StageState:drawHelpDialog(app)
+  if not self.helpDialogOpen then
+    return
+  end
+
+  local width = love.graphics.getWidth()
+  local height = love.graphics.getHeight()
+  local dialog = self:getHelpDialogLayout()
+  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Help")
+  local closeButton = self:getHelpDialogCloseButton(dialog.x, dialog.y, dialog.width)
+  local mouseX, mouseY = love.mouse.getPosition()
+
+  love.graphics.setColor(0, 0, 0, 0.50)
+  love.graphics.rectangle("fill", 0, 0, width, height)
+
+  Panel.draw(dialog.x, dialog.y, dialog.width, dialog.height, "Help")
+  Button.drawButtons({ closeButton }, mouseX, mouseY)
+
+  love.graphics.setFont(app.fonts.body)
+  Layout.drawWrappedLines(
+    self:getHelpDialogLines(app),
+    contentArea.x,
+    contentArea.y,
+    contentArea.width,
+    Theme.colors.text,
+    Theme.spacing.lineHeight,
+    contentArea.height
+  )
+end
+
+function StageState:getHelpDialogCloseButton(dialogX, dialogY, dialogWidth)
+  local size = 32
+
+  return {
+    x = dialogX + dialogWidth - Theme.spacing.panelPadding - size,
+    y = dialogY + Theme.spacing.panelPadding - 4,
+    width = size,
+    height = size,
+    label = "X",
+    variant = "default",
+    onClick = function()
+      self.helpDialogOpen = false
+      return true
+    end,
+  }
+end
+
+function StageState:drawStageSummary(app, area)
+  local stage = app.stageState
+  local scoreColor = stage.stageScore >= stage.targetScore and Theme.colors.success or Theme.colors.text
+  local stats = {
+    { label = "Score", value = string.format("%d/%d", stage.stageScore, stage.targetScore), color = scoreColor },
+    { label = "Flips", value = tostring(stage.flipsRemaining), color = Theme.colors.text },
+    { label = "Shop", value = tostring(app.runState.shopPoints), color = Theme.colors.text },
+    { label = "Call", value = string.upper(app.selectedCall), color = Theme.colors.text },
+  }
+
+  local statGap = Theme.spacing.itemGap
+  local statWidth = math.floor((area.width - (statGap * (#stats - 1))) / #stats)
+  local statHeight = 48
+  local statY = area.y
+
+  for index, stat in ipairs(stats) do
+    local statX = area.x + ((index - 1) * (statWidth + statGap))
+
+    setColorWithAlpha(Theme.colors.panelBorder, 0.16)
+    love.graphics.rectangle("fill", statX, statY, statWidth, statHeight, 10, 10)
+    Theme.applyColor(Theme.colors.panelBorder)
+    love.graphics.rectangle("line", statX, statY, statWidth, statHeight, 10, 10)
+
+    love.graphics.setFont(app.fonts.small)
+    Theme.applyColor(Theme.colors.mutedText)
+    love.graphics.printf(stat.label, statX + 8, statY + 7, statWidth - 16, "center")
+
+    love.graphics.setFont(app.fonts.body)
+    Theme.applyColor(stat.color)
+    love.graphics.printf(stat.value, statX + 8, statY + 24, statWidth - 16, "center")
+  end
+
+  if stage.stageType == "boss" then
+    local pulse = app:getUiPulse(4.8, 0.10, 0.22)
+    local bossCards = app:getBossModifierCards()
+    local bannerY = statY + statHeight + 10
+    local bannerHeight = math.min(46, math.max(0, area.y + area.height - bannerY))
+
+    if bannerHeight > 0 then
+      love.graphics.setColor(Theme.colors.danger[1], Theme.colors.danger[2], Theme.colors.danger[3], 0.16 + pulse)
+      love.graphics.rectangle("fill", area.x, bannerY, area.width, bannerHeight, 10, 10)
+      love.graphics.setColor(Theme.colors.warning[1], Theme.colors.warning[2], Theme.colors.warning[3], 0.95)
+      love.graphics.setLineWidth(2)
+      love.graphics.rectangle("line", area.x, bannerY, area.width, bannerHeight, 10, 10)
+      love.graphics.setLineWidth(1)
+      love.graphics.setFont(app.fonts.body)
+      Theme.applyColor(Theme.colors.text)
+      love.graphics.printf(string.format("Boss pressure active: %d modifier(s)", #bossCards), area.x + 14, bannerY + 12, area.width - 28, "center")
+    end
+  end
+end
+
+function StageState:getVisibleCoinStates(app)
+  local batchResult = app.lastBatchResult
+  local coins = {}
+
+  if batchResult and batchResult.perCoin then
+    for _, coinState in ipairs(batchResult.perCoin) do
+      table.insert(coins, {
+        coinId = coinState.coinId,
+        slotIndex = coinState.slotIndex,
+        result = coinState.result,
+        forcedResult = coinState.forcedResult,
+        didMatch = coinState.result == batchResult.call,
+      })
+    end
+
+    return coins, batchResult.call, batchResult.batchId
+  end
+
+  for slotIndex = 1, app.runState.maxActiveCoinSlots do
+    local coinId = app.runState.equippedCoinSlots[slotIndex]
+
+    if coinId then
+      table.insert(coins, {
+        coinId = coinId,
+        slotIndex = slotIndex,
+      })
+    end
+  end
+
+  return coins, nil, nil
+end
+
+function StageState:drawCoinRow(app, x, y, width, height)
+  local coins, call, batchId = self:getVisibleCoinStates(app)
+
+  if #coins == 0 then
+    love.graphics.setFont(app.fonts.body)
+    Theme.applyColor(Theme.colors.mutedText)
+    love.graphics.printf("No coins equipped.", x, y + math.floor(height / 2) - 10, width, "center")
+    return
+  end
+
+  love.graphics.setFont(app.fonts.small)
+  Theme.applyColor(Theme.colors.mutedText)
+
+  local title = call and string.format("Last flip: %s", string.upper(call)) or "Ready coins"
+  if batchId then
+    title = string.format("%s  Batch %d", title, batchId)
+  end
+
+  local titleHeight = 20
+  love.graphics.printf(title, x, y, width, "center")
+
+  local cardGap = Theme.spacing.itemGap
+  local maxCardHeight = math.max(132, height - titleHeight - 18)
+  local cardHeight = math.min(210, maxCardHeight)
+  local availableCardWidth = math.floor((width - (cardGap * (#coins - 1))) / #coins)
+  local cardWidth = math.min(190, availableCardWidth, math.floor(cardHeight * 0.92))
+  cardWidth = math.max(82, cardWidth)
+  cardHeight = math.max(132, cardHeight)
+  local totalWidth = (cardWidth * #coins) + (cardGap * (#coins - 1))
+  local startX = x + math.floor((width - totalWidth) / 2)
+  local cardY = y + titleHeight + math.floor((height - titleHeight - cardHeight) / 2)
+  local reveal = self.coinRowReveal
+  local visibleCount = #coins
+
+  if reveal and reveal.batchId == batchId then
+    local revealRatio = math.min(1, reveal.elapsed / math.max(reveal.revealDuration, 0.001))
+    visibleCount = math.min(#coins, math.floor(revealRatio * math.max(1, #coins - 1)) + 1)
+  end
+
+  for index, coin in ipairs(coins) do
+    local cardX = startX + ((index - 1) * (cardWidth + cardGap))
+    local hasResult = coin.result ~= nil and index <= visibleCount
+    local borderColor = Theme.colors.panelBorder
+    local fillColor = Theme.colors.panel
+    local artSide = nil
+    local artSelected = false
+    local revealAge = reveal and reveal.batchId == batchId and reveal.elapsed - ((index - 1) * (reveal.revealDuration / math.max(1, #coins))) or nil
+
+    if hasResult then
+      borderColor = coin.didMatch and Theme.colors.success or Theme.colors.danger
+      fillColor = borderColor
+      artSide = coin.result
+      artSelected = coin.didMatch
+      setColorWithAlpha(fillColor, 0.16)
+    else
+      setColorWithAlpha(fillColor, 0.82)
+    end
+
+    love.graphics.rectangle("fill", cardX, cardY, cardWidth, cardHeight, 12, 12)
+    Theme.applyColor(borderColor)
+    love.graphics.setLineWidth(hasResult and 2 or 1)
+    love.graphics.rectangle("line", cardX, cardY, cardWidth, cardHeight, 12, 12)
+    love.graphics.setLineWidth(1)
+
+    love.graphics.setFont(app.fonts.small)
+    Theme.applyColor(Theme.colors.mutedText)
+    love.graphics.printf(string.format("Slot %d", coin.slotIndex or index), cardX + 8, cardY + 8, cardWidth - 16, "center")
+
+    local coinSize = math.min(84, math.max(58, math.floor(cardWidth * 0.46)))
+    CoinArt.draw(coin.coinId, cardX + math.floor((cardWidth - coinSize) / 2), cardY + 34, coinSize, {
+      side = artSide,
+      selected = artSelected,
+      alpha = hasResult and 1.0 or 0.72,
+      tilt = hasResult and ((index % 2 == 0) and 0.08 or -0.08) or 0,
+    })
+
+    if hasResult and coin.didMatch and revealAge and revealAge >= 0 and revealAge <= 0.42 then
+      self:drawMatchParticles(cardX, cardY, cardWidth, cardHeight, revealAge)
+    end
+
+    love.graphics.setFont(app.fonts.small)
+    Theme.applyColor(Theme.colors.text)
+    love.graphics.printf(app:getCoinName(coin.coinId), cardX + 8, cardY + cardHeight - 60, cardWidth - 16, "center")
+
+    if hasResult then
+      Theme.applyColor(coin.didMatch and Theme.colors.success or Theme.colors.mutedText)
+      love.graphics.printf(coin.didMatch and "MATCH" or "MISS", cardX + 8, cardY + cardHeight - 36, cardWidth - 16, "center")
+
+      if coin.forcedResult then
+        Theme.applyColor(Theme.colors.warning)
+        love.graphics.printf("FORCED", cardX + 8, cardY + cardHeight - 18, cardWidth - 16, "center")
+      end
+    else
+      Theme.applyColor(Theme.colors.mutedText)
+      love.graphics.printf("waiting", cardX + 8, cardY + cardHeight - 36, cardWidth - 16, "center")
+    end
+  end
+end
+
+function StageState:drawMatchParticles(cardX, cardY, cardWidth, cardHeight, age)
+  local alpha = math.max(0, 1 - (age / 0.42))
+  local centerX = cardX + math.floor(cardWidth / 2)
+  local centerY = cardY + math.floor(cardHeight / 2)
+  local particles = {
+    { -44, -28 },
+    { -28, 34 },
+    { 36, -32 },
+    { 48, 22 },
+    { -8, -52 },
+    { 10, 48 },
+  }
+
+  Theme.applyColor({ Theme.colors.success[1], Theme.colors.success[2], Theme.colors.success[3], alpha })
+
+  for index, particle in ipairs(particles) do
+    local drift = math.floor(age * 46)
+    local sparkleSize = index % 2 == 0 and 4 or 3
+    local px = centerX + particle[1] + (particle[1] >= 0 and drift or -drift)
+    local py = centerY + particle[2] + (particle[2] >= 0 and drift or -drift)
+
+    love.graphics.rectangle("fill", px, py, sparkleSize, sparkleSize)
+  end
 end
 
 function StageState:enter(app)
   app:ensureCurrentStage()
   self.reveal = nil
-  self.statusMessage = "Choose Heads or Tails with buttons or Left/Right (H/T), then resolve with the button or Space."
+  self.helpDialogOpen = false
+  self.statusMessage = "Pick HEADS or TAILS. One click resolves the full batch."
 end
 
 function StageState:update(app, dt)
+  if self.coinRowReveal then
+    self.coinRowReveal.elapsed = self.coinRowReveal.elapsed + dt
+
+    if self.coinRowReveal.elapsed >= self.coinRowReveal.revealDuration + 0.45 then
+      self.coinRowReveal = nil
+    end
+  end
+
   if not self:isRevealActive() then
     return
   end
@@ -335,6 +687,19 @@ function StageState:drawRevealOverlay(app)
 end
 
 function StageState:keypressed(app, key)
+  if self.helpDialogOpen then
+    if key == "escape" or key == "return" or key == "kpenter" then
+      self.helpDialogOpen = false
+    end
+
+    return
+  end
+
+  if key == "/" then
+    self.helpDialogOpen = true
+    return
+  end
+
   if app:isDevControlsEnabled() then
     local function blockRevealMutation()
       if self:isRevealActive() then
@@ -430,12 +795,12 @@ function StageState:keypressed(app, key)
   end
 
   if key == "left" or key == "h" then
-    self:selectCall(app, "heads")
+    self:callAndResolve(app, "heads")
     return
   end
 
   if key == "right" or key == "t" then
-    self:selectCall(app, "tails")
+    self:callAndResolve(app, "tails")
     return
   end
 
@@ -445,184 +810,64 @@ function StageState:keypressed(app, key)
 end
 
 function StageState:draw(app)
-  local activeUpgradeNames = app:getActiveUpgradeNames()
-  local activeModifierNames = app:getActiveModifierNames()
-  local activeModifierDetailLines = app:getActiveModifierDetailLines()
-  local activeTemporaryEffectLines = app:getActiveTemporaryEffectLines()
   local padding = Theme.spacing.screenPadding
   local gap = Theme.spacing.blockGap
   local width = love.graphics.getWidth()
   local height = love.graphics.getHeight()
-  local topY = 84
+  local topY = 72
   local availableHeight = height - topY - padding
-  local columnWidth = math.floor((width - (padding * 2) - (gap * 2)) / 3)
-  local topHeight = math.floor((availableHeight - gap) * 0.44)
-  local bottomY = topY + topHeight + gap
-  local bottomHeight = availableHeight - topHeight - gap
-  local leftX = padding
-  local middleX = leftX + columnWidth + gap
-  local rightX = middleX + columnWidth + gap
-  local rightWidth = width - rightX - padding
+  local topHeight = app.stageState and app.stageState.stageType == "boss" and 150 or 112
+  topHeight = math.min(topHeight, math.max(80, math.floor((availableHeight - gap) * 0.35)))
+  local panelWidth = width - (padding * 2)
+  local buttonLayout = self:getButtonLayout(app)
+  local coinRowY = topY + topHeight + gap
+  local coinRowBottom = buttonLayout.y - 42
+  local coinRowHeight = math.max(120, coinRowBottom - coinRowY)
+  local mouseX, mouseY = love.mouse.getPosition()
 
   love.graphics.setFont(app.fonts.heading)
   Theme.applyColor(Theme.colors.text)
-  love.graphics.print(app.currentStageDefinition.label, padding, padding)
+  love.graphics.print(app.currentStageDefinition.label, padding, padding + 4)
 
-  Panel.draw(leftX, topY, columnWidth, topHeight, "Stage")
-  Panel.draw(middleX, topY, columnWidth, topHeight, "Build + Modifiers")
-  Panel.draw(rightX, topY, rightWidth, topHeight, "Last Batch")
-  Panel.draw(padding, bottomY, width - (padding * 2), bottomHeight, "Breakdown + Controls")
+  Panel.draw(padding, topY, panelWidth, topHeight, "Stage")
 
-  local stageArea = Panel.getContentArea(leftX, topY, columnWidth, topHeight, "Stage")
-  local buildArea = Panel.getContentArea(middleX, topY, columnWidth, topHeight, "Build + Modifiers")
-  local batchArea = Panel.getContentArea(rightX, topY, rightWidth, topHeight, "Last Batch")
-  local bottomArea = Panel.getContentArea(padding, bottomY, width - (padding * 2), bottomHeight, "Breakdown + Controls")
+  local stageArea = Panel.getContentArea(padding, topY, panelWidth, topHeight, "Stage")
 
-  local stageLines = {
-    string.format("Target Score: %d", app.stageState.targetScore),
-    string.format("Stage Score: %d", app.stageState.stageScore),
-    string.format("Run Total Score: %d", app.runState.runTotalScore),
-    string.format("Flips Remaining: %d", app.stageState.flipsRemaining),
-    string.format("Shop Points: %d", app.runState.shopPoints),
-    string.format("Current Call: %s", string.upper(app.selectedCall)),
-    string.format("Batch Index: %d", app.stageState.batchIndex),
-  }
+  self:drawStageSummary(app, stageArea)
+  self:drawCoinRow(app, padding, coinRowY, panelWidth, coinRowHeight)
 
-  local stageTextY = stageArea.y
-  local stageTextHeight = stageArea.height
+  love.graphics.setFont(app.fonts.small)
+  Theme.applyColor(Theme.colors.mutedText)
+  love.graphics.printf(self.statusMessage, padding, buttonLayout.y - 28, panelWidth, "center")
 
-  if app.stageState.stageType == "boss" then
-    local pulse = app:getUiPulse(4.8, 0.10, 0.22)
-    local bannerHeight = 56
-    local bossCards = app:getBossModifierCards()
-
-    love.graphics.setColor(Theme.colors.danger[1], Theme.colors.danger[2], Theme.colors.danger[3], 0.16 + pulse)
-    love.graphics.rectangle("fill", stageArea.x, stageArea.y, stageArea.width, bannerHeight, 10, 10)
-    love.graphics.setColor(Theme.colors.warning[1], Theme.colors.warning[2], Theme.colors.warning[3], 0.95)
-    love.graphics.setLineWidth(2)
-    love.graphics.rectangle("line", stageArea.x, stageArea.y, stageArea.width, bannerHeight, 10, 10)
-    love.graphics.setFont(app.fonts.body)
-    Theme.applyColor(Theme.colors.text)
-    love.graphics.print("BOSS PRESSURE ACTIVE", stageArea.x + 14, stageArea.y + 8)
-    Theme.applyColor(Theme.colors.warning)
-    love.graphics.printf(string.format("%d boss modifier(s) active", #bossCards), stageArea.x + 14, stageArea.y + 28, stageArea.width - 28, "left")
-
-    stageTextY = stageArea.y + bannerHeight + 10
-    stageTextHeight = math.max(0, stageArea.height - bannerHeight - 10)
-    table.insert(stageLines, 1, string.format("Boss Modifiers: %d", #bossCards))
-  end
-
-  Layout.drawWrappedLines(stageLines, stageArea.x, stageTextY, stageArea.width, Theme.colors.text, Theme.spacing.lineHeight, stageTextHeight)
-
-  local buildLines = {
-    string.format("Equipped: %s", app:getCurrentLoadoutKey()),
-    "",
-  }
-
-  for _, coinName in ipairs(app:getEquippedCoinNames()) do
-    table.insert(buildLines, string.format("- %s", coinName))
-  end
-
-  if #activeUpgradeNames > 0 then
-    table.insert(buildLines, "")
-    table.insert(buildLines, "Upgrades:")
-
-    for _, upgradeName in ipairs(activeUpgradeNames) do
-      table.insert(buildLines, string.format("- %s", upgradeName))
-    end
-  end
-
-  if #activeModifierNames > 0 then
-    table.insert(buildLines, "")
-    table.insert(buildLines, "Modifiers:")
-
-    for _, modifierName in ipairs(activeModifierNames) do
-      table.insert(buildLines, string.format("- %s", modifierName))
-    end
-  end
-
-  if #activeModifierDetailLines > 0 then
-    table.insert(buildLines, "")
-
-    for _, line in ipairs(activeModifierDetailLines) do
-      table.insert(buildLines, line)
-    end
-  end
-
-  if #activeTemporaryEffectLines > 0 then
-    table.insert(buildLines, "")
-    table.insert(buildLines, "Temporary Effects:")
-
-    for _, line in ipairs(activeTemporaryEffectLines) do
-      table.insert(buildLines, line)
-    end
-  end
-
-  Layout.drawWrappedLines(buildLines, buildArea.x, buildArea.y, buildArea.width, Theme.colors.text, Theme.spacing.lineHeight, buildArea.height)
-
-  Layout.drawWrappedLines(
-    app:getLastBatchSummaryLines(14),
-    batchArea.x,
-    batchArea.y,
-    batchArea.width,
-    Theme.colors.text,
-    Theme.spacing.lineHeight,
-    batchArea.height
-  )
-
-  local controlLines = {
-    "Breakdown:",
-  }
-
-  for _, line in ipairs(app:getScoreBreakdownLines(8)) do
-    table.insert(controlLines, line)
-  end
-
-  table.insert(controlLines, "")
-  table.insert(controlLines, "Controls:")
-
-  local controls = {
-    "- Left / H: choose Heads",
-    "- Right / T: choose Tails",
-    "- Space / Enter: resolve batch",
-  }
-
-  if app:isDevControlsEnabled() then
-    table.insert(controls, "- F3: toggle debug overlay")
-  end
-
-  for _, line in ipairs(app:getDebugControlLines()) do
-    table.insert(controls, line)
-  end
-
-  for _, line in ipairs(controls) do
-    table.insert(controlLines, line)
-  end
-
-  table.insert(controlLines, "")
-  table.insert(controlLines, self.statusMessage)
-
-  local buttonLayout = self:getButtonLayout(app)
-  local textHeight = buttonLayout.textHeight
-
-  Layout.drawWrappedLines(
-    controlLines,
-    bottomArea.x,
-    bottomArea.y,
-    bottomArea.width,
-    Theme.colors.text,
-    Theme.spacing.lineHeight,
-    textHeight
-  )
-
-  local mouseX, mouseY = love.mouse.getPosition()
   Button.drawButtons(self:buildButtons(app, buttonLayout.x, buttonLayout.y, buttonLayout.width), mouseX, mouseY)
 
-  self:drawRevealOverlay(app)
+  Button.drawButtons({ self:getHelpButtonLayout() }, mouseX, mouseY)
+  self:drawHelpDialog(app)
 end
 
 function StageState:mousepressed(app, x, y, button)
   if button ~= 1 then
+    return
+  end
+
+  local handled = false
+
+  if self.helpDialogOpen then
+    local dialog = self:getHelpDialogLayout()
+
+    handled = Button.handleMousePressed({ self:getHelpDialogCloseButton(dialog.x, dialog.y, dialog.width) }, x, y)
+
+    if not handled and (x < dialog.x or x > dialog.x + dialog.width or y < dialog.y or y > dialog.y + dialog.height) then
+      self.helpDialogOpen = false
+    end
+
+    return
+  end
+
+  handled = Button.handleMousePressed({ self:getHelpButtonLayout() }, x, y)
+
+  if handled then
     return
   end
 

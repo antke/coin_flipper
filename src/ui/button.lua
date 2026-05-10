@@ -58,9 +58,11 @@ function Button.drawTextButton(x, y, width, height, label, options)
   local textY = y + math.floor((height - font:getHeight()) / 2)
 
   Theme.applyColor(fill)
-  love.graphics.rectangle("fill", x, y, width, height, 8, 8)
+  love.graphics.rectangle("fill", x + 3, y + 3, width, height)
+  Theme.applyColor(fill)
+  love.graphics.rectangle("fill", x, y, width, height)
   Theme.applyColor(border)
-  love.graphics.rectangle("line", x, y, width, height, 8, 8)
+  love.graphics.rectangle("line", x, y, width, height)
 
   Theme.applyColor(textColor)
   love.graphics.printf(label, x + 6, textY, width - 12, options.align or "center")
