@@ -6,6 +6,26 @@ local Theme = require("src.ui.theme")
 local BossRewardState = {}
 BossRewardState.__index = BossRewardState
 
+local function formatRewardError(errorCode)
+  if errorCode == "invalid_reward_option" then
+    return "That final reward option is no longer available."
+  end
+
+  if errorCode == "reward_preview_not_initialized" or errorCode == "reward_preview_unavailable" then
+    return "No final reward preview is currently active."
+  end
+
+  if errorCode == "reward_option_not_selected" or errorCode == "reward_choice_required" then
+    return "Choose a final reward before continuing."
+  end
+
+  if errorCode == "reward_already_claimed" then
+    return "That final reward has already been claimed."
+  end
+
+  return tostring(errorCode)
+end
+
 local function getWrappedLineCount(text, width)
   local font = love.graphics.getFont()
   local _, wrapped = font:getWrap(tostring(text or ""), math.max(1, width))
@@ -64,7 +84,7 @@ function BossRewardState:selectRewardOption(app, index)
   if ok and result then
     self.statusMessage = string.format("Selected reward: %s.", result.name or result.contentId or tostring(index))
   elseif not ok then
-    self.statusMessage = tostring(result)
+    self.statusMessage = formatRewardError(result)
   end
 
   return ok, result
@@ -81,7 +101,7 @@ end
 
 function BossRewardState:buildRewardButtons(app, area)
   local session = app:ensureBossRewardEvent()
-  local buttonHeight = 38
+  local buttonHeight = 44
   local gap = Theme.spacing.itemGap
 
   self.rewardButtons = {}
@@ -92,7 +112,7 @@ function BossRewardState:buildRewardButtons(app, area)
       y = area.y + ((index - 1) * (buttonHeight + gap)),
       width = area.width,
       height = buttonHeight,
-      label = string.format("%s Reward: %s", string.upper(option.type or "?"), option.name or option.contentId or "Unknown"),
+      label = string.format("%d. %s", index, option.name or option.contentId or "Unknown"),
       variant = option.selected and "success" or "default",
       focused = option.selected == true,
       disabled = session and session.claimed == true,
@@ -139,9 +159,10 @@ end
 
 function BossRewardState:keypressed(app, key)
   local session = app:ensureBossRewardEvent()
+  local numericIndex = tonumber(key)
 
-  if key == "1" or key == "2" then
-    self:selectRewardOption(app, tonumber(key))
+  if numericIndex and numericIndex >= 1 then
+    self:selectRewardOption(app, numericIndex)
     return
   end
 
@@ -199,10 +220,16 @@ function BossRewardState:draw(app)
 
   local rewardButtonsHeight = 0
   if #(rewardSession and rewardSession.options or {}) > 0 then
-    rewardButtonsHeight = (#rewardSession.options * 38) + math.max(0, (#rewardSession.options - 1) * Theme.spacing.itemGap) + Theme.spacing.itemGap
+    rewardButtonsHeight = (#rewardSession.options * 44) + math.max(0, (#rewardSession.options - 1) * Theme.spacing.itemGap) + Theme.spacing.itemGap
     table.insert(rewardLines, "")
     table.insert(rewardLines, "Reward Options:")
-    table.insert(rewardLines, "Use 1/2, arrow keys, or click to choose.")
+    table.insert(rewardLines, "Use number keys, arrow keys, or click to compare and choose between the available rewards.")
+
+    for _, card in ipairs(app:getRewardPreviewOptionCards()) do
+      local marker = card.selected and "*" or "-"
+      local rarity = card.rarity and string.format(" [%s]", tostring(card.rarity)) or ""
+      table.insert(rewardLines, string.format("%s %d. %s%s — %s", marker, card.index, card.name or card.contentId or "Unknown", rarity, card.description or "No description."))
+    end
   else
     table.insert(rewardLines, "")
     table.insert(rewardLines, "Reward Options:")
@@ -270,7 +297,7 @@ function BossRewardState:mousepressed(app, x, y, button)
   local rewardSession = app:ensureBossRewardEvent()
 
   if #(rewardSession and rewardSession.options or {}) > 0 then
-    local rewardButtonsHeight = (#rewardSession.options * 38) + math.max(0, (#rewardSession.options - 1) * Theme.spacing.itemGap) + Theme.spacing.itemGap
+    local rewardButtonsHeight = (#rewardSession.options * 44) + math.max(0, (#rewardSession.options - 1) * Theme.spacing.itemGap) + Theme.spacing.itemGap
     local rewardButtonsY = rewardArea.y + rewardArea.height - rewardButtonsHeight + Theme.spacing.itemGap
     local rewardButtonArea = { x = rewardArea.x, y = rewardButtonsY, width = rewardArea.width }
     local handled = select(1, Button.handleMousePressed(self:buildRewardButtons(app, rewardButtonArea), x, y))

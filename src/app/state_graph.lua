@@ -138,6 +138,18 @@ function StateGraph:mousepressed(x, y, button, istouch, presses)
   end
 end
 
+function StateGraph:textinput(text)
+  if self.current and self.current.textinput then
+    self.current:textinput(self.app, text)
+  end
+end
+
+function StateGraph:wheelmoved(x, y)
+  if self.current and self.current.wheelmoved then
+    self.current:wheelmoved(self.app, x, y)
+  end
+end
+
 function StateGraph:resize(width, height)
   if self.current and self.current.resize then
     self.current:resize(self.app, width, height)

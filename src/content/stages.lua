@@ -31,6 +31,12 @@ local definitions = {
         label = "Round 2 — Side Pot",
         activeStageModifierIds = { "side_pot" },
       },
+      {
+        id = "round_2_crowd_favorite",
+        name = "Crowd Favorite",
+        label = "Round 2 — Crowd Favorite",
+        activeStageModifierIds = { "crowd_favorite" },
+      },
     },
   },
   {
@@ -53,6 +59,12 @@ local definitions = {
         name = "House Lights",
         label = "Round 3 — House Lights",
         activeStageModifierIds = { "bright_lights", "echo_chamber" },
+      },
+      {
+        id = "round_3_long_game",
+        name = "Long Game",
+        label = "Round 3 — Long Game",
+        activeStageModifierIds = { "long_game", "side_pot" },
       },
     },
   },
@@ -77,6 +89,12 @@ local definitions = {
         label = "Boss — Heads Embargo",
         bossModifierIds = { "heads_embargo", "loaded_ledger" },
       },
+      {
+        id = "boss_variant_tails_embargo",
+        name = "Tails Embargo",
+        label = "Boss — Tails Embargo",
+        bossModifierIds = { "tails_embargo", "stacked_deck" },
+      },
     },
   },
 }
@@ -99,6 +117,16 @@ end
 
 local Stages = {}
 
+local function hashText(text)
+  local hash = 0
+
+  for index = 1, #text do
+    hash = (hash * 131 + string.byte(text, index)) % 2147483647
+  end
+
+  return hash
+end
+
 local function extractSeed(source)
   if type(source) == "number" then
     return source
@@ -119,8 +147,28 @@ local function resolveVariant(definition, variants, source)
   end
 
   local seed = extractSeed(source) or 1
-  local variantIndex = ((seed + (definition.roundIndex or 1) - 2) % #variants) + 1
-  local variant = variants[variantIndex]
+  local keyedVariants = {}
+
+  for _, variant in ipairs(variants) do
+    table.insert(keyedVariants, {
+      variant = variant,
+      hash = hashText((definition.id or "") .. ":" .. (variant.id or "") .. ":" .. tostring(seed) .. ":" .. tostring(definition.roundIndex or 1)),
+    })
+  end
+
+  table.sort(keyedVariants, function(left, right)
+    if left.hash == right.hash then
+      return (left.variant.id or "") < (right.variant.id or "")
+    end
+
+    return left.hash < right.hash
+  end)
+
+  local variant = keyedVariants[1] and keyedVariants[1].variant or nil
+
+  if not variant then
+    return definition
+  end
   local resolved = Utils.clone(definition)
 
   resolved.variants = nil

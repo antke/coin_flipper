@@ -15,12 +15,12 @@ end
 function MenuState:buildButtons(app)
   local width = love.graphics.getWidth()
   local height = love.graphics.getHeight()
-  local buttonWidth = 260
   local footerMetrics = Layout.getFooterMetrics(height)
   local buttonHeight = footerMetrics.buttonHeight
   local gap = Theme.spacing.itemGap
   local hasContinue = app:hasActiveRunSave()
-  local buttonCount = hasContinue and 3 or 2
+  local buttonCount = hasContinue and 6 or 5
+  local buttonWidth = math.min(240, math.floor((width - (Theme.spacing.screenPadding * 2) - (gap * math.max(0, buttonCount - 1))) / buttonCount))
   local totalWidth = (buttonWidth * buttonCount) + (gap * (buttonCount - 1))
   local startX = math.floor((width - totalWidth) / 2)
   local buttonY = footerMetrics.buttonY
@@ -57,6 +57,42 @@ function MenuState:buildButtons(app)
       y = buttonY,
       width = buttonWidth,
       height = buttonHeight,
+      label = "Collection",
+      variant = "default",
+      onClick = function()
+        return app.stateGraph:request("open_collection")
+      end,
+    })
+
+    table.insert(self.buttons, {
+      x = startX + ((buttonWidth + gap) * 3),
+      y = buttonY,
+      width = buttonWidth,
+      height = buttonHeight,
+      label = "Records",
+      variant = "default",
+      onClick = function()
+        return app.stateGraph:request("open_records")
+      end,
+    })
+
+    table.insert(self.buttons, {
+      x = startX + ((buttonWidth + gap) * 4),
+      y = buttonY,
+      width = buttonWidth,
+      height = buttonHeight,
+      label = "How to Play",
+      variant = "default",
+      onClick = function()
+        return app.stateGraph:request("open_help")
+      end,
+    })
+
+    table.insert(self.buttons, {
+      x = startX + ((buttonWidth + gap) * 5),
+      y = buttonY,
+      width = buttonWidth,
+      height = buttonHeight,
       label = "Meta Progression",
       variant = "default",
       onClick = function()
@@ -81,6 +117,42 @@ function MenuState:buildButtons(app)
       y = buttonY,
       width = buttonWidth,
       height = buttonHeight,
+      label = "Collection",
+      variant = "default",
+      onClick = function()
+        return app.stateGraph:request("open_collection")
+      end,
+    })
+
+    table.insert(self.buttons, {
+      x = startX + ((buttonWidth + gap) * 2),
+      y = buttonY,
+      width = buttonWidth,
+      height = buttonHeight,
+      label = "Records",
+      variant = "default",
+      onClick = function()
+        return app.stateGraph:request("open_records")
+      end,
+    })
+
+    table.insert(self.buttons, {
+      x = startX + ((buttonWidth + gap) * 3),
+      y = buttonY,
+      width = buttonWidth,
+      height = buttonHeight,
+      label = "How to Play",
+      variant = "default",
+      onClick = function()
+        return app.stateGraph:request("open_help")
+      end,
+    })
+
+    table.insert(self.buttons, {
+      x = startX + ((buttonWidth + gap) * 4),
+      y = buttonY,
+      width = buttonWidth,
+      height = buttonHeight,
       label = "Meta Progression",
       variant = "default",
       onClick = function()
@@ -102,6 +174,21 @@ function MenuState:keypressed(app, key)
     return
   end
 
+  if app:hasActiveRunSave() and key == "n" then
+    app.stateGraph:request("start_run")
+    return
+  end
+
+  if key == "b" then
+    app.stateGraph:request("open_collection")
+    return
+  end
+
+  if key == "r" then
+    app.stateGraph:request("open_records")
+    return
+  end
+
   if key == "return" or key == "space" or key == "kpenter" then
     app.stateGraph:request("start_run")
     return
@@ -109,6 +196,11 @@ function MenuState:keypressed(app, key)
 
   if key == "m" then
     app.stateGraph:request("open_meta")
+    return
+  end
+
+  if key == "h" then
+    app.stateGraph:request("open_help")
   end
 end
 
@@ -141,12 +233,15 @@ function MenuState:draw(app)
   }
 
   if app:hasActiveRunSave() then
-    table.insert(lines, "- Click Continue Run or press Enter / C")
-    table.insert(lines, "- Click Start Run to begin a fresh run")
+    table.insert(lines, "- Click Continue Run or press Enter / Space / C")
+    table.insert(lines, "- Click Start Run or press N to open Run Setup")
   else
-    table.insert(lines, "- Click Start Run or press Enter / Space")
+    table.insert(lines, "- Click Start Run or press Enter / Space / KPEnter to open Run Setup")
   end
 
+  table.insert(lines, "- Click Collection or press B")
+  table.insert(lines, "- Click Records or press R")
+  table.insert(lines, "- Click How to Play or press H")
   table.insert(lines, "- Click Meta Progression or press M")
 
   if app:isDevControlsEnabled() then

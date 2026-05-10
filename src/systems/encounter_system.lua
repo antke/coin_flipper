@@ -1,10 +1,21 @@
 local AcquisitionSystem = require("src.systems.acquisition_system")
 local Coins = require("src.content.coins")
 local Encounters = require("src.content.encounters")
+local RNG = require("src.core.rng")
 local Upgrades = require("src.content.upgrades")
 local Utils = require("src.core.utils")
 
 local EncounterSystem = {}
+
+local function hashText(text)
+  local hash = 2166136261
+
+  for index = 1, #text do
+    hash = (hash * 131 + string.byte(text, index)) % 2147483647
+  end
+
+  return hash
+end
 
 local function serializeChoice(choice)
   if not choice then
@@ -55,15 +66,79 @@ local function buildEligibleChoices(runState, definition)
   return choices
 end
 
-local function chooseEncounterDefinition(runState)
-  local definitions = Encounters.getAll()
+local function chooseEncounterDefinition(runState, definitions)
+  definitions = definitions or Encounters.getAll()
 
   if #definitions == 0 then
     return nil
   end
 
-  local index = ((runState.seed + runState.roundIndex - 2) % #definitions) + 1
-  return definitions[index]
+  local previousEncounterFamily = nil
+  local seenEncounterFamilies = {}
+  local stageResults = runState and runState.history and runState.history.stageResults or nil
+  local lastStageRecord = stageResults and stageResults[#stageResults] or nil
+
+  for _, stageRecord in ipairs(stageResults or {}) do
+    if stageRecord.encounter and stageRecord.encounter.id then
+      local previousDefinition = Encounters.getById(stageRecord.encounter.id)
+      local familyId = previousDefinition and (previousDefinition.familyId or previousDefinition.id) or stageRecord.encounter.id
+      seenEncounterFamilies[familyId] = true
+      previousEncounterFamily = familyId
+    end
+  end
+
+  if previousEncounterFamily and #definitions > 1 then
+    local unseen = {}
+
+    for _, definition in ipairs(definitions) do
+      if not seenEncounterFamilies[definition.familyId or definition.id] then
+        table.insert(unseen, definition)
+      end
+    end
+
+    if #unseen > 0 then
+      definitions = unseen
+    end
+  end
+
+  if previousEncounterFamily and #definitions > 1 then
+    local filtered = {}
+
+    for _, definition in ipairs(definitions) do
+      if (definition.familyId or definition.id) ~= previousEncounterFamily then
+        table.insert(filtered, definition)
+      end
+    end
+
+    if #filtered > 0 then
+      definitions = filtered
+    end
+  end
+
+  table.sort(definitions, function(left, right)
+    return (left.id or "") < (right.id or "")
+  end)
+
+  local keyedDefinitions = {}
+  local seed = tostring(runState and runState.seed or 1)
+  local roundIndex = tostring(runState and runState.roundIndex or 1)
+
+  for _, definition in ipairs(definitions) do
+    table.insert(keyedDefinitions, {
+      definition = definition,
+      hash = hashText(seed .. ":" .. roundIndex .. ":" .. (definition.id or "")),
+    })
+  end
+
+  table.sort(keyedDefinitions, function(left, right)
+    if left.hash == right.hash then
+      return (left.definition.id or "") < (right.definition.id or "")
+    end
+
+    return left.hash < right.hash
+  end)
+
+  return keyedDefinitions[1] and keyedDefinitions[1].definition or nil
 end
 
 function EncounterSystem.serializeChoice(choice)
@@ -93,11 +168,19 @@ local function applyChoiceToRun(runState, choice)
 end
 
 function EncounterSystem.buildSession(runState)
-  local definition = chooseEncounterDefinition(runState)
+  local eligibleDefinitions = {}
+
+  for _, definition in ipairs(Encounters.getAll()) do
+    if #buildEligibleChoices(runState, definition) > 0 then
+      table.insert(eligibleDefinitions, definition)
+    end
+  end
+
+  local definition = chooseEncounterDefinition(runState, eligibleDefinitions)
 
   if not definition then
     return {
-      encounterId = nil,
+      encounterId = "quiet_hallway",
       name = "Quiet Hallway",
       description = "No encounter is active for this stop.",
       choices = {},

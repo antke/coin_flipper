@@ -58,6 +58,35 @@ local definitions = {
       },
     },
   },
+  {
+    id = "crowd_favorite",
+    name = "Crowd Favorite",
+    description = "Heads calls are worth 10% more score in this stage.",
+    tags = { "stage", "heads", "score" },
+    triggers = {
+      {
+        hook = "before_scoring",
+        condition = { call = "heads" },
+        effects = {
+          { op = "apply_score_multiplier", value = 1.10 },
+        },
+      },
+    },
+  },
+  {
+    id = "long_game",
+    name = "Long Game",
+    description = "+1 run score after each scored batch in this stage.",
+    tags = { "stage", "score", "economy" },
+    triggers = {
+      {
+        hook = "after_scoring",
+        effects = {
+          { op = "add_run_score", amount = 1 },
+        },
+      },
+    },
+  },
 }
 
 local byId = {}

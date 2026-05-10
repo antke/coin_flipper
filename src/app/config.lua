@@ -11,7 +11,7 @@ local GameConfig = {
     overlayEnabled = false,
     maxLogEntries = 12,
     devControlsEnabled = false,
-    postStageAnalyticsEnabled = false,
+    postStageAnalyticsEnabled = true,
     grantShopPointsAmount = 5,
     fastSimBatchCount = 3,
   },

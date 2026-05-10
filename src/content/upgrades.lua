@@ -217,6 +217,53 @@ local definitions = {
     },
   },
   {
+    id = "heads_notebook",
+    name = "Heads Notebook",
+    rarity = "common",
+    description = "+1 shop point after scoring a Heads call batch.",
+    tags = { "heads", "economy" },
+    triggers = {
+      {
+        hook = "after_scoring",
+        condition = { call = "heads" },
+        effects = {
+          { op = "add_shop_points", amount = 1 },
+        },
+      },
+    },
+  },
+  {
+    id = "heads_contract",
+    name = "Heads Contract",
+    rarity = "common",
+    description = "Heads calls are worth 1.15x score.",
+    tags = { "heads", "multiplier" },
+    triggers = {
+      {
+        hook = "before_scoring",
+        condition = { call = "heads" },
+        effects = {
+          { op = "apply_score_multiplier", value = 1.15 },
+        },
+      },
+    },
+  },
+  {
+    id = "profit_margin",
+    name = "Profit Margin",
+    rarity = "common",
+    description = "+1 run score after each scored batch.",
+    tags = { "economy", "score" },
+    triggers = {
+      {
+        hook = "after_scoring",
+        effects = {
+          { op = "add_run_score", amount = 1 },
+        },
+      },
+    },
+  },
+  {
     id = "insurance_ledger",
     name = "Insurance Ledger",
     rarity = "common",
@@ -228,6 +275,23 @@ local definitions = {
         condition = { no_matches = true },
         effects = {
           { op = "add_shop_points", amount = 2 },
+        },
+      },
+    },
+  },
+  {
+    id = "rainy_day_fund",
+    name = "Rainy Day Fund",
+    rarity = "uncommon",
+    unlockedByDefault = false,
+    description = "If no coins match this batch, gain +1 free shop reroll.",
+    tags = { "economy", "safety", "shop" },
+    triggers = {
+      {
+        hook = "on_batch_end",
+        condition = { no_matches = true },
+        effects = {
+          { op = "add_shop_rerolls", amount = 1 },
         },
       },
     },
@@ -272,6 +336,54 @@ local definitions = {
               { op = "queue_trace_note", note = "Reserve Fuse fired before the stage-end check." },
             },
           },
+        },
+      },
+    },
+  },
+  {
+    id = "streak_credit",
+    name = "Streak Credit",
+    rarity = "common",
+    description = "+1 shop point when a coin matches on a repeated call batch.",
+    tags = { "economy", "streak" },
+    triggers = {
+      {
+        hook = "after_coin_roll",
+        condition = { match = true, repeated_call = true },
+        effects = {
+          { op = "add_shop_points", amount = 1 },
+        },
+      },
+    },
+  },
+  {
+    id = "parlay_notes",
+    name = "Parlay Notes",
+    rarity = "common",
+    description = "+2 run score when every equipped coin matches a batch.",
+    tags = { "perfect", "score" },
+    triggers = {
+      {
+        hook = "on_batch_end",
+        condition = { all_matched = true },
+        effects = {
+          { op = "add_run_score", amount = 2 },
+        },
+      },
+    },
+  },
+  {
+    id = "pressure_valve",
+    name = "Pressure Valve",
+    rarity = "common",
+    description = "+1 shop point after any repeated-call batch.",
+    tags = { "streak", "economy" },
+    triggers = {
+      {
+        hook = "after_scoring",
+        condition = { repeated_call = true },
+        effects = {
+          { op = "add_shop_points", amount = 1 },
         },
       },
     },

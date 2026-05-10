@@ -162,7 +162,7 @@ function ResultState:draw(app)
     string.format("Next step: %s", destination),
     "",
     app.lastBatchResult and string.format("Final batch: %d (%s)", app.lastBatchResult.batchId, string.upper(app.lastBatchResult.call)) or "No final batch info.",
-    "Click Continue or press Enter to keep moving.",
+    "Click Continue or press Enter to open the next review or reward step.",
   }
 
   if (result.metaRewardEarned or 0) > 0 then

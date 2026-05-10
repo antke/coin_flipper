@@ -1,9 +1,20 @@
 local AcquisitionSystem = require("src.systems.acquisition_system")
 local Coins = require("src.content.coins")
+local RNG = require("src.core.rng")
 local Upgrades = require("src.content.upgrades")
 local Utils = require("src.core.utils")
 
 local RewardSystem = {}
+
+local function hashText(text)
+  local hash = 2166136261
+
+  for index = 1, #text do
+    hash = (hash * 131 + string.byte(text, index)) % 2147483647
+  end
+
+  return hash
+end
 
 local function serializeDefinition(definition, contentType)
   return {
@@ -59,21 +70,112 @@ local function chooseDefinition(candidates, rng)
   return candidates[1]
 end
 
+local function chooseSerializedOption(candidates, rng)
+  if #candidates == 0 then
+    return nil
+  end
+
+  if rng and rng.choose then
+    return rng:choose(candidates)
+  end
+
+  return candidates[1]
+end
+
+local function removeDefinition(candidates, definitionId)
+  local filtered = {}
+
+  for _, definition in ipairs(candidates or {}) do
+    if definition.id ~= definitionId then
+      table.insert(filtered, definition)
+    end
+  end
+
+  return filtered
+end
+
+local function buildExtraCandidates(coinCandidates, upgradeCandidates)
+  local candidates = {}
+
+  for _, definition in ipairs(coinCandidates or {}) do
+    table.insert(candidates, serializeDefinition(definition, "coin"))
+  end
+
+  for _, definition in ipairs(upgradeCandidates or {}) do
+    table.insert(candidates, serializeDefinition(definition, "upgrade"))
+  end
+
+  return candidates
+end
+
+local function removeSerializedOption(candidates, option)
+  local filtered = {}
+
+  for _, candidate in ipairs(candidates or {}) do
+    if not (candidate.type == option.type and candidate.contentId == option.contentId) then
+      table.insert(filtered, candidate)
+    end
+  end
+
+  return filtered
+end
+
 function RewardSystem.serializeOption(option)
   return Utils.clone(option)
+end
+
+function RewardSystem.createPreviewRng(runState, stageRecord)
+  if type(runState) ~= "table" then
+    return nil
+  end
+
+  local seed = tostring(runState.seed or 1)
+  local roundIndex = tostring(stageRecord and stageRecord.roundIndex or runState.roundIndex or 1)
+  local stageId = tostring(stageRecord and stageRecord.stageId or runState.currentStageId or "unknown_stage")
+  local derivedSeed = ((hashText(seed .. ":reward:" .. roundIndex .. ":" .. stageId) - 1) % 2147483646) + 1
+
+  return RNG.new(derivedSeed)
+end
+
+function RewardSystem.buildPreviewForStage(runState, stageRecord)
+  return RewardSystem.buildPreview(runState, RewardSystem.createPreviewRng(runState, stageRecord))
 end
 
 function RewardSystem.buildPreview(runState, rng)
   local options = {}
 
-  local coinDefinition = chooseDefinition(buildCoinCandidates(runState), rng)
+  local coinCandidates = buildCoinCandidates(runState)
+  local upgradeCandidates = buildUpgradeCandidates(runState)
+
+  local coinDefinition = chooseDefinition(coinCandidates, rng)
   if coinDefinition then
     table.insert(options, serializeDefinition(coinDefinition, "coin"))
+    coinCandidates = removeDefinition(coinCandidates, coinDefinition.id)
   end
 
-  local upgradeDefinition = chooseDefinition(buildUpgradeCandidates(runState), rng)
+  local upgradeDefinition = chooseDefinition(upgradeCandidates, rng)
   if upgradeDefinition then
     table.insert(options, serializeDefinition(upgradeDefinition, "upgrade"))
+    upgradeCandidates = removeDefinition(upgradeCandidates, upgradeDefinition.id)
+  end
+
+  local extraCandidates = buildExtraCandidates(coinCandidates, upgradeCandidates)
+
+  while #options < 4 do
+    local extraOption = chooseSerializedOption(extraCandidates, rng)
+
+    if not extraOption then
+      break
+    end
+
+    table.insert(options, RewardSystem.serializeOption(extraOption))
+    extraCandidates = removeSerializedOption(extraCandidates, extraOption)
+
+    if extraOption.type == "coin" then
+      coinCandidates = removeDefinition(coinCandidates, extraOption.contentId)
+    elseif extraOption.type == "upgrade" then
+      upgradeCandidates = removeDefinition(upgradeCandidates, extraOption.contentId)
+    end
   end
 
   return {
@@ -93,7 +195,13 @@ function RewardSystem.selectOption(session, index)
     return false, "reward_already_claimed"
   end
 
-  if type(index) ~= "number" or index < 1 or index > #(session.options or {}) then
+  if type(index) ~= "number" then
+    return false, "invalid_reward_option"
+  end
+
+  index = math.floor(index)
+
+  if index < 1 or index > #(session.options or {}) then
     return false, "invalid_reward_option"
   end
 

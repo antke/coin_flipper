@@ -31,6 +31,7 @@ function RunState.new(options)
     metaRewardEarned = 0,
     metaRewardGranted = false,
     runStartRecorded = false,
+    runRecordSaved = options.runRecordSaved == true,
 
     history = {
       loadoutCommits = {},

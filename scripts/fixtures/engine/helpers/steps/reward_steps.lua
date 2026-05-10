@@ -10,7 +10,7 @@ local function buildRewardPreview(env)
   assert(env.runState, "reward preview requires run state")
   assert(env.stageRecord, "reward preview requires finalized stage record")
 
-  env.rewardPreviewSession = RewardSystem.buildPreview(env.runState, env:ensureRng())
+  env.rewardPreviewSession = RewardSystem.buildPreviewForStage(env.runState, env.stageRecord)
   RunHistorySystem.recordStageRewardPreview(env.stageRecord, env.rewardPreviewSession)
   Common.assertRuntime(env, "fixtures.build_reward_preview", { history = true })
   return env.rewardPreviewSession

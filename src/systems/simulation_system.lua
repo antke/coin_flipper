@@ -7,6 +7,7 @@ local MetaState = require("src.domain.meta_state")
 local ProgressionSystem = require("src.systems.progression_system")
 local RNG = require("src.core.rng")
 local RewardSystem = require("src.systems.reward_system")
+local EncounterSystem = require("src.systems.encounter_system")
 local RunInitializer = require("src.systems.run_initializer")
 local ShopFlowSystem = require("src.systems.shop_flow_system")
 local ShopSystem = require("src.systems.shop_system")
@@ -295,7 +296,7 @@ local function chooseRewardOptionIndex(session)
 end
 
 local function simulateRewardChoice(runState, stageRecord, rng)
-  local session = RewardSystem.buildPreview(runState, rng)
+  local session = RewardSystem.buildPreviewForStage(runState, stageRecord)
   RunHistorySystem.recordStageRewardPreview(stageRecord, session)
 
   local selectedIndex = chooseRewardOptionIndex(session)
@@ -309,6 +310,37 @@ local function simulateRewardChoice(runState, stageRecord, rng)
   end
 
   RunHistorySystem.recordStageRewardChoice(stageRecord, choiceOrError)
+end
+
+local function chooseEncounterChoiceIndex(session)
+  if not session or #(session.choices or {}) == 0 then
+    return nil
+  end
+
+  for index, choice in ipairs(session.choices or {}) do
+    if choice.type == "upgrade" or choice.type == "coin" then
+      return index
+    end
+  end
+
+  return session.selectedIndex or 1
+end
+
+local function simulateEncounterChoice(runState, stageRecord)
+  local session = EncounterSystem.buildSession(runState)
+  RunHistorySystem.recordStageEncounterPreview(stageRecord, session)
+
+  local selectedIndex = chooseEncounterChoiceIndex(session)
+  if selectedIndex then
+    EncounterSystem.selectChoice(session, selectedIndex)
+  end
+
+  local ok, choiceOrError = EncounterSystem.claimChoice(runState, session)
+  if not ok then
+    error(choiceOrError or "encounter_claim_failed")
+  end
+
+  RunHistorySystem.recordStageEncounterChoice(stageRecord, choiceOrError)
 end
 
 function SimulationSystem.simulateRun(options)
@@ -377,6 +409,7 @@ function SimulationSystem.simulateRun(options)
     end
 
     if stageRecord.status == "cleared" then
+      simulateEncounterChoice(runState, stageRecord)
       simulateShopVisit(runState, stageState, stageRecord, metaProjection, rng)
       ProgressionSystem.advanceToNextRound(runState)
     end

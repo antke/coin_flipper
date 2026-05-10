@@ -47,6 +47,37 @@ local definitions = {
       },
     },
   },
+  {
+    id = "tails_embargo",
+    name = "Tails Embargo",
+    description = "Tails calls are worth 15% less score during this boss fight.",
+    tags = { "boss", "tails", "score" },
+    triggers = {
+      {
+        hook = "before_scoring",
+        condition = {
+          call = "tails",
+        },
+        effects = {
+          { op = "apply_score_multiplier", value = 0.85 },
+        },
+      },
+    },
+  },
+  {
+    id = "stacked_deck",
+    name = "Stacked Deck",
+    description = "Each equipped coin gains +0.06 Heads weight before rolling.",
+    tags = { "boss", "weight", "heads" },
+    triggers = {
+      {
+        hook = "before_coin_roll",
+        effects = {
+          { op = "modify_coin_weight", side = "heads", amount = 0.06 },
+        },
+      },
+    },
+  },
 }
 
 local byId = {}

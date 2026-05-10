@@ -31,6 +31,18 @@ function love.mousepressed(x, y, button, istouch, presses)
   end
 end
 
+function love.textinput(text)
+  if app and app.textinput then
+    app:textinput(text)
+  end
+end
+
+function love.wheelmoved(x, y)
+  if app and app.wheelmoved then
+    app:wheelmoved(x, y)
+  end
+end
+
 function love.resize(width, height)
   if app then
     app:resize(width, height)

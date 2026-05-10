@@ -21,7 +21,7 @@ local definitions = {
     id = "heads_hunter",
     name = "Heads Hunter",
     rarity = "common",
-    description = "+2 stage score when this coin matches a Heads call.",
+    description = "+2 stage score and +2 run score when this coin matches a Heads call.",
     tags = { "starter", "heads", "match" },
     isStarter = true,
     triggers = {
@@ -39,7 +39,7 @@ local definitions = {
     id = "tails_chaser",
     name = "Tails Chaser",
     rarity = "common",
-    description = "+2 stage score when this coin matches a Tails call.",
+    description = "+2 stage score and +2 run score when this coin matches a Tails call.",
     tags = { "starter", "tails", "match" },
     isStarter = true,
     triggers = {
@@ -107,7 +107,7 @@ local definitions = {
     id = "boss_biter",
     name = "Boss Biter",
     rarity = "uncommon",
-    description = "+2 stage score during boss stages.",
+    description = "+2 stage score and +2 run score during boss stages.",
     tags = { "boss", "score" },
     triggers = {
       {
@@ -137,6 +137,40 @@ local definitions = {
     },
   },
   {
+    id = "heads_banker",
+    name = "Heads Banker",
+    rarity = "common",
+    description = "+1 stage score and +1 shop point when this coin matches a Heads call.",
+    tags = { "heads", "economy", "match" },
+    triggers = {
+      {
+        hook = "after_coin_roll",
+        condition = { call = "heads", result = "heads" },
+        effects = {
+          { op = "add_stage_score", amount = 1 },
+          { op = "add_shop_points", amount = 1 },
+        },
+      },
+    },
+  },
+  {
+    id = "tails_banker",
+    name = "Tails Banker",
+    rarity = "common",
+    description = "+1 stage score and +1 shop point when this coin matches a Tails call.",
+    tags = { "tails", "economy", "match" },
+    triggers = {
+      {
+        hook = "after_coin_roll",
+        condition = { call = "tails", result = "tails" },
+        effects = {
+          { op = "add_stage_score", amount = 1 },
+          { op = "add_shop_points", amount = 1 },
+        },
+      },
+    },
+  },
+  {
     id = "safety_net",
     name = "Safety Net",
     rarity = "uncommon",
@@ -149,6 +183,144 @@ local definitions = {
         condition = { no_matches = true },
         effects = {
           { op = "add_shop_points", amount = 1 },
+          { op = "add_run_score", amount = 1 },
+        },
+      },
+    },
+  },
+  {
+    id = "reserve_token",
+    name = "Reserve Token",
+    rarity = "uncommon",
+    unlockedByDefault = false,
+    description = "If every equipped coin matches this batch, gain +1 free shop reroll.",
+    tags = { "economy", "perfect", "shop" },
+    triggers = {
+      {
+        hook = "on_batch_end",
+        condition = { all_matched = true },
+        effects = {
+          { op = "add_shop_rerolls", amount = 1 },
+        },
+      },
+    },
+  },
+  {
+    id = "mirror_mark",
+    name = "Mirror Mark",
+    rarity = "common",
+    description = "+1 run score when this coin matches on a repeated call batch.",
+    tags = { "streak", "score" },
+    triggers = {
+      {
+        hook = "after_coin_roll",
+        condition = { match = true, repeated_call = true },
+        effects = {
+          { op = "add_run_score", amount = 1 },
+        },
+      },
+    },
+  },
+  {
+    id = "parachute_pin",
+    name = "Parachute Pin",
+    rarity = "common",
+    description = "+1 stage score before the stage-end check if no equipped coin matches this batch.",
+    tags = { "safety", "miss", "score" },
+    triggers = {
+      {
+        hook = "before_stage_end_check",
+        condition = { no_matches = true },
+        effects = {
+          { op = "add_stage_score", amount = 1 },
+        },
+      },
+    },
+  },
+  {
+    id = "tails_echo",
+    name = "Tails Echo",
+    rarity = "common",
+    description = "+1 run score and +1 shop point when this coin matches on a repeated Tails call.",
+    tags = { "tails", "streak", "economy" },
+    triggers = {
+      {
+        hook = "after_coin_roll",
+        condition = { call = "tails", result = "tails", repeated_call = true },
+        effects = {
+          { op = "add_run_score", amount = 1 },
+          { op = "add_shop_points", amount = 1 },
+        },
+      },
+    },
+  },
+  {
+    id = "glass_nickel",
+    name = "Glass Nickel",
+    rarity = "rare",
+    description = "Each match primes a 1.15x score multiplier before base scoring. Fragile, but explosive with wide loadouts.",
+    tags = { "match", "multiplier", "score" },
+    triggers = {
+      {
+        hook = "after_coin_roll",
+        condition = { match = true },
+        effects = {
+          { op = "apply_score_multiplier", value = 1.15 },
+        },
+      },
+    },
+  },
+  {
+    id = "moon_mint",
+    name = "Moon Mint",
+    rarity = "uncommon",
+    description = "This coin gains +0.15 Tails weight. On a Tails match, gain +1 shop point.",
+    tags = { "tails", "weight", "economy" },
+    triggers = {
+      {
+        hook = "before_coin_roll",
+        effects = {
+          { op = "modify_coin_weight", side = "tails", amount = 0.15 },
+        },
+      },
+      {
+        hook = "after_coin_roll",
+        condition = { call = "tails", result = "tails" },
+        effects = {
+          { op = "add_shop_points", amount = 1 },
+        },
+      },
+    },
+  },
+  {
+    id = "sun_stamp",
+    name = "Sun Stamp",
+    rarity = "uncommon",
+    description = "If every equipped coin matches this batch, add +3 stage score and +3 run score at batch end.",
+    tags = { "perfect", "score", "match" },
+    triggers = {
+      {
+        hook = "on_batch_end",
+        condition = { all_matched = true },
+        effects = {
+          { op = "add_stage_score", amount = 3 },
+          { op = "add_run_score", amount = 3 },
+        },
+      },
+    },
+  },
+  {
+    id = "black_cat_cent",
+    name = "Black Cat Cent",
+    rarity = "rare",
+    description = "If no equipped coin matches this batch, gain +2 shop points and +1 run score.",
+    tags = { "miss", "safety", "economy" },
+    triggers = {
+      {
+        hook = "on_batch_end",
+        condition = { no_matches = true },
+        effects = {
+          { op = "add_shop_points", amount = 2 },
           { op = "add_run_score", amount = 1 },
         },
       },

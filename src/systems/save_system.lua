@@ -337,6 +337,7 @@ function SaveSystem.normalizeMetaStateForSave(metaState)
     unlockedCoinIds = Utils.copyArray(metaState.unlockedCoinIds or {}),
     unlockedUpgradeIds = Utils.copyArray(metaState.unlockedUpgradeIds or {}),
     purchasedMetaUpgradeIds = Utils.copyArray(metaState.purchasedMetaUpgradeIds or {}),
+    runRecords = Utils.clone(metaState.runRecords or {}),
     effectiveValues = Utils.clone(metaState.effectiveValues or {}),
     stats = Utils.clone(metaState.stats or {}),
   }
@@ -357,7 +358,9 @@ function SaveSystem.normalizeActiveRunForSave(snapshot)
     selectedCall = snapshot.selectedCall,
     lastBatchResult = Utils.clone(snapshot.lastBatchResult),
     lastStageResult = Utils.clone(snapshot.lastStageResult),
+    postResultNextState = snapshot.postResultNextState,
     rewardPreviewSession = Utils.clone(snapshot.rewardPreviewSession),
+    encounterSession = Utils.clone(snapshot.encounterSession),
     shopOffers = Utils.clone(snapshot.shopOffers or {}),
     shopSession = Utils.clone(snapshot.shopSession),
     lastShopGenerationTrace = Utils.clone(snapshot.lastShopGenerationTrace),

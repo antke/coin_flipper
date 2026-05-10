@@ -34,10 +34,10 @@ end
 
 function SummaryState:buildButtons(app)
   local metrics = Layout.getFooterMetrics(love.graphics.getHeight())
-  local buttonWidth = 260
+  local buttonWidth = 220
   local buttonHeight = metrics.buttonHeight
   local gap = Theme.spacing.itemGap
-  local totalWidth = (buttonWidth * 2) + gap
+  local totalWidth = (buttonWidth * 3) + (gap * 2)
   local startX = math.floor((love.graphics.getWidth() - totalWidth) / 2)
 
   self.buttons = {
@@ -57,6 +57,17 @@ function SummaryState:buildButtons(app)
       y = metrics.buttonY,
       width = buttonWidth,
       height = buttonHeight,
+      label = "Open Records",
+      variant = "default",
+      onClick = function()
+        return app.stateGraph:request("open_records")
+      end,
+    },
+    {
+      x = startX + ((buttonWidth + gap) * 2),
+      y = metrics.buttonY,
+      width = buttonWidth,
+      height = buttonHeight,
       label = "Return to Menu",
       variant = "primary",
       onClick = function()
@@ -71,6 +82,11 @@ end
 function SummaryState:keypressed(app, key)
   if key == "m" then
     app.stateGraph:request("open_meta")
+    return
+  end
+
+  if key == "r" then
+    app.stateGraph:request("open_records")
     return
   end
 
@@ -109,6 +125,7 @@ function SummaryState:draw(app)
 
   local summaryLines = {
     string.format("Run Status: %s", summary.runStatus),
+    string.format("Seed: %s", tostring(summary.seed or "n/a")),
     string.format("Final Round Reached: %d", summary.roundIndex),
     string.format("Run Total Score: %d", summary.runTotalScore),
     string.format("Shop Points Remaining: %d", summary.shopPoints),
@@ -129,7 +146,7 @@ function SummaryState:draw(app)
   end
 
   table.insert(summaryLines, "")
-  table.insert(summaryLines, "Click Open Meta Progression or press M, or Return to Menu with Enter.")
+  table.insert(summaryLines, "Click Open Meta Progression, Open Records, or Return to Menu. Press M for Meta, R for Records, or Enter to leave.")
 
   local stageHistoryLines = {}
   for _, stageRecord in ipairs(summary.stageHistory or {}) do

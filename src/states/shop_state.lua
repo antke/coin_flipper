@@ -1,4 +1,6 @@
 local Button = require("src.ui.button")
+local CoinArt = require("src.ui.coin_art")
+local Coins = require("src.content.coins")
 local Layout = require("src.ui.layout")
 local Panel = require("src.ui.panel")
 local ShopSystem = require("src.systems.shop_system")
@@ -250,6 +252,30 @@ function ShopState:draw(app)
     local contentArea = Panel.getContentArea(entry.x, entry.y, entry.width, entry.height, string.format("Offer %d", index))
     local buttonHeight = 38
 
+    local artSize = math.min(86, math.max(54, math.floor(contentArea.width * 0.30)))
+    local textX = contentArea.x
+    local textY = contentArea.y
+    local textWidth = contentArea.width
+
+    if offer.type == "coin" then
+      local coinDefinition = Coins.getById(offer.contentId)
+      CoinArt.draw(coinDefinition or offer.contentId, contentArea.x, contentArea.y, artSize, {
+        selected = not offer.purchased,
+        tilt = (index % 2 == 0) and 0.08 or -0.08,
+      })
+      textX = contentArea.x + artSize + Theme.spacing.itemGap
+      textWidth = contentArea.width - artSize - Theme.spacing.itemGap
+    else
+      love.graphics.setColor(Theme.colors.highlight[1], Theme.colors.highlight[2], Theme.colors.highlight[3], 0.18)
+      love.graphics.rectangle("fill", contentArea.x, contentArea.y, artSize, artSize, 10, 10)
+      Theme.applyColor(Theme.colors.highlight)
+      love.graphics.rectangle("line", contentArea.x, contentArea.y, artSize, artSize, 10, 10)
+      love.graphics.setFont(app.fonts.heading)
+      love.graphics.printf("UP", contentArea.x, contentArea.y + math.floor((artSize - Theme.spacing.lineHeight) / 2), artSize, "center")
+      textX = contentArea.x + artSize + Theme.spacing.itemGap
+      textWidth = contentArea.width - artSize - Theme.spacing.itemGap
+    end
+
     local lines = {
       string.format("%s", offer.name),
       string.format("Type: %s", offer.type),
@@ -270,7 +296,7 @@ function ShopState:draw(app)
       end
     end
 
-    Layout.drawWrappedLines(lines, contentArea.x, contentArea.y, contentArea.width, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height - (buttonHeight + 8))
+    Layout.drawWrappedLines(lines, textX, textY, textWidth, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height - (buttonHeight + 8))
   end
 
   local mouseX, mouseY = love.mouse.getPosition()

@@ -86,7 +86,41 @@ local RULES = {
     event = "start_run",
     build = function()
       return {
-        { type = "action", action = "start_new_run" },
+        { type = "state", state = "run_setup", payload = { returnState = "menu" } },
+      }
+    end,
+  },
+  {
+    from = "run_setup",
+    event = "back_to_menu",
+    build = function()
+      return {
+        { type = "state", state = "menu" },
+      }
+    end,
+  },
+  {
+    from = "run_setup",
+    event = "back_to_meta",
+    build = function(context)
+      local payload = context.payload or {}
+      return {
+        {
+          type = "state",
+          state = "meta",
+          payload = {
+            metaFlowContext = payload.metaFlowContext or context.metaFlowContext,
+          },
+        },
+      }
+    end,
+  },
+  {
+    from = "run_setup",
+    event = "start_run",
+    build = function(context)
+      return {
+        { type = "action", action = "start_new_run", payload = context.payload or {} },
         { type = "state", state = "loadout" },
       }
     end,
@@ -111,6 +145,42 @@ local RULES = {
     end,
   },
   {
+    from = "menu",
+    event = "open_help",
+    build = function()
+      return {
+        { type = "state", state = "help" },
+      }
+    end,
+  },
+  {
+    from = "menu",
+    event = "open_collection",
+    build = function()
+      return {
+        { type = "state", state = "collection", payload = { returnState = "menu" } },
+      }
+    end,
+  },
+  {
+    from = "menu",
+    event = "open_records",
+    build = function()
+      return {
+        { type = "state", state = "records", payload = { returnState = "menu" } },
+      }
+    end,
+  },
+  {
+    from = "help",
+    event = "back",
+    build = function()
+      return {
+        { type = "state", state = "menu" },
+      }
+    end,
+  },
+  {
     from = "meta",
     event = "back",
     build = function(context)
@@ -122,14 +192,113 @@ local RULES = {
   {
     from = "meta",
     event = "start_next_run",
-    build = function(context)
+    build = function(context, app)
       if context.metaAllowStartRun ~= true then
         return {}
       end
 
       return {
-        { type = "action", action = "start_new_run" },
-        { type = "state", state = "loadout" },
+        {
+          type = "state",
+          state = "run_setup",
+          payload = {
+            returnState = "meta",
+            metaFlowContext = app and app.getMetaFlowContext and app:getMetaFlowContext() or nil,
+          },
+        },
+      }
+    end,
+  },
+  {
+    from = "meta",
+    event = "open_collection",
+    build = function()
+      return {
+        { type = "state", state = "collection", payload = { returnState = "meta" } },
+      }
+    end,
+  },
+  {
+    from = "meta",
+    event = "open_records",
+    build = function(_, app)
+      return {
+        {
+          type = "state",
+          state = "records",
+          payload = {
+            returnState = "meta",
+            metaFlowContext = app and app.getMetaFlowContext and app:getMetaFlowContext() or nil,
+          },
+        },
+      }
+    end,
+  },
+  {
+    from = "collection",
+    event = "back_to_menu",
+    build = function()
+      return {
+        { type = "state", state = "menu" },
+      }
+    end,
+  },
+  {
+    from = "records",
+    event = "back_to_menu",
+    build = function()
+      return {
+        { type = "state", state = "menu" },
+      }
+    end,
+  },
+  {
+    from = "records",
+    event = "back_to_meta",
+    build = function(context)
+      local payload = context.payload or {}
+      return {
+        {
+          type = "state",
+          state = "meta",
+          payload = {
+            metaFlowContext = payload.metaFlowContext or context.metaFlowContext,
+          },
+        },
+      }
+    end,
+  },
+  {
+    from = "records",
+    event = "back_to_summary",
+    build = function()
+      return {
+        { type = "state", state = "summary" },
+      }
+    end,
+  },
+  {
+    from = "collection",
+    event = "back_to_meta",
+    build = function(_, app)
+      return {
+        {
+          type = "state",
+          state = "meta",
+          payload = {
+            metaFlowContext = app and app.getMetaFlowContext and app:getMetaFlowContext() or nil,
+          },
+        },
+      }
+    end,
+  },
+  {
+    from = "loadout",
+    event = "open_pause",
+    build = function()
+      return {
+        { type = "action", action = "prepare_pause", payload = { returnState = "loadout" } },
+        { type = "state", state = "pause" },
       }
     end,
   },
@@ -163,6 +332,16 @@ local RULES = {
   },
   {
     from = "boss_warning",
+    event = "open_pause",
+    build = function()
+      return {
+        { type = "action", action = "prepare_pause", payload = { returnState = "boss_warning" } },
+        { type = "state", state = "pause" },
+      }
+    end,
+  },
+  {
+    from = "boss_warning",
     event = "back",
     build = function()
       return {
@@ -176,6 +355,16 @@ local RULES = {
     build = function()
       return {
         { type = "state", state = "loadout" },
+      }
+    end,
+  },
+  {
+    from = "stage",
+    event = "open_pause",
+    build = function()
+      return {
+        { type = "action", action = "prepare_pause", payload = { returnState = "stage" } },
+        { type = "state", state = "pause" },
       }
     end,
   },
@@ -202,6 +391,16 @@ local RULES = {
     end,
   },
   {
+    from = "result",
+    event = "open_pause",
+    build = function()
+      return {
+        { type = "action", action = "prepare_pause", payload = { returnState = "result" } },
+        { type = "state", state = "pause" },
+      }
+    end,
+  },
+  {
     from = "post_stage_analytics",
     event = "continue",
     build = function(context)
@@ -210,6 +409,16 @@ local RULES = {
           type = "state",
           state = context.postResultDestinationState or "summary",
         },
+      }
+    end,
+  },
+  {
+    from = "post_stage_analytics",
+    event = "open_pause",
+    build = function()
+      return {
+        { type = "action", action = "prepare_pause", payload = { returnState = "post_stage_analytics" } },
+        { type = "state", state = "pause" },
       }
     end,
   },
@@ -230,6 +439,16 @@ local RULES = {
     end,
   },
   {
+    from = "reward_preview",
+    event = "open_pause",
+    build = function()
+      return {
+        { type = "action", action = "prepare_pause", payload = { returnState = "reward_preview" } },
+        { type = "state", state = "pause" },
+      }
+    end,
+  },
+  {
     from = "encounter",
     event = "continue",
     build = function()
@@ -237,6 +456,16 @@ local RULES = {
         { type = "action", action = "claim_encounter_choice" },
         { type = "action", action = "prepare_shop" },
         { type = "state", state = "shop" },
+      }
+    end,
+  },
+  {
+    from = "encounter",
+    event = "open_pause",
+    build = function()
+      return {
+        { type = "action", action = "prepare_pause", payload = { returnState = "encounter" } },
+        { type = "state", state = "pause" },
       }
     end,
   },
@@ -251,12 +480,67 @@ local RULES = {
     end,
   },
   {
+    from = "boss_reward",
+    event = "open_pause",
+    build = function()
+      return {
+        { type = "action", action = "prepare_pause", payload = { returnState = "boss_reward" } },
+        { type = "state", state = "pause" },
+      }
+    end,
+  },
+  {
     from = "shop",
     event = "continue",
     build = function()
       return {
         { type = "action", action = "advance_after_shop" },
         { type = "state", state = "loadout" },
+      }
+    end,
+  },
+  {
+    from = "shop",
+    event = "open_pause",
+    build = function()
+      return {
+        { type = "action", action = "prepare_pause", payload = { returnState = "shop" } },
+        { type = "state", state = "pause" },
+      }
+    end,
+  },
+  {
+    from = "pause",
+    event = "resume",
+    build = function(context)
+      if not context.pauseReturnState then
+        return {
+          { type = "state", state = "menu" },
+        }
+      end
+
+      return {
+        { type = "state", state = context.pauseReturnState, payload = context.pauseReturnPayload or {} },
+      }
+    end,
+  },
+  {
+    from = "pause",
+    event = "save_quit_to_menu",
+    build = function()
+      return {
+        { type = "action", action = "save_quit_to_menu" },
+        { type = "state", state = "menu" },
+      }
+    end,
+  },
+  {
+    from = "pause",
+    event = "abandon_run",
+    build = function()
+      return {
+        { type = "action", action = "abandon_run" },
+        { type = "state", state = "menu" },
       }
     end,
   },
@@ -276,6 +560,15 @@ local RULES = {
             },
           },
         },
+      }
+    end,
+  },
+  {
+    from = "summary",
+    event = "open_records",
+    build = function()
+      return {
+        { type = "state", state = "records", payload = { returnState = "summary" } },
       }
     end,
   },

@@ -78,11 +78,11 @@ function PostStageAnalyticsState:draw(app)
   local titleColor = stageRecord.status == "cleared" and Theme.colors.accent or Theme.colors.warning
 
   love.graphics.setFont(app.fonts.title)
-  Layout.centeredText("Post-Stage Analytics", 68, app.fonts.title, titleColor)
+  Layout.centeredText("Stage Review", 68, app.fonts.title, titleColor)
 
   Panel.draw(padding, panelY, width - (padding * 2), topHeight, "Stage Snapshot")
   Panel.draw(padding, bottomY, halfWidth, bottomHeight, "Batch + Coin Stats")
-  Panel.draw(padding + halfWidth + gap, bottomY, halfWidth, bottomHeight, "Trace + Follow-up")
+  Panel.draw(padding + halfWidth + gap, bottomY, halfWidth, bottomHeight, "Trigger + Follow-up")
 
   local topContent = Panel.getContentArea(padding, panelY, width - (padding * 2), topHeight, "Stage Snapshot")
   local bottomLeftContent = Panel.getContentArea(padding, bottomY, halfWidth, bottomHeight, "Batch + Coin Stats")

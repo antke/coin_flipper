@@ -1,3 +1,4 @@
+local EncounterSystem = require("src.systems.encounter_system")
 local FlipResolver = require("src.systems.flip_resolver")
 local Loadout = require("src.domain.loadout")
 local LoadoutSystem = require("src.systems.loadout_system")
@@ -305,6 +306,7 @@ local function buildStageTranscript(runState, stageRecord, batchPointer, shopPoi
     loadout = nil,
     batches = {},
     reward = nil,
+    encounter = nil,
     shop = nil,
   }
 
@@ -366,6 +368,16 @@ local function buildStageTranscript(runState, stageRecord, batchPointer, shopPoi
     stageEntry.reward = {
       options = Utils.clone(stageRecord.rewardOptions or {}),
       choice = Utils.clone(stageRecord.rewardChoice or nil),
+    }
+  end
+
+  if stageRecord.encounter ~= nil or stageRecord.encounterChoice ~= nil then
+    stageEntry.encounter = {
+      id = stageRecord.encounter and stageRecord.encounter.id or nil,
+      name = stageRecord.encounter and stageRecord.encounter.name or nil,
+      description = stageRecord.encounter and stageRecord.encounter.description or nil,
+      choices = Utils.clone(stageRecord.encounter and stageRecord.encounter.choices or {}),
+      choice = Utils.clone(stageRecord.encounterChoice or nil),
     }
   end
 
@@ -604,7 +616,7 @@ local function replayRewardChoice(runState, stageRecord, rng, rewardTranscript, 
     return false, "missing_reward_choice"
   end
 
-  local session = RewardSystem.buildPreview(runState, rng)
+  local session = RewardSystem.buildPreviewForStage(runState, stageRecord)
   RunHistorySystem.recordStageRewardPreview(stageRecord, session)
 
   if not valuesEqual(rewardTranscript.options or {}, stageRecord.rewardOptions or {}) then
@@ -651,6 +663,81 @@ local function replayRewardChoice(runState, stageRecord, rng, rewardTranscript, 
 
   if not valuesEqual(rewardTranscript.choice, stageRecord.rewardChoice) then
     return false, "reward_choice_mismatch"
+  end
+
+  return true
+end
+
+local function replayEncounterChoice(runState, stageRecord, encounterTranscript, hasShopTranscript)
+  local encounterEligible = stageRecord.stageType == "normal"
+    and stageRecord.status == "cleared"
+    and runState.runStatus == "active"
+
+  if not encounterEligible then
+    if encounterTranscript ~= nil then
+      return false, "unexpected_encounter_for_stage"
+    end
+
+    return true
+  end
+
+  if not encounterTranscript then
+    if not hasShopTranscript then
+      return true
+    end
+
+    return false, "missing_encounter_choice"
+  end
+
+  local session = EncounterSystem.buildSession(runState)
+  RunHistorySystem.recordStageEncounterPreview(stageRecord, session)
+
+  local expectedEncounter = {
+    id = encounterTranscript.id,
+    name = encounterTranscript.name,
+    description = encounterTranscript.description,
+    choices = Utils.clone(encounterTranscript.choices or {}),
+  }
+
+  if not valuesEqual(expectedEncounter, stageRecord.encounter or {}) then
+    return false, "encounter_options_mismatch"
+  end
+
+  if encounterTranscript.choice == nil then
+    if #(session.choices or {}) > 0 then
+      return false, "missing_encounter_choice"
+    end
+
+    local ok, claimError = EncounterSystem.claimChoice(runState, session)
+    if not ok then
+      return false, claimError or "encounter_claim_failed"
+    end
+
+    return true
+  end
+
+  local choiceIndex = nil
+  for index, choice in ipairs(session.choices or {}) do
+    if choice.id == encounterTranscript.choice.id then
+      choiceIndex = index
+      break
+    end
+  end
+
+  if not choiceIndex then
+    return false, string.format("missing_encounter_option:%s", tostring(encounterTranscript.choice.id))
+  end
+
+  EncounterSystem.selectChoice(session, choiceIndex)
+  local ok, choiceOrError = EncounterSystem.claimChoice(runState, session)
+  if not ok then
+    return false, choiceOrError or "encounter_claim_failed"
+  end
+
+  RunHistorySystem.recordStageEncounterChoice(stageRecord, choiceOrError)
+
+  if not valuesEqual(encounterTranscript.choice, stageRecord.encounterChoice) then
+    return false, "encounter_choice_mismatch"
   end
 
   return true
@@ -869,6 +956,15 @@ function ReplaySystem.replayTranscript(transcript)
         ok = false,
         error = rewardError or "reward_replay_failed",
         mismatches = { tostring(rewardError or "reward_replay_failed") },
+      }
+    end
+
+    local okEncounter, encounterError = replayEncounterChoice(runState, stageRecord, stageInput.encounter, stageInput.shop ~= nil)
+    if not okEncounter then
+      return {
+        ok = false,
+        error = encounterError or "encounter_replay_failed",
+        mismatches = { tostring(encounterError or "encounter_replay_failed") },
       }
     end
 

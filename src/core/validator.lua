@@ -35,6 +35,7 @@ local VALID_META_STATE_KEYS = {
   unlockedCoinIds = true,
   unlockedUpgradeIds = true,
   purchasedMetaUpgradeIds = true,
+  runRecords = true,
   effectiveValues = true,
   modifiers = true,
   stats = true,
@@ -45,6 +46,66 @@ local VALID_META_STATS = {
   runsWon = true,
   bestRunScore = true,
   bossesDefeated = true,
+}
+
+local VALID_RUN_RECORD_KEYS = {
+  resultType = true,
+  seed = true,
+  runStatus = true,
+  finalRound = true,
+  finalStageLabel = true,
+  finalStageStatus = true,
+  finalStageVariant = true,
+  runTotalScore = true,
+  metaRewardEarned = true,
+  shopVisitCount = true,
+  totalRerollsUsed = true,
+  collectionSize = true,
+  upgradeCount = true,
+  loadoutKey = true,
+  stageHistory = true,
+  shopHistory = true,
+  purchaseHistory = true,
+}
+
+local VALID_RUN_RECORD_STAGE_KEYS = {
+  roundIndex = true,
+  stageLabel = true,
+  stageType = true,
+  variantName = true,
+  status = true,
+  stageScore = true,
+  targetScore = true,
+  loadoutKey = true,
+  rewardChoice = true,
+  rewardOptionsCount = true,
+  encounterChoice = true,
+  encounterOptionsCount = true,
+}
+
+local VALID_RUN_RECORD_PURCHASE_KEYS = {
+  type = true,
+  contentId = true,
+  price = true,
+}
+
+local VALID_RUN_RECORD_SHOP_KEYS = {
+  roundIndex = true,
+  sourceStageId = true,
+  sourceStageLabel = true,
+  rerollsUsed = true,
+  offersSeen = true,
+  purchases = true,
+}
+
+local VALID_RUN_RECORD_ENCOUNTER_CHOICE_KEYS = {
+  id = true,
+  type = true,
+  amount = true,
+  contentId = true,
+  label = true,
+  description = true,
+  name = true,
 }
 
 local VALID_SAVE_ARTIFACT_KEYS = {
@@ -63,7 +124,9 @@ local VALID_ACTIVE_RUN_ARTIFACT_KEYS = {
   selectedCall = true,
   lastBatchResult = true,
   lastStageResult = true,
+  postResultNextState = true,
   rewardPreviewSession = true,
+  encounterSession = true,
   shopOffers = true,
   shopSession = true,
   lastShopGenerationTrace = true,
@@ -80,7 +143,15 @@ local VALID_ACTIVE_RUN_STATES = {
   post_stage_analytics = true,
   reward_preview = true,
   boss_reward = true,
+  encounter = true,
   shop = true,
+}
+
+local VALID_POST_RESULT_NEXT_STATES = {
+  post_stage_analytics = true,
+  reward_preview = true,
+  boss_reward = true,
+  summary = true,
 }
 
 local VALID_REPLAY_TRANSCRIPT_KEYS = {
@@ -111,6 +182,7 @@ local VALID_REPLAY_STAGE_KEYS = {
   loadout = true,
   batches = true,
   reward = true,
+  encounter = true,
   shop = true,
 }
 
@@ -124,6 +196,23 @@ local VALID_REPLAY_REWARD_OPTION_KEYS = {
   contentId = true,
   name = true,
   rarity = true,
+  description = true,
+}
+
+local VALID_REPLAY_ENCOUNTER_KEYS = {
+  id = true,
+  name = true,
+  description = true,
+  choices = true,
+  choice = true,
+}
+
+local VALID_REPLAY_ENCOUNTER_CHOICE_KEYS = {
+  id = true,
+  type = true,
+  amount = true,
+  contentId = true,
+  label = true,
   description = true,
 }
 
@@ -577,6 +666,170 @@ local function validateRewardOption(option, label)
   return true
 end
 
+local function validateEncounterChoice(choice, label)
+  local Coins = require("src.content.coins")
+  local Upgrades = require("src.content.upgrades")
+
+  if type(choice) ~= "table" then
+    return false, string.format("%s must be a table", label)
+  end
+
+  for key in pairs(choice) do
+    if not VALID_REPLAY_ENCOUNTER_CHOICE_KEYS[key] then
+      return false, string.format("%s has unknown field %s", label, tostring(key))
+    end
+  end
+
+  if type(choice.id) ~= "string" or choice.id == "" then
+    return false, string.format("%s id must be a non-empty string", label)
+  end
+
+  if choice.type ~= "shop_points" and choice.type ~= "shop_rerolls" and choice.type ~= "coin" and choice.type ~= "upgrade" then
+    return false, string.format("%s type must be shop_points, shop_rerolls, coin, or upgrade", label)
+  end
+
+  if choice.type == "shop_points" or choice.type == "shop_rerolls" then
+    if type(choice.amount) ~= "number" then
+      return false, string.format("%s amount must be numeric", label)
+    end
+  else
+    if type(choice.contentId) ~= "string" or choice.contentId == "" then
+      return false, string.format("%s contentId must be a non-empty string", label)
+    end
+
+    local lookup = choice.type == "coin" and Coins.getById or Upgrades.getById
+    if not lookup(choice.contentId) then
+      return false, string.format("%s references unknown %s %s", label, choice.type, tostring(choice.contentId))
+    end
+  end
+
+  if type(choice.label) ~= "string" or choice.label == "" then
+    return false, string.format("%s label must be a non-empty string", label)
+  end
+
+  if type(choice.description) ~= "string" or choice.description == "" then
+    return false, string.format("%s description must be a non-empty string", label)
+  end
+
+  return true
+end
+
+local function validateEncounterSession(session, label)
+  if type(session) ~= "table" then
+    return false, string.format("%s must be a table", label)
+  end
+
+  if type(session.encounterId) ~= "string" or session.encounterId == "" then
+    return false, string.format("%s encounterId must be a non-empty string", label)
+  end
+
+  if type(session.name) ~= "string" or session.name == "" then
+    return false, string.format("%s name must be a non-empty string", label)
+  end
+
+  if type(session.description) ~= "string" or session.description == "" then
+    return false, string.format("%s description must be a non-empty string", label)
+  end
+
+  if type(session.choices or {}) ~= "table" then
+    return false, string.format("%s choices must be a table", label)
+  end
+
+  local seenChoiceIds = {}
+  for index, choice in ipairs(session.choices or {}) do
+    local ok, errorMessage = validateEncounterChoice(choice, string.format("%s choice %d", label, index))
+    if not ok then
+      return false, errorMessage
+    end
+
+    if seenChoiceIds[choice.id] then
+      return false, string.format("%s choices contain duplicate id %s", label, tostring(choice.id))
+    end
+
+    seenChoiceIds[choice.id] = true
+  end
+
+  if session.selectedIndex ~= nil then
+    if not isPositiveInteger(session.selectedIndex) then
+      return false, string.format("%s selectedIndex must be a positive integer", label)
+    end
+
+    if session.choices[session.selectedIndex] == nil then
+      return false, string.format("%s selectedIndex is out of range", label)
+    end
+  end
+
+  if session.choice ~= nil then
+    local ok, errorMessage = validateEncounterChoice(session.choice, label .. " choice")
+    if not ok then
+      return false, errorMessage
+    end
+
+    local found = false
+    for _, choice in ipairs(session.choices or {}) do
+      if choice.id == session.choice.id then
+        found = true
+        break
+      end
+    end
+
+    if not found then
+      return false, string.format("%s choice %s is not present in choices", label, tostring(session.choice.id))
+    end
+  end
+
+  if type(session.claimed) ~= "boolean" then
+    return false, string.format("%s claimed must be boolean", label)
+  end
+
+  if session.claimed and #(session.choices or {}) > 0 and session.choice == nil then
+    return false, string.format("%s claimed session is missing a chosen option", label)
+  end
+
+  return true
+end
+
+function Validator.validateEncounterRegistry(definitions)
+  local seenEncounterIds = {}
+
+  for _, definition in ipairs(definitions or {}) do
+    local ok, errorMessage = Validator.validateContentDefinition(definition)
+    if not ok then
+      return false, string.format("encounters registry error: %s", errorMessage)
+    end
+
+    if seenEncounterIds[definition.id] then
+      return false, string.format("encounters registry has duplicate id %s", tostring(definition.id))
+    end
+
+    seenEncounterIds[definition.id] = true
+
+    if type(definition.description) ~= "string" or definition.description == "" then
+      return false, string.format("encounters registry error: %s is missing description", tostring(definition.id))
+    end
+
+    if type(definition.choices) ~= "table" then
+      return false, string.format("encounters registry error: %s choices must be a table", tostring(definition.id))
+    end
+
+    local seenChoiceIds = {}
+    for index, choice in ipairs(definition.choices or {}) do
+      ok, errorMessage = validateEncounterChoice(choice, string.format("encounter %s choice %d", tostring(definition.id), index))
+      if not ok then
+        return false, string.format("encounters registry error: %s", errorMessage)
+      end
+
+      if seenChoiceIds[choice.id] then
+        return false, string.format("encounters registry error: %s has duplicate choice id %s", tostring(definition.id), tostring(choice.id))
+      end
+
+      seenChoiceIds[choice.id] = true
+    end
+  end
+
+  return true
+end
+
 local function collectConditionFlagKeysFromActions(actionList, flagKeys)
   for _, action in ipairs(actionList or {}) do
     if (action.op == "set_batch_flag" or action.op == "set_shop_flag") and type(action.flag) == "string" and action.flag ~= "" then
@@ -620,6 +873,243 @@ local function validateCustomResolver(definition)
 
   if type(resolverModule) ~= "table" or type(resolverModule.resolve) ~= "function" then
     return false, string.format("definition %s customResolver %s must export resolve", definition.id, definition.customResolver)
+  end
+
+  return true
+end
+
+local function validateRunRecord(record, index)
+  if type(record) ~= "table" then
+    return false, string.format("runRecords[%d] must be a table", index)
+  end
+
+  for key in pairs(record) do
+    if not VALID_RUN_RECORD_KEYS[key] then
+      return false, string.format("runRecords[%d] contains unknown field %s", index, tostring(key))
+    end
+  end
+
+  if type(record.resultType) ~= "string" or record.resultType == "" then
+    return false, string.format("runRecords[%d] resultType must be a non-empty string", index)
+  end
+
+  if record.seed ~= nil and not isPositiveInteger(record.seed) then
+    return false, string.format("runRecords[%d] seed must be a positive integer when present", index)
+  end
+
+  if not VALID_RUN_STATUSES[record.runStatus] then
+    return false, string.format("runRecords[%d] has invalid runStatus %s", index, tostring(record.runStatus))
+  end
+
+  if not isPositiveInteger(record.finalRound) then
+    return false, string.format("runRecords[%d] finalRound must be a positive integer", index)
+  end
+
+  if type(record.finalStageLabel) ~= "string" or record.finalStageLabel == "" then
+    return false, string.format("runRecords[%d] finalStageLabel must be a non-empty string", index)
+  end
+
+  if record.finalStageVariant ~= nil and (type(record.finalStageVariant) ~= "string" or record.finalStageVariant == "") then
+    return false, string.format("runRecords[%d] finalStageVariant must be a non-empty string when present", index)
+  end
+
+  if not VALID_STAGE_STATUSES[record.finalStageStatus] then
+    return false, string.format("runRecords[%d] has invalid finalStageStatus %s", index, tostring(record.finalStageStatus))
+  end
+
+  if type(record.runTotalScore) ~= "number" or record.runTotalScore < 0 then
+    return false, string.format("runRecords[%d] runTotalScore must be a non-negative number", index)
+  end
+
+  if not isNonNegativeInteger(record.metaRewardEarned or 0) then
+    return false, string.format("runRecords[%d] metaRewardEarned must be a non-negative integer", index)
+  end
+
+  if not isNonNegativeInteger(record.shopVisitCount or 0) then
+    return false, string.format("runRecords[%d] shopVisitCount must be a non-negative integer", index)
+  end
+
+  if not isNonNegativeInteger(record.totalRerollsUsed or 0) then
+    return false, string.format("runRecords[%d] totalRerollsUsed must be a non-negative integer", index)
+  end
+
+  if not isNonNegativeInteger(record.collectionSize or 0) then
+    return false, string.format("runRecords[%d] collectionSize must be a non-negative integer", index)
+  end
+
+  if not isNonNegativeInteger(record.upgradeCount or 0) then
+    return false, string.format("runRecords[%d] upgradeCount must be a non-negative integer", index)
+  end
+
+  if record.loadoutKey ~= nil and (type(record.loadoutKey) ~= "string" or record.loadoutKey == "") then
+    return false, string.format("runRecords[%d] loadoutKey must be a non-empty string when present", index)
+  end
+
+  if type(record.stageHistory) ~= "table" then
+    return false, string.format("runRecords[%d] stageHistory must be a table", index)
+  end
+
+  for stageIndex, stageRecord in ipairs(record.stageHistory) do
+    if type(stageRecord) ~= "table" then
+      return false, string.format("runRecords[%d].stageHistory[%d] must be a table", index, stageIndex)
+    end
+
+    for key in pairs(stageRecord) do
+      if not VALID_RUN_RECORD_STAGE_KEYS[key] then
+        return false, string.format("runRecords[%d].stageHistory[%d] contains unknown field %s", index, stageIndex, tostring(key))
+      end
+    end
+
+    if not isPositiveInteger(stageRecord.roundIndex) then
+      return false, string.format("runRecords[%d].stageHistory[%d] roundIndex must be a positive integer", index, stageIndex)
+    end
+
+    if type(stageRecord.stageLabel) ~= "string" or stageRecord.stageLabel == "" then
+      return false, string.format("runRecords[%d].stageHistory[%d] stageLabel must be a non-empty string", index, stageIndex)
+    end
+
+    if not VALID_STAGE_TYPES[stageRecord.stageType] then
+      return false, string.format("runRecords[%d].stageHistory[%d] has invalid stageType %s", index, stageIndex, tostring(stageRecord.stageType))
+    end
+
+    if stageRecord.variantName ~= nil and (type(stageRecord.variantName) ~= "string" or stageRecord.variantName == "") then
+      return false, string.format("runRecords[%d].stageHistory[%d] variantName must be a non-empty string when present", index, stageIndex)
+    end
+
+    if not VALID_STAGE_STATUSES[stageRecord.status] then
+      return false, string.format("runRecords[%d].stageHistory[%d] has invalid status %s", index, stageIndex, tostring(stageRecord.status))
+    end
+
+    if type(stageRecord.stageScore) ~= "number" or stageRecord.stageScore < 0 then
+      return false, string.format("runRecords[%d].stageHistory[%d] stageScore must be a non-negative number", index, stageIndex)
+    end
+
+    if type(stageRecord.targetScore) ~= "number" or stageRecord.targetScore <= 0 then
+      return false, string.format("runRecords[%d].stageHistory[%d] targetScore must be a positive number", index, stageIndex)
+    end
+
+    if stageRecord.loadoutKey ~= nil and (type(stageRecord.loadoutKey) ~= "string" or stageRecord.loadoutKey == "") then
+      return false, string.format("runRecords[%d].stageHistory[%d] loadoutKey must be a non-empty string when present", index, stageIndex)
+    end
+
+    if stageRecord.rewardChoice then
+      local ok, errorMessage = validateRewardOption(stageRecord.rewardChoice, string.format("runRecords[%d].stageHistory[%d].rewardChoice", index, stageIndex))
+      if not ok then
+        return false, errorMessage
+      end
+    end
+
+    if not isNonNegativeInteger(stageRecord.rewardOptionsCount or 0) then
+      return false, string.format("runRecords[%d].stageHistory[%d] rewardOptionsCount must be a non-negative integer", index, stageIndex)
+    end
+
+    if stageRecord.encounterChoice then
+      if type(stageRecord.encounterChoice) ~= "table" then
+        return false, string.format("runRecords[%d].stageHistory[%d].encounterChoice must be a table", index, stageIndex)
+      end
+
+      for key in pairs(stageRecord.encounterChoice) do
+        if not VALID_RUN_RECORD_ENCOUNTER_CHOICE_KEYS[key] then
+          return false, string.format("runRecords[%d].stageHistory[%d].encounterChoice contains unknown field %s", index, stageIndex, tostring(key))
+        end
+      end
+
+      if type(stageRecord.encounterChoice.id) ~= "string" or stageRecord.encounterChoice.id == "" then
+        return false, string.format("runRecords[%d].stageHistory[%d].encounterChoice id must be a non-empty string", index, stageIndex)
+      end
+
+      if stageRecord.encounterChoice.type ~= "shop_points" and stageRecord.encounterChoice.type ~= "shop_rerolls" and stageRecord.encounterChoice.type ~= "coin" and stageRecord.encounterChoice.type ~= "upgrade" then
+        return false, string.format("runRecords[%d].stageHistory[%d].encounterChoice has invalid type %s", index, stageIndex, tostring(stageRecord.encounterChoice.type))
+      end
+
+      if type(stageRecord.encounterChoice.label) ~= "string" or stageRecord.encounterChoice.label == "" then
+        return false, string.format("runRecords[%d].stageHistory[%d].encounterChoice label must be a non-empty string", index, stageIndex)
+      end
+    end
+
+    if not isNonNegativeInteger(stageRecord.encounterOptionsCount or 0) then
+      return false, string.format("runRecords[%d].stageHistory[%d] encounterOptionsCount must be a non-negative integer", index, stageIndex)
+    end
+  end
+
+  if type(record.shopHistory or {}) ~= "table" then
+    return false, string.format("runRecords[%d] shopHistory must be a table", index)
+  end
+
+  for shopIndex, shopRecord in ipairs(record.shopHistory or {}) do
+    if type(shopRecord) ~= "table" then
+      return false, string.format("runRecords[%d].shopHistory[%d] must be a table", index, shopIndex)
+    end
+
+    for key in pairs(shopRecord) do
+      if not VALID_RUN_RECORD_SHOP_KEYS[key] then
+        return false, string.format("runRecords[%d].shopHistory[%d] contains unknown field %s", index, shopIndex, tostring(key))
+      end
+    end
+
+    if not isPositiveInteger(shopRecord.roundIndex) then
+      return false, string.format("runRecords[%d].shopHistory[%d] roundIndex must be a positive integer", index, shopIndex)
+    end
+
+    if type(shopRecord.sourceStageId) ~= "string" or shopRecord.sourceStageId == "" then
+      return false, string.format("runRecords[%d].shopHistory[%d] sourceStageId must be a non-empty string", index, shopIndex)
+    end
+
+    if shopRecord.sourceStageLabel ~= nil and (type(shopRecord.sourceStageLabel) ~= "string" or shopRecord.sourceStageLabel == "") then
+      return false, string.format("runRecords[%d].shopHistory[%d] sourceStageLabel must be a non-empty string when present", index, shopIndex)
+    end
+
+    if not isNonNegativeInteger(shopRecord.rerollsUsed or 0) then
+      return false, string.format("runRecords[%d].shopHistory[%d] rerollsUsed must be a non-negative integer", index, shopIndex)
+    end
+
+    if not isNonNegativeInteger(shopRecord.offersSeen or 0) then
+      return false, string.format("runRecords[%d].shopHistory[%d] offersSeen must be a non-negative integer", index, shopIndex)
+    end
+
+    if type(shopRecord.purchases or {}) ~= "table" then
+      return false, string.format("runRecords[%d].shopHistory[%d] purchases must be a table", index, shopIndex)
+    end
+
+    for purchaseIndex, purchase in ipairs(shopRecord.purchases or {}) do
+      if type(purchase) ~= "table" then
+        return false, string.format("runRecords[%d].shopHistory[%d].purchases[%d] must be a table", index, shopIndex, purchaseIndex)
+      end
+
+      for key in pairs(purchase) do
+        if not VALID_RUN_RECORD_PURCHASE_KEYS[key] then
+          return false, string.format("runRecords[%d].shopHistory[%d].purchases[%d] contains unknown field %s", index, shopIndex, purchaseIndex, tostring(key))
+        end
+      end
+    end
+  end
+
+  if type(record.purchaseHistory) ~= "table" then
+    return false, string.format("runRecords[%d] purchaseHistory must be a table", index)
+  end
+
+  for purchaseIndex, purchase in ipairs(record.purchaseHistory) do
+    if type(purchase) ~= "table" then
+      return false, string.format("runRecords[%d].purchaseHistory[%d] must be a table", index, purchaseIndex)
+    end
+
+    for key in pairs(purchase) do
+      if not VALID_RUN_RECORD_PURCHASE_KEYS[key] then
+        return false, string.format("runRecords[%d].purchaseHistory[%d] contains unknown field %s", index, purchaseIndex, tostring(key))
+      end
+    end
+
+    if purchase.type ~= "coin" and purchase.type ~= "upgrade" then
+      return false, string.format("runRecords[%d].purchaseHistory[%d] has invalid type %s", index, purchaseIndex, tostring(purchase.type))
+    end
+
+    if type(purchase.contentId) ~= "string" or purchase.contentId == "" then
+      return false, string.format("runRecords[%d].purchaseHistory[%d] contentId must be a non-empty string", index, purchaseIndex)
+    end
+
+    if type(purchase.price) ~= "number" or purchase.price < 0 then
+      return false, string.format("runRecords[%d].purchaseHistory[%d] price must be a non-negative number", index, purchaseIndex)
+    end
   end
 
   return true
@@ -743,6 +1233,20 @@ function Validator.validateMetaStatePayload(metaStateTable)
     end
   end
 
+  if metaStateTable.runRecords ~= nil then
+    if type(metaStateTable.runRecords) ~= "table" then
+      return false, "metaState runRecords must be a table"
+    end
+
+    for index, record in ipairs(metaStateTable.runRecords) do
+      ok, errorMessage = validateRunRecord(record, index)
+
+      if not ok then
+        return false, errorMessage
+      end
+    end
+  end
+
   if metaStateTable.stats ~= nil then
     if type(metaStateTable.stats) ~= "table" then
       return false, "metaState stats must be a table"
@@ -847,6 +1351,12 @@ function Validator.validateActiveRunArtifactPayload(artifact)
     return false, "active run artifact selectedCall must be heads or tails"
   end
 
+  if artifact.postResultNextState ~= nil then
+    if type(artifact.postResultNextState) ~= "string" or not VALID_POST_RESULT_NEXT_STATES[artifact.postResultNextState] then
+      return false, "active run artifact postResultNextState is invalid"
+    end
+  end
+
   if artifact.stageState ~= nil then
     if type(artifact.stageState) ~= "table" then
       return false, "active run artifact stageState must be a table"
@@ -930,10 +1440,31 @@ function Validator.validateActiveRunArtifactPayload(artifact)
       if not ok then
         return false, errorMessage
       end
+
+      local choiceKey = string.format(
+        "%s:%s",
+        tostring(artifact.rewardPreviewSession.choice.type),
+        tostring(artifact.rewardPreviewSession.choice.contentId)
+      )
+
+      if not seenOptions[choiceKey] then
+        return false, "active run artifact reward choice is not present in reward options"
+      end
     end
 
     if type(artifact.rewardPreviewSession.claimed) ~= "boolean" then
       return false, "active run artifact rewardPreviewSession claimed must be boolean"
+    end
+
+    if artifact.rewardPreviewSession.claimed == true and #(artifact.rewardPreviewSession.options or {}) > 0 and artifact.rewardPreviewSession.choice == nil then
+      return false, "active run artifact claimed rewardPreviewSession must include reward choice"
+    end
+  end
+
+  if artifact.encounterSession ~= nil then
+    ok, errorMessage = validateEncounterSession(artifact.encounterSession, "active run artifact encounterSession")
+    if not ok then
+      return false, errorMessage
     end
   end
 
@@ -983,6 +1514,7 @@ function Validator.validateActiveRunArtifactPayload(artifact)
     post_stage_analytics = true,
     reward_preview = true,
     boss_reward = true,
+    encounter = true,
     shop = true,
   }
 
@@ -990,14 +1522,28 @@ function Validator.validateActiveRunArtifactPayload(artifact)
     return false, string.format("active run artifact state %s requires stageState", artifact.currentState)
   end
 
-  if (artifact.currentState == "result" or artifact.currentState == "post_stage_analytics" or artifact.currentState == "reward_preview" or artifact.currentState == "boss_reward" or artifact.currentState == "shop")
+  if (artifact.currentState == "result" or artifact.currentState == "post_stage_analytics" or artifact.currentState == "reward_preview" or artifact.currentState == "boss_reward" or artifact.currentState == "encounter" or artifact.currentState == "shop")
     and type(artifact.lastStageResult) ~= "table" then
     return false, string.format("active run artifact state %s requires lastStageResult", artifact.currentState)
+  end
+
+  if (artifact.currentState == "result" or artifact.currentState == "post_stage_analytics") and artifact.lastStageResult ~= nil then
+    if artifact.postResultNextState == nil then
+      return false, string.format("active run artifact state %s requires postResultNextState", artifact.currentState)
+    end
+  end
+
+  if artifact.currentState == "post_stage_analytics" and artifact.postResultNextState ~= "post_stage_analytics" then
+    return false, "active run artifact post_stage_analytics state must preserve postResultNextState"
   end
 
   if (artifact.currentState == "reward_preview" or artifact.currentState == "boss_reward")
     and type(artifact.rewardPreviewSession) ~= "table" then
     return false, string.format("active run artifact state %s requires rewardPreviewSession", artifact.currentState)
+  end
+
+  if artifact.currentState == "encounter" and type(artifact.encounterSession) ~= "table" then
+    return false, "active run artifact encounter state requires encounterSession"
   end
 
   if artifact.currentState == "shop" and type(artifact.shopSession) ~= "table" then
@@ -1124,6 +1670,17 @@ function Validator.validateActiveRunArtifactPayload(artifact)
 
   if (artifact.currentState == "result" or artifact.currentState == "post_stage_analytics") and rewardEligible and type(artifact.rewardPreviewSession) ~= "table" then
     return false, string.format("active run artifact state %s requires rewardPreviewSession when reward flow is pending", artifact.currentState)
+  end
+
+  if artifact.currentState == "encounter" then
+    local encounterEligible = artifact.lastStageResult
+      and artifact.lastStageResult.stageType == "normal"
+      and artifact.lastStageResult.status == "cleared"
+      and artifact.runState.runStatus == "active"
+
+    if not encounterEligible then
+      return false, "active run artifact encounter state is only valid for cleared active normal stages"
+    end
   end
 
   return true
@@ -1293,6 +1850,10 @@ function Validator.validateReplayTranscriptPayload(transcript)
       return false, string.format("replay transcript stage %d is missing reward data before shop", index)
     end
 
+    if stageEntry.shop ~= nil and stageEntry.encounter == nil then
+      return false, string.format("replay transcript stage %d is missing encounter data before shop", index)
+    end
+
     if stageEntry.reward ~= nil then
       if not rewardEligible then
         return false, string.format("replay transcript stage %d has reward data for ineligible stage", index)
@@ -1351,6 +1912,132 @@ function Validator.validateReplayTranscriptPayload(transcript)
         local choiceKey = string.format("%s:%s", tostring(stageEntry.reward.choice.type), tostring(stageEntry.reward.choice.contentId))
         if not seenRewardOptionKeys[choiceKey] then
           return false, string.format("replay transcript stage %d reward choice %s is not present in options", index, choiceKey)
+        end
+      end
+    end
+
+    local encounterEligible = stageEntry.stageType == "normal"
+
+    if stageEntry.encounter ~= nil then
+      if not encounterEligible then
+        return false, string.format("replay transcript stage %d has encounter data for ineligible stage", index)
+      end
+
+      if type(stageEntry.encounter) ~= "table" then
+        return false, string.format("replay transcript stage %d encounter must be a table", index)
+      end
+
+      for key in pairs(stageEntry.encounter) do
+        if not VALID_REPLAY_ENCOUNTER_KEYS[key] then
+          return false, string.format("replay transcript stage %d encounter has unknown field %s", index, tostring(key))
+        end
+      end
+
+      if type(stageEntry.encounter.id) ~= "string" or stageEntry.encounter.id == "" then
+        return false, string.format("replay transcript stage %d encounter requires id", index)
+      end
+
+      if type(stageEntry.encounter.name) ~= "string" or stageEntry.encounter.name == "" then
+        return false, string.format("replay transcript stage %d encounter requires name", index)
+      end
+
+      if type(stageEntry.encounter.description) ~= "string" or stageEntry.encounter.description == "" then
+        return false, string.format("replay transcript stage %d encounter requires description", index)
+      end
+
+      if type(stageEntry.encounter.choices) ~= "table" then
+        return false, string.format("replay transcript stage %d encounter choices must be a table", index)
+      end
+
+      local seenEncounterChoiceIds = {}
+      for choiceIndex, choice in ipairs(stageEntry.encounter.choices or {}) do
+        local okChoice, choiceError = validateEncounterChoice(choice, string.format("replay transcript stage %d encounter choice %d", index, choiceIndex))
+        if not okChoice then
+          return false, choiceError
+        end
+
+        if seenEncounterChoiceIds[choice.id] then
+          return false, string.format("replay transcript stage %d encounter choice %d duplicates %s", index, choiceIndex, tostring(choice.id))
+        end
+
+        seenEncounterChoiceIds[choice.id] = true
+      end
+
+      if #(stageEntry.encounter.choices or {}) > 0 and stageEntry.encounter.choice == nil then
+        return false, string.format("replay transcript stage %d encounter choice is required when encounter choices exist", index)
+      end
+
+      if stageEntry.encounter.choice ~= nil then
+        local okChoice, choiceError = validateEncounterChoice(stageEntry.encounter.choice, string.format("replay transcript stage %d encounter choice", index))
+        if not okChoice then
+          return false, choiceError
+        end
+
+        if not seenEncounterChoiceIds[stageEntry.encounter.choice.id] then
+          return false, string.format("replay transcript stage %d encounter choice %s is not present in encounter choices", index, tostring(stageEntry.encounter.choice.id))
+        end
+      end
+    end
+
+    local encounterEligible = stageEntry.stageType == "normal"
+
+    if stageEntry.encounter ~= nil then
+      if not encounterEligible then
+        return false, string.format("replay transcript stage %d has encounter data for ineligible stage", index)
+      end
+
+      if type(stageEntry.encounter) ~= "table" then
+        return false, string.format("replay transcript stage %d encounter must be a table", index)
+      end
+
+      for key in pairs(stageEntry.encounter) do
+        if not VALID_REPLAY_ENCOUNTER_KEYS[key] then
+          return false, string.format("replay transcript stage %d encounter has unknown field %s", index, tostring(key))
+        end
+      end
+
+      if type(stageEntry.encounter.id) ~= "string" or stageEntry.encounter.id == "" then
+        return false, string.format("replay transcript stage %d encounter requires id", index)
+      end
+
+      if type(stageEntry.encounter.name) ~= "string" or stageEntry.encounter.name == "" then
+        return false, string.format("replay transcript stage %d encounter requires name", index)
+      end
+
+      if type(stageEntry.encounter.description) ~= "string" or stageEntry.encounter.description == "" then
+        return false, string.format("replay transcript stage %d encounter requires description", index)
+      end
+
+      if type(stageEntry.encounter.choices) ~= "table" then
+        return false, string.format("replay transcript stage %d encounter choices must be a table", index)
+      end
+
+      local seenEncounterChoiceIds = {}
+      for choiceIndex, choice in ipairs(stageEntry.encounter.choices or {}) do
+        local okChoice, choiceError = validateEncounterChoice(choice, string.format("replay transcript stage %d encounter choice %d", index, choiceIndex))
+        if not okChoice then
+          return false, choiceError
+        end
+
+        if seenEncounterChoiceIds[choice.id] then
+          return false, string.format("replay transcript stage %d encounter choice %d duplicates %s", index, choiceIndex, tostring(choice.id))
+        end
+
+        seenEncounterChoiceIds[choice.id] = true
+      end
+
+      if #(stageEntry.encounter.choices or {}) > 0 and stageEntry.encounter.choice == nil then
+        return false, string.format("replay transcript stage %d encounter choice is required when encounter choices exist", index)
+      end
+
+      if stageEntry.encounter.choice ~= nil then
+        local okChoice, choiceError = validateEncounterChoice(stageEntry.encounter.choice, string.format("replay transcript stage %d encounter choice", index))
+        if not okChoice then
+          return false, choiceError
+        end
+
+        if not seenEncounterChoiceIds[stageEntry.encounter.choice.id] then
+          return false, string.format("replay transcript stage %d encounter choice %s is not present in encounter choices", index, tostring(stageEntry.encounter.choice.id))
         end
       end
     end
@@ -2138,6 +2825,70 @@ function Validator.validateRunHistory(runState)
     elseif stageRecord.rewardChoice ~= nil then
       return false, string.format("stageResults[%d] has rewardChoice without rewardOptions", index)
     end
+
+    local encounterEligible = stageRecord.stageType == "normal"
+      and stageRecord.status == "cleared"
+      and stageRecord.runStatus == "active"
+
+    if stageRecord.encounter ~= nil then
+      if not encounterEligible then
+        return false, string.format("stageResults[%d] has encounter data for ineligible stage", index)
+      end
+
+      if type(stageRecord.encounter) ~= "table" then
+        return false, string.format("stageResults[%d].encounter must be a table", index)
+      end
+
+      if type(stageRecord.encounter.id) ~= "string" or stageRecord.encounter.id == "" then
+        return false, string.format("stageResults[%d].encounter requires id", index)
+      end
+
+      if type(stageRecord.encounter.name) ~= "string" or stageRecord.encounter.name == "" then
+        return false, string.format("stageResults[%d].encounter requires name", index)
+      end
+
+      if type(stageRecord.encounter.description) ~= "string" or stageRecord.encounter.description == "" then
+        return false, string.format("stageResults[%d].encounter requires description", index)
+      end
+
+      if type(stageRecord.encounter.choices) ~= "table" then
+        return false, string.format("stageResults[%d].encounter choices must be a table", index)
+      end
+
+      local seenEncounterChoiceIds = {}
+      for choiceIndex, choice in ipairs(stageRecord.encounter.choices or {}) do
+        local okChoice, choiceError = validateEncounterChoice(choice, string.format("stageResults[%d].encounter.choices[%d]", index, choiceIndex))
+        if not okChoice then
+          return false, choiceError
+        end
+
+        if seenEncounterChoiceIds[choice.id] then
+          return false, string.format("stageResults[%d].encounter.choices duplicates %s", index, tostring(choice.id))
+        end
+
+        seenEncounterChoiceIds[choice.id] = true
+      end
+
+      if #stageRecord.encounter.choices > 0 and stageRecord.encounterChoice == nil then
+        local isPendingLatestEncounterSelection = index == #(history.stageResults or {})
+        if not isPendingLatestEncounterSelection then
+          return false, string.format("stageResults[%d] is missing encounterChoice despite encounter choices", index)
+        end
+      end
+
+      if stageRecord.encounterChoice ~= nil then
+        local okChoice, choiceError = validateEncounterChoice(stageRecord.encounterChoice, string.format("stageResults[%d].encounterChoice", index))
+        if not okChoice then
+          return false, choiceError
+        end
+
+        if not seenEncounterChoiceIds[stageRecord.encounterChoice.id] then
+          return false, string.format("stageResults[%d].encounterChoice is not present in encounter choices", index)
+        end
+      end
+    elseif stageRecord.encounterChoice ~= nil then
+      return false, string.format("stageResults[%d] has encounterChoice without encounter", index)
+    end
   end
 
   for index, commit in ipairs(history.loadoutCommits or {}) do
@@ -2224,6 +2975,15 @@ function Validator.validateRunHistory(runState)
 
     if stageIndex[stageKey].rewardOptions == nil then
       return false, string.format("shopVisits[%d] references stage %s without reward preview data", index, stageKey)
+    end
+
+    if stageIndex[stageKey].encounter == nil then
+      return false, string.format("shopVisits[%d] references stage %s without encounter preview data", index, stageKey)
+    end
+
+    local encounterChoices = stageIndex[stageKey].encounter and stageIndex[stageKey].encounter.choices or {}
+    if #encounterChoices > 0 and stageIndex[stageKey].encounterChoice == nil then
+      return false, string.format("shopVisits[%d] references stage %s with incomplete encounter choice", index, stageKey)
     end
 
     if type(visit.actions) ~= "table" then

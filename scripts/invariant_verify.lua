@@ -36,6 +36,14 @@ local function runTargetedShopScenario(seed)
 
   local stageRecord = RunHistorySystem.finalizeStage(runState, stageState, metaState)
   RunHistorySystem.recordStageRewardPreview(stageRecord, { options = {}, choice = nil })
+  RunHistorySystem.recordStageEncounterPreview(stageRecord, {
+    encounterId = "quiet_hallway",
+    name = "Quiet Hallway",
+    description = "No encounter is active for this stop.",
+    choices = {},
+    choice = nil,
+    claimed = false,
+  })
   runState.shopPoints = 20
   runState.shopRerollsRemaining = 1
 

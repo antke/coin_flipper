@@ -1,4 +1,5 @@
 local Button = require("src.ui.button")
+local CoinArt = require("src.ui.coin_art")
 local Layout = require("src.ui.layout")
 local Panel = require("src.ui.panel")
 local Theme = require("src.ui.theme")
@@ -298,17 +299,20 @@ function StageState:drawRevealOverlay(app)
     love.graphics.setFont(app.fonts.small)
     Theme.applyColor(Theme.colors.mutedText)
     love.graphics.print(string.format("Slot %d • Order %d", coin.slotIndex or 0, coin.resolutionIndex or 0), cardX + 10, cardY + 8)
-    love.graphics.setFont(app.fonts.body)
+    CoinArt.draw(coin.coinId, cardX + math.floor((cardWidth - 38) / 2), cardY + 28, 38, {
+      side = revealed and coin.result or nil,
+      selected = revealed and coin.didMatch,
+      alpha = revealed and 1.0 or 0.55,
+      tilt = revealed and ((index % 2 == 0) and 0.10 or -0.10) or 0,
+    })
+    love.graphics.setFont(app.fonts.small)
     Theme.applyColor(Theme.colors.text)
-    love.graphics.printf(app:getCoinName(coin.coinId), cardX + 10, cardY + 30, cardWidth - 20, "center")
+    love.graphics.printf(app:getCoinName(coin.coinId), cardX + 8, cardY + 68, cardWidth - 16, "center")
 
     if revealed then
-      Theme.applyColor(resultColor)
-      love.graphics.setFont(app.fonts.heading)
-      love.graphics.printf(string.upper(coin.result or "?"), cardX + 10, cardY + 54, cardWidth - 20, "center")
       love.graphics.setFont(app.fonts.small)
       Theme.applyColor(coin.didMatch and Theme.colors.success or Theme.colors.mutedText)
-      love.graphics.printf(coin.didMatch and "MATCH" or "MISS", cardX + 10, cardY + 82, cardWidth - 20, "center")
+      love.graphics.printf(coin.didMatch and "MATCH" or "MISS", cardX + 10, cardY + 86, cardWidth - 20, "center")
 
       if coin.forcedResult then
         Theme.applyColor(Theme.colors.warning)

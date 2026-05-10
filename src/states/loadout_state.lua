@@ -1,4 +1,5 @@
 local Button = require("src.ui.button")
+local CoinArt = require("src.ui.coin_art")
 local Coins = require("src.content.coins")
 local GameConfig = require("src.app.config")
 local Layout = require("src.ui.layout")
@@ -539,14 +540,48 @@ function LoadoutState:draw(app)
     table.insert(slotLines, string.format("Slot %d: %s", slotIndex, coinId and app:getCoinName(coinId) or "(empty)"))
   end
 
+  local slotCardHeight = 92
+  local slotGap = Theme.spacing.itemGap
+  local slotCardWidth = math.floor((buildArea.width - (slotGap * math.max(0, app.runState.maxActiveCoinSlots - 1))) / app.runState.maxActiveCoinSlots)
+
+  for slotIndex = 1, app.runState.maxActiveCoinSlots do
+    local coinId = self.selectionSlots[slotIndex]
+    local cardX = buildArea.x + ((slotIndex - 1) * (slotCardWidth + slotGap))
+    local cardY = buildArea.y
+    local selected = coinId ~= nil and coinId == currentCoinId
+
+    love.graphics.setColor(Theme.colors.panel[1], Theme.colors.panel[2], Theme.colors.panel[3], 0.88)
+    love.graphics.rectangle("fill", cardX, cardY, slotCardWidth, slotCardHeight, 10, 10)
+    Theme.applyColor(selected and Theme.colors.accent or Theme.colors.panelBorder)
+    love.graphics.setLineWidth(selected and 2 or 1)
+    love.graphics.rectangle("line", cardX, cardY, slotCardWidth, slotCardHeight, 10, 10)
+    love.graphics.setLineWidth(1)
+
+    if coinId then
+      CoinArt.drawCard(coinId, cardX + math.floor((slotCardWidth - 62) / 2), cardY + 6, 62, 62, {
+        selected = selected,
+        tilt = selected and -0.04 or 0.025,
+      })
+    else
+      Theme.applyColor(Theme.colors.panelBorder)
+      love.graphics.rectangle("line", cardX + math.floor((slotCardWidth - 44) / 2), cardY + 10, 44, 44, 8, 8)
+      Theme.applyColor(Theme.colors.mutedText)
+      love.graphics.printf("?", cardX, cardY + 22, slotCardWidth, "center")
+    end
+
+    love.graphics.setFont(app.fonts.small)
+    Theme.applyColor(Theme.colors.mutedText)
+    love.graphics.printf(string.format("Slot %d", slotIndex), cardX + 6, cardY + 60, slotCardWidth - 12, "center")
+  end
+
   Layout.drawWrappedLines(
     slotLines,
     buildArea.x,
-    buildArea.y,
+    buildArea.y + slotCardHeight + Theme.spacing.itemGap,
     buildArea.width,
     Theme.colors.text,
     Theme.spacing.lineHeight,
-    buildArea.height
+    buildArea.height - slotCardHeight - Theme.spacing.itemGap
   )
 
   local detailLines = {}
@@ -562,14 +597,27 @@ function LoadoutState:draw(app)
     detailLines = { "No coin highlighted." }
   end
 
+  local detailTextY = detailArea.y
+  local detailTextHeight = detailArea.height
+
+  if currentCoin then
+    local artSize = math.min(96, math.max(60, math.floor(detailArea.width * 0.28)))
+    CoinArt.draw(currentCoin, detailArea.x + math.floor((detailArea.width - artSize) / 2), detailArea.y, artSize, {
+      selected = true,
+      tilt = -0.08,
+    })
+    detailTextY = detailArea.y + artSize + Theme.spacing.itemGap
+    detailTextHeight = detailArea.height - artSize - Theme.spacing.itemGap
+  end
+
   Layout.drawWrappedLines(
     detailLines,
     detailArea.x,
-    detailArea.y,
+    detailTextY,
     detailArea.width,
     Theme.colors.text,
     Theme.spacing.lineHeight,
-    detailArea.height
+    detailTextHeight
   )
 
   local previewLinesHeight = 0

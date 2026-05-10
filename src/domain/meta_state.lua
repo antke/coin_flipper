@@ -119,6 +119,7 @@ function MetaState.new(options)
     unlockedCoinIds = normalizedUnlockedCoinIds,
     unlockedUpgradeIds = normalizedUnlockedUpgradeIds,
     purchasedMetaUpgradeIds = Utils.copyArray(purchasedMetaUpgradeIds),
+    runRecords = Utils.clone(type(options.runRecords) == "table" and options.runRecords or {}),
     effectiveValues = effectiveValues,
     modifiers = modifiers,
     stats = stats,

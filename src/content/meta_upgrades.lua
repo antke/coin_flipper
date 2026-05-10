@@ -42,10 +42,10 @@ local definitions = {
   {
     id = "meta_unlock_streak_drill",
     name = "Pattern Primer",
-    description = "Unlock Streak Drill and Safety Net for future runs and shops.",
+    description = "Unlock Streak Drill, Safety Net, and Reserve Token for future runs and shops.",
     cost = 3,
     tags = { "meta", "unlock", "coin" },
-    unlockCoinIds = { "streak_drill", "safety_net" },
+    unlockCoinIds = { "streak_drill", "safety_net", "reserve_token" },
   },
   {
     id = "meta_unlock_merchant_tools",
@@ -58,10 +58,10 @@ local definitions = {
   {
     id = "meta_unlock_tactical_notes",
     name = "Tactical Notes",
-    description = "Unlock Echo Cache, Reserve Fuse, and Boss Banner for future runs and shops.",
+    description = "Unlock Echo Cache, Reserve Fuse, Boss Banner, and Rainy Day Fund for future runs and shops.",
     cost = 5,
     tags = { "meta", "unlock", "strategy" },
-    unlockUpgradeIds = { "echo_cache", "reserve_fuse", "boss_banner" },
+    unlockUpgradeIds = { "echo_cache", "reserve_fuse", "boss_banner", "rainy_day_fund" },
   },
   {
     id = "meta_shop_quality_1",

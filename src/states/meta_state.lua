@@ -227,7 +227,7 @@ function MetaState:buildActionButtons(app, x, y, width)
   local options = app:getMetaUpgradeOptions()
   local selected = options[self.selectedIndex]
   local allowStartRun = app:canStartRunFromMeta()
-  local buttonCount = allowStartRun and 4 or 3
+  local buttonCount = allowStartRun and 6 or 5
   local gap = Theme.spacing.itemGap
   local buttonWidth = math.floor((width - (gap * (buttonCount - 1))) / buttonCount)
   local buttonHeight = 42
@@ -257,9 +257,34 @@ function MetaState:buildActionButtons(app, x, y, width)
         return self:saveNow(app)
       end,
     },
+    {
+      x = x + ((buttonWidth + gap) * 2),
+      y = y,
+      width = buttonWidth,
+      height = buttonHeight,
+      label = "Collection",
+      variant = "default",
+      onClick = function()
+        return app.stateGraph:request("open_collection")
+      end,
+    },
   }
 
-  local nextX = x + (buttonWidth * 2) + (gap * 2)
+  local nextX = x + (buttonWidth * 3) + (gap * 3)
+
+  table.insert(buttons, {
+    x = nextX,
+    y = y,
+    width = buttonWidth,
+    height = buttonHeight,
+    label = "Records",
+    variant = "default",
+    onClick = function()
+      return app.stateGraph:request("open_records")
+    end,
+  })
+
+  nextX = nextX + buttonWidth + gap
 
   if allowStartRun then
     table.insert(buttons, {
@@ -331,6 +356,16 @@ function MetaState:keypressed(app, key)
     return
   end
 
+  if key == "b" then
+    app.stateGraph:request("open_collection")
+    return
+  end
+
+  if key == "r" then
+    app.stateGraph:request("open_records")
+    return
+  end
+
   if key == "return" or key == "space" or key == "kpenter" then
     self:tryPurchaseSelectedUpgrade(app)
   end
@@ -371,6 +406,8 @@ function MetaState:draw(app)
   if app:canStartRunFromMeta() then
     table.insert(detailLines, "- Click Start Next Run or press N")
   end
+  table.insert(detailLines, "- Click Collection or press B")
+  table.insert(detailLines, "- Click Records or press R")
   table.insert(detailLines, string.format("- Click %s or press Esc", app:getMetaBackLabel()))
 
   local actionButtonY = detailContent.y + detailContent.height - 46

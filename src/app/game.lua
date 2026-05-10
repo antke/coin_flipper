@@ -59,6 +59,13 @@ local function createSummaryMetaFlowContext()
   }
 end
 
+local function createPauseFlowContext(returnState, returnPayload)
+  return {
+    returnState = returnState,
+    returnPayload = Utils.clone(returnPayload or {}),
+  }
+end
+
 function Game.new()
   local logger = Log.new({
     enabled = GameConfig.get("debug.logEnabled"),
@@ -82,6 +89,7 @@ function Game.new()
     selectedCall = "heads",
     lastBatchResult = nil,
     lastStageResult = nil,
+    postResultNextState = nil,
     rewardPreviewSession = nil,
     encounterSession = nil,
     shopOffers = {},
@@ -89,6 +97,8 @@ function Game.new()
     lastShopGenerationTrace = nil,
     lastShopPurchaseTrace = nil,
     metaFlowContext = createMenuMetaFlowContext(),
+    pauseFlowContext = nil,
+    preserveActiveRunSaveOnce = false,
     feedbackClock = 0,
     activeFeedback = nil,
     screenFlash = {
@@ -112,6 +122,11 @@ end
 function Game:registerStates()
   self.stateGraph:register("boot", require("src.states.boot_state").new())
   self.stateGraph:register("menu", require("src.states.menu_state").new())
+  self.stateGraph:register("run_setup", require("src.states.run_setup_state").new())
+  self.stateGraph:register("help", require("src.states.help_state").new())
+  self.stateGraph:register("collection", require("src.states.collection_state").new())
+  self.stateGraph:register("records", require("src.states.records_state").new())
+  self.stateGraph:register("pause", require("src.states.pause_state").new())
   self.stateGraph:register("loadout", require("src.states.loadout_state").new())
   self.stateGraph:register("boss_warning", require("src.states.boss_warning_state").new())
   self.stateGraph:register("stage", require("src.states.stage_state").new())
@@ -130,13 +145,20 @@ function Game:validateContentRegistries()
     coins = Coins.getAll(),
     upgrades = Upgrades.getAll(),
     bosses = Bosses.getAll(),
+    encounters = require("src.content.encounters").getAll(),
     stage_modifiers = StageModifiers.getAll(),
     stages = Stages.getAll(),
     meta_upgrades = MetaUpgrades.getAll(),
   }
 
   for name, definitions in pairs(registries) do
-    local ok, errorMessage = Validator.validateContentRegistry(name, definitions)
+    local ok, errorMessage
+
+    if name == "encounters" then
+      ok, errorMessage = Validator.validateEncounterRegistry(definitions)
+    else
+      ok, errorMessage = Validator.validateContentRegistry(name, definitions)
+    end
 
     if not ok then
       error(errorMessage)
@@ -221,7 +243,35 @@ function Game:getCurrentStateResumePayload()
   }
 end
 
-function Game:buildActiveRunSnapshot(currentStateName)
+function Game:createPauseFlowContext(returnState, returnPayload)
+  return createPauseFlowContext(returnState, returnPayload)
+end
+
+function Game:setPauseFlowContext(context)
+  if context == nil then
+    self.pauseFlowContext = nil
+    return
+  end
+
+  self.pauseFlowContext = createPauseFlowContext(context.returnState, context.returnPayload)
+end
+
+function Game:getPauseFlowContext()
+  local context = self.pauseFlowContext
+  return context and createPauseFlowContext(context.returnState, context.returnPayload) or nil
+end
+
+function Game:getPauseResumeStateName()
+  local context = self.pauseFlowContext
+  return context and context.returnState or nil
+end
+
+function Game:getPauseResumePayload()
+  local context = self.pauseFlowContext
+  return context and Utils.clone(context.returnPayload or {}) or {}
+end
+
+function Game:buildActiveRunSnapshot(currentStateName, screenStateOverride)
   if not self.runState then
     return nil, "run_not_initialized"
   end
@@ -235,6 +285,7 @@ function Game:buildActiveRunSnapshot(currentStateName)
     post_stage_analytics = true,
     reward_preview = true,
     boss_reward = true,
+    encounter = true,
     shop = true,
   }
 
@@ -252,14 +303,15 @@ function Game:buildActiveRunSnapshot(currentStateName)
     selectedCall = self.selectedCall,
     lastBatchResult = Utils.clone(self.lastBatchResult),
     lastStageResult = Utils.clone(self.lastStageResult),
+    postResultNextState = self.postResultNextState,
     rewardPreviewSession = Utils.clone(self.rewardPreviewSession),
     encounterSession = Utils.clone(self.encounterSession),
     shopOffers = Utils.clone(self.shopOffers or {}),
     shopSession = Utils.clone(self.shopSession),
     lastShopGenerationTrace = Utils.clone(self.lastShopGenerationTrace),
     lastShopPurchaseTrace = Utils.clone(self.lastShopPurchaseTrace),
-    currentStageDefinitionId = self.currentStageDefinition and (self.currentStageDefinition.variantId or self.currentStageDefinition.id) or nil,
-    screenState = self:getCurrentStateResumePayload(),
+    currentStageDefinitionId = self.currentStageDefinition and self.currentStageDefinition.id or nil,
+    screenState = Utils.clone(screenStateOverride ~= nil and screenStateOverride or self:getCurrentStateResumePayload()),
   }
 end
 
@@ -283,8 +335,8 @@ function Game:loadActiveRunArtifact()
   return false, errorMessage
 end
 
-function Game:saveActiveRun(reason, currentStateName)
-  local snapshot, errorMessage = self:buildActiveRunSnapshot(currentStateName)
+function Game:saveActiveRun(reason, currentStateName, screenStateOverride)
+  local snapshot, errorMessage = self:buildActiveRunSnapshot(currentStateName, screenStateOverride)
 
   if not snapshot then
     return false, errorMessage
@@ -341,6 +393,7 @@ function Game:resumeSavedRun()
   self.selectedCall = artifact.selectedCall or "heads"
   self.lastBatchResult = Utils.clone(artifact.lastBatchResult)
   self.lastStageResult = Utils.clone(artifact.lastStageResult)
+  self.postResultNextState = artifact.postResultNextState or self:computePostResultNextState()
   self.rewardPreviewSession = Utils.clone(artifact.rewardPreviewSession)
   self.encounterSession = Utils.clone(artifact.encounterSession)
   self.shopOffers = Utils.clone(artifact.shopOffers or {})
@@ -348,8 +401,73 @@ function Game:resumeSavedRun()
   self.lastShopGenerationTrace = Utils.clone(artifact.lastShopGenerationTrace)
   self.lastShopPurchaseTrace = Utils.clone(artifact.lastShopPurchaseTrace)
   self:setMetaFlowContext(self:createMenuMetaFlowContext())
+  self:setPauseFlowContext(nil)
   self:assertRuntimeInvariants("game.resumeSavedRun", { history = true })
   self.logger:info("Resumed active run", { state = artifact.currentState, seed = self.runState and self.runState.seed or "n/a" })
+  return true
+end
+
+function Game:preparePause(returnState, returnPayload)
+  if not self.runState then
+    return false, "run_not_initialized"
+  end
+
+  local targetState = returnState or (self.stateGraph and self.stateGraph:getCurrentName()) or nil
+
+  if not targetState then
+    return false, "pause_return_state_unavailable"
+  end
+
+  self:setPauseFlowContext({
+    returnState = targetState,
+    returnPayload = returnPayload or self:getCurrentStateResumePayload(),
+  })
+  local ok, errorMessage = self:saveActiveRun("pause_open", targetState, self:getPauseResumePayload())
+
+  if not ok then
+    self.preserveActiveRunSaveOnce = false
+    return false, errorMessage
+  end
+
+  self.preserveActiveRunSaveOnce = true
+  return true
+end
+
+function Game:saveAndQuitToMenu()
+  if self.runState then
+    local pauseContext = self.pauseFlowContext
+    local targetState = pauseContext and pauseContext.returnState or (self.stateGraph and self.stateGraph:getCurrentName()) or nil
+    local ok, errorMessage = self:saveActiveRun("save_quit_to_menu", targetState, self:getPauseResumePayload())
+
+    if not ok then
+      return false, errorMessage or "save_quit_failed"
+    end
+  end
+
+  self.preserveActiveRunSaveOnce = true
+  self:setMetaFlowContext(self:createMenuMetaFlowContext())
+  self:clearRunState()
+  return true
+end
+
+function Game:abandonRun()
+  if self.runState then
+    local recordResultType = self.runState.runStatus ~= "active" and self.runState.runStatus or "abandoned"
+    local appended, appendError = self:appendRunRecord(recordResultType, self.stageState)
+
+    if appended == false and self.runState.runRecordSaved ~= true then
+      return false, appendError or "run_record_save_failed"
+    end
+
+    local ok, errorMessage = self:clearActiveRunSave("abandon_run")
+
+    if not ok then
+      return false, errorMessage
+    end
+  end
+
+  self:setMetaFlowContext(self:createMenuMetaFlowContext())
+  self:clearRunState()
   return true
 end
 
@@ -386,11 +504,37 @@ function Game:keypressed(key, scancode, isRepeat)
     return
   end
 
+  local currentStateName = self.stateGraph and self.stateGraph:getCurrentName() or nil
+  local pausableStates = {
+    loadout = true,
+    boss_warning = true,
+    stage = true,
+    result = true,
+    post_stage_analytics = true,
+    reward_preview = true,
+    boss_reward = true,
+    encounter = true,
+    shop = true,
+  }
+
+  if (key == "escape" or key == "p") and currentStateName ~= "pause" and self.runState and pausableStates[currentStateName] then
+    self.stateGraph:request("open_pause")
+    return
+  end
+
   self.stateGraph:keypressed(key, scancode, isRepeat)
 end
 
 function Game:mousepressed(x, y, button, istouch, presses)
   self.stateGraph:mousepressed(x, y, button, istouch, presses)
+end
+
+function Game:textinput(text)
+  self.stateGraph:textinput(text)
+end
+
+function Game:wheelmoved(x, y)
+  self.stateGraph:wheelmoved(x, y)
 end
 
 function Game:resize(width, height)
@@ -402,7 +546,7 @@ function Game:quit()
 
   if self.runState and currentStateName then
     self:saveActiveRun("quit", currentStateName)
-  else
+  elseif not self:hasActiveRunSave() then
     self:clearActiveRunSave("quit")
   end
 
@@ -676,12 +820,24 @@ end
 
 function Game:executeMacroAction(actionName, payload)
   if actionName == "start_new_run" then
-    self:startNewRun()
+    self:startNewRun(payload)
     return true
   end
 
   if actionName == "resume_run" then
     return self:resumeSavedRun()
+  end
+
+  if actionName == "prepare_pause" then
+    return self:preparePause(payload and payload.returnState or nil, payload and payload.returnPayload or nil)
+  end
+
+  if actionName == "save_quit_to_menu" then
+    return self:saveAndQuitToMenu()
+  end
+
+  if actionName == "abandon_run" then
+    return self:abandonRun()
   end
 
   if actionName == "finalize_current_stage" then
@@ -710,8 +866,7 @@ function Game:executeMacroAction(actionName, payload)
   end
 
   if actionName == "return_to_menu" then
-    self:returnToMenu()
-    return true
+    return self:returnToMenu()
   end
 
   error(string.format("Unknown macro action: %s", tostring(actionName)))
@@ -773,15 +928,19 @@ end
 
 function Game:buildMacroContext(currentStateName, transitionPayload)
   local metaFlowContext = self:getMetaFlowContext()
+  local pauseFlowContext = self:getPauseFlowContext()
 
   return {
     currentStateName = currentStateName,
+    payload = Utils.clone(transitionPayload or {}),
     event = transitionPayload and transitionPayload.event or nil,
     postResultDestinationState = self:getPostResultDestinationState(),
     metaReturnState = metaFlowContext.returnState,
     metaAllowStartRun = metaFlowContext.allowStartRun,
     continueRunState = self:getContinueRunStateName(),
     continueRunPayload = self:getContinueRunPayload(),
+    pauseReturnState = pauseFlowContext and pauseFlowContext.returnState or nil,
+    pauseReturnPayload = pauseFlowContext and pauseFlowContext.returnPayload or {},
     insertedSteps = {
       pre_stage = self:getMacroInsertedSteps("pre_stage"),
       post_result = self:getMacroInsertedSteps("post_result"),
@@ -815,10 +974,92 @@ function Game:applyShopFlow(shopFlow)
   self.lastShopPurchaseTrace = shopFlow.lastPurchaseTrace
 end
 
-function Game:startNewRun()
+function Game:generateRunSeed()
+  return math.floor(love.timer.getTime() * 100000) % 2147483646 + 1
+end
+
+function Game:normalizeRunSeed(seed)
+  if type(seed) == "string" then
+    local digits = seed:match("%d+")
+
+    if not digits or digits == "" then
+      return self:generateRunSeed()
+    end
+
+    local modulus = 2147483646
+    local numericSeed = 0
+
+    for i = 1, #digits do
+      numericSeed = ((numericSeed * 10) + tonumber(digits:sub(i, i))) % modulus
+    end
+
+    if numericSeed == 0 then
+      return self:generateRunSeed()
+    end
+
+    return ((numericSeed - 1) % modulus) + 1
+  end
+
+  local numericSeed = tonumber(seed)
+
+  if not numericSeed then
+    return self:generateRunSeed()
+  end
+
+  numericSeed = math.floor(math.abs(numericSeed))
+
+  if numericSeed == 0 then
+    return self:generateRunSeed()
+  end
+
+  return ((numericSeed - 1) % 2147483646) + 1
+end
+
+function Game:getRunSetupPreviewLines(seed)
+  local normalizedSeed = self:normalizeRunSeed(seed)
+  local normalRoundCount = self.config.get("run.normalRoundCount") or 3
+  local totalStageCount = normalRoundCount + (self.config.get("run.bossRoundCount") or 1)
+  local lines = {
+    string.format("Seed: %d", normalizedSeed),
+    "",
+    "Upcoming route:",
+  }
+
+  for roundIndex = 1, totalStageCount do
+    local stageDefinition = Stages.getForRound(roundIndex, normalizedSeed)
+
+    if stageDefinition then
+      local variantLabel = stageDefinition.variantName and string.format(" (%s)", stageDefinition.variantName) or ""
+      table.insert(lines, string.format("- Round %d: %s%s", roundIndex, stageDefinition.label or stageDefinition.name or stageDefinition.id, variantLabel))
+    end
+  end
+
+  return lines
+end
+
+function Game:getRunSetupWarningLines()
+  local lines = {
+    "Use the generated seed, regenerate it, or enter a numeric seed to replay a known route.",
+  }
+
+  if self:hasActiveRunSave() then
+    table.insert(lines, "Starting a fresh run will replace the current Continue Run save.")
+  end
+
+  return lines
+end
+
+function Game:startNewRun(options)
+  options = options or {}
   self:setMetaFlowContext(self:createMenuMetaFlowContext())
-  self:clearActiveRunSave("start_new_run")
-  local seed = math.floor(love.timer.getTime() * 100000) % 2147483646 + 1
+  self:setPauseFlowContext(nil)
+  local cleared, clearError = self:clearActiveRunSave("start_new_run")
+
+  if not cleared then
+    return false, clearError
+  end
+
+  local seed = self:normalizeRunSeed(options.seed)
   self.runState, self.metaProjection = RunInitializer.createNewRun(self.metaState, {
     seed = seed,
   })
@@ -828,9 +1069,10 @@ function Game:startNewRun()
   self.selectedCall = "heads"
   self.lastBatchResult = nil
   self.lastStageResult = nil
-   self.rewardPreviewSession = nil
-   self.encounterSession = nil
-   self.shopOffers = {}
+  self.postResultNextState = nil
+  self.rewardPreviewSession = nil
+  self.encounterSession = nil
+  self.shopOffers = {}
   self.shopSession = nil
   self.lastShopGenerationTrace = nil
   self.lastShopPurchaseTrace = nil
@@ -847,6 +1089,7 @@ function Game:clearRunState()
   self.currentStageDefinition = nil
   self.lastBatchResult = nil
   self.lastStageResult = nil
+  self.postResultNextState = nil
   self.rewardPreviewSession = nil
   self.encounterSession = nil
   self.shopOffers = {}
@@ -854,16 +1097,137 @@ function Game:clearRunState()
   self.lastShopGenerationTrace = nil
   self.lastShopPurchaseTrace = nil
   self.selectedCall = "heads"
+  self.pauseFlowContext = nil
 end
 
 function Game:returnToMenu()
   self:setMetaFlowContext(self:createMenuMetaFlowContext())
+  self:setPauseFlowContext(nil)
+  local ok, errorMessage = self:clearActiveRunSave("return_to_menu")
+
+  if not ok then
+    return false, errorMessage
+  end
+
   self:clearRunState()
-  self:clearActiveRunSave("return_to_menu")
+
+  return true
+end
+
+function Game:getRunRecords()
+  return self.metaState and self.metaState.runRecords or {}
+end
+
+function Game:getRunRecordProgressLines()
+  local records = self:getRunRecords()
+  local wins = 0
+  local losses = 0
+  local abandoned = 0
+
+  for _, record in ipairs(records) do
+    if record.resultType == "won" then
+      wins = wins + 1
+    elseif record.resultType == "lost" then
+      losses = losses + 1
+    elseif record.resultType == "abandoned" then
+      abandoned = abandoned + 1
+    end
+  end
+
+  return {
+    string.format("Stored Runs: %d/%d", #records, SummarySystem.MAX_RUN_RECORDS or #records),
+    string.format("Wins / Losses / Abandoned: %d / %d / %d", wins, losses, abandoned),
+    string.format("Meta Points: %d", self.metaState and (self.metaState.metaPoints or 0) or 0),
+    "Browse saved runs to compare score, stage progress, and rewards.",
+  }
+end
+
+function Game:getRunRecordDetailLines(record)
+  if not record then
+    return { "No run record selected." }
+  end
+
+  local lines = {
+    string.format("Result: %s", tostring(record.resultType or record.runStatus or "n/a")),
+    string.format("Seed: %s", tostring(record.seed or "n/a")),
+    string.format("Final Round: %s", tostring(record.finalRound or "n/a")),
+    string.format("Final Stage: %s", tostring(record.finalStageLabel or "n/a")),
+    string.format("Final Stage Status: %s", tostring(record.finalStageStatus or "n/a")),
+    string.format("Run Total Score: %s", tostring(record.runTotalScore or 0)),
+    string.format("Meta Reward Earned: %s", tostring(record.metaRewardEarned or 0)),
+    string.format("Shop Visits / Rerolls: %s / %s", tostring(record.shopVisitCount or 0), tostring(record.totalRerollsUsed or 0)),
+    string.format("Collection Size: %s", tostring(record.collectionSize or 0)),
+    string.format("Upgrade Count: %s", tostring(record.upgradeCount or 0)),
+    "",
+    "Stage History:",
+  }
+
+  if record.resultType ~= "abandoned" then
+    table.insert(lines, 2, string.format("Run Status: %s", tostring(record.runStatus or "n/a")))
+  end
+
+  for _, stageRecord in ipairs(record.stageHistory or {}) do
+    local line = string.format("- R%s %s => %s (%s/%s)", tostring(stageRecord.roundIndex or "?"), tostring(stageRecord.stageLabel or "n/a"), tostring(stageRecord.status or "n/a"), tostring(stageRecord.stageScore or 0), tostring(stageRecord.targetScore or 0))
+
+    if stageRecord.rewardChoice then
+      line = string.format("%s | Reward: %s", line, tostring(stageRecord.rewardChoice.name or stageRecord.rewardChoice.contentId or "n/a"))
+    elseif (stageRecord.rewardOptionsCount or 0) > 0 then
+      line = string.format("%s | Reward options: %d", line, stageRecord.rewardOptionsCount)
+    end
+
+    table.insert(lines, line)
+  end
+
+  if #(record.stageHistory or {}) == 0 then
+    table.insert(lines, "- No stage history recorded.")
+  end
+
+  table.insert(lines, "")
+  table.insert(lines, "Purchase History:")
+
+  for _, purchase in ipairs(record.purchaseHistory or {}) do
+    table.insert(lines, string.format("- %s %s (%d)", tostring(purchase.type or "?"), tostring(purchase.contentId or "n/a"), tonumber(purchase.price or 0) or 0))
+  end
+
+  if #(record.purchaseHistory or {}) == 0 then
+    table.insert(lines, "- No purchases recorded.")
+  end
+
+  return lines
+end
+
+function Game:appendRunRecord(resultType, stageState)
+  if not self.runState or self.runState.runRecordSaved == true then
+    return false
+  end
+
+  local record = SummarySystem.buildRunRecord(self.runState, resultType, stageState)
+  local previousRecords = Utils.clone(self.metaState.runRecords or {})
+  local nextMetaState = {
+    runRecords = Utils.clone(previousRecords),
+  }
+
+  SummarySystem.appendRunRecord(nextMetaState, record)
+  self.metaState.runRecords = nextMetaState.runRecords
+
+  local ok, errorMessage = self:saveMetaState("run_record")
+
+  if not ok then
+    self.metaState.runRecords = previousRecords
+    return false, errorMessage or "run_record_save_failed"
+  end
+
+  self.runState.runRecordSaved = true
+  self.logger:info("Appended run record", { resultType = resultType or record.runStatus, total = #(self.metaState.runRecords or {}) })
   return true
 end
 
 function Game:onStateChanged(currentStateName, previousName, payload)
+  if self.preserveActiveRunSaveOnce then
+    self.preserveActiveRunSaveOnce = false
+    return
+  end
+
   local resumableStates = {
     loadout = true,
     boss_warning = true,
@@ -876,8 +1240,18 @@ function Game:onStateChanged(currentStateName, previousName, payload)
     shop = true,
   }
 
+  if self.runState and (currentStateName == "result" or currentStateName == "post_stage_analytics") then
+    if (self:shouldUseRewardPreview() or self:shouldUseBossRewardEvent()) and not self.rewardPreviewSession then
+      self:ensureRewardSession()
+    end
+  end
+
   if self.runState and resumableStates[currentStateName] then
     self:saveActiveRun("state_change", currentStateName)
+  elseif currentStateName == "pause" then
+    return
+  elseif currentStateName == "menu" or currentStateName == "help" or currentStateName == "meta" or currentStateName == "collection" or currentStateName == "records" then
+    return
   else
     self:clearActiveRunSave("state_change")
   end
@@ -1279,9 +1653,18 @@ function Game:finalizeCurrentStage()
   end
 
   self.lastStageResult = stageRecord
+  self.postResultNextState = self:computePostResultNextState()
 
   if self:shouldUseRewardPreview() or self:shouldUseBossRewardEvent() then
     self:ensureRewardSession()
+  end
+
+  if self.runState.runStatus ~= "active" and not self:shouldUseBossRewardEvent() then
+    local appended, appendError = self:appendRunRecord(self.runState.runStatus, self.stageState)
+
+    if appended == false and self.runState.runRecordSaved ~= true then
+      return nil, appendError or "run_record_save_failed"
+    end
   end
 
   self:assertRuntimeInvariants("game.finalizeCurrentStage", { history = true })
@@ -1311,6 +1694,18 @@ function Game:prepareShopOffers()
     local claimOk, claimError = self:claimSelectedReward()
     if claimOk ~= true then
       return false, claimError or "reward_choice_required"
+    end
+  end
+
+  local encounterSession = self:ensureEncounterSession()
+  if encounterSession and encounterSession.claimed ~= true then
+    if #(encounterSession.choices or {}) > 0 then
+      return false, "encounter_choice_required"
+    end
+
+    local encounterOk, encounterError = self:claimSelectedEncounterChoice()
+    if encounterOk ~= true then
+      return false, encounterError or "encounter_choice_required"
     end
   end
 
@@ -1423,6 +1818,7 @@ function Game:advanceAfterShop()
   self.currentStageDefinition = nil
   self.lastBatchResult = nil
   self.lastStageResult = nil
+  self.postResultNextState = nil
   self.rewardPreviewSession = nil
   self.encounterSession = nil
   self.shopOffers = {}
@@ -1439,7 +1835,7 @@ function Game:buildSummary()
 end
 
 function Game:buildPostStageAnalyticsReport()
-  return AnalyticsSystem.buildPostStageReport(self.runState, self.lastStageResult, self.lastBatchResult)
+  return AnalyticsSystem.buildPostStageReport(self.runState, self.lastStageResult, self.lastBatchResult, self:getPostStageReviewFollowupLine())
 end
 
 function Game:getMetaUpgradeName(metaUpgradeId)
@@ -2045,18 +2441,24 @@ function Game:getPostResultDestinationState()
   return "summary"
 end
 
-function Game:shouldShowPostStageAnalytics()
-  return self.config.get("debug.postStageAnalyticsEnabled") == true
-    and self.config.get("debug.devControlsEnabled") == true
-    and self.lastStageResult ~= nil
-end
-
-function Game:getPostResultNextState()
-  if self:shouldShowPostStageAnalytics() then
+function Game:computePostResultNextState()
+  if self.config.get("debug.postStageAnalyticsEnabled") == true and self.lastStageResult ~= nil then
     return "post_stage_analytics"
   end
 
   return self:getPostResultDestinationState()
+end
+
+function Game:shouldShowPostStageAnalytics()
+  return self.lastStageResult ~= nil and self:getPostResultNextState() == "post_stage_analytics"
+end
+
+function Game:getPostResultNextState()
+  if self.postResultNextState ~= nil then
+    return self.postResultNextState
+  end
+
+  return self:computePostResultNextState()
 end
 
 function Game:getPostResultDestinationLabel()
@@ -2067,7 +2469,7 @@ function Game:getPostResultDestinationLabel()
   end
 
   if destination == "post_stage_analytics" then
-    return "analytics review"
+    return "stage review"
   end
 
   if destination == "boss_reward" then
@@ -2075,6 +2477,24 @@ function Game:getPostResultDestinationLabel()
   end
 
   return destination
+end
+
+function Game:getPostStageReviewFollowupLine()
+  local destination = self:getPostResultDestinationState()
+
+  if destination == "boss_reward" then
+    return "Victory reward follows."
+  end
+
+  if destination == "reward_preview" then
+    if self:shouldUseEncounterEvent() then
+      return "Reward preview, encounter, and shop follow."
+    end
+
+    return "Reward preview and shop follow."
+  end
+
+  return "Run summary follows."
 end
 
 function Game:shouldShowBossWarning()
@@ -2129,18 +2549,305 @@ function Game:getRewardPreviewLines()
   end
 
   table.insert(lines, "")
-  table.insert(lines, "Use this stop to plan the shop and the round after it.")
+  table.insert(lines, self:shouldUseEncounterEvent()
+    and "Use this stop to plan the encounter, the shop, and the round after it."
+    or "Use this stop to plan the shop and the round after it.")
+
+  if self:shouldUseEncounterEvent() then
+    table.insert(lines, "A special encounter comes before the shop on this route.")
+  end
 
   local rewardSession = self.rewardPreviewSession
   if rewardSession and rewardSession.claimed and rewardSession.choice then
     table.insert(lines, string.format("Chosen Reward: %s", rewardSession.choice.name or rewardSession.choice.contentId or "n/a"))
   elseif rewardSession and #(rewardSession.options or {}) == 0 then
-    table.insert(lines, "Reward Choice: no valid rewards remain; continue directly to the shop.")
+    table.insert(lines, self:shouldUseEncounterEvent()
+      and "Reward Choice: no valid rewards remain; continue to the encounter."
+      or "Reward Choice: no valid rewards remain; continue directly to the shop.")
   else
     table.insert(lines, "Reward Choice: choose one reward before continuing.")
   end
 
   return lines
+end
+
+function Game:shouldUseEncounterEvent()
+  local result = self.lastStageResult
+
+  return result ~= nil
+    and result.stageType == "normal"
+    and result.status == "cleared"
+    and self.runState ~= nil
+    and self.runState.runStatus == "active"
+end
+
+function Game:prepareEncounterEvent()
+  if not self:shouldUseEncounterEvent() then
+    return false, "encounter_unavailable"
+  end
+
+  local session = self:ensureEncounterSession()
+
+  if not session then
+    return false, "encounter_unavailable"
+  end
+
+  return true, session
+end
+
+function Game:getEncounterSession()
+  return self.encounterSession
+end
+
+function Game:ensureEncounterSession()
+  if not self:shouldUseEncounterEvent() then
+    return nil
+  end
+
+  if not self.encounterSession then
+    self.encounterSession = EncounterSystem.buildSession(self.runState)
+
+    if self.lastStageResult then
+      RunHistorySystem.recordStageEncounterPreview(self.lastStageResult, self.encounterSession)
+    end
+
+    self:assertRuntimeInvariants("game.ensureEncounterSession", { history = true })
+  end
+
+  return self.encounterSession
+end
+
+function Game:selectEncounterChoice(index)
+  local session = self:getEncounterSession()
+
+  if not session then
+    return false, "encounter_unavailable"
+  end
+
+  local ok, result = EncounterSystem.selectChoice(session, index)
+
+  if ok then
+    local currentStateName = self.stateGraph and self.stateGraph:getCurrentName() or nil
+    if currentStateName == "encounter" then
+      self:saveActiveRun("encounter_selection", currentStateName)
+    end
+  end
+
+  return ok, result
+end
+
+function Game:canContinueEncounter()
+  local session = self:getEncounterSession()
+  return EncounterSystem.canContinue(session)
+end
+
+function Game:getEncounterOptionCards()
+  local cards = {}
+  local session = self:getEncounterSession()
+
+  for index, option in ipairs(session and session.choices or {}) do
+    table.insert(cards, {
+      index = index,
+      id = option.id,
+      type = option.type,
+      contentId = option.contentId,
+      amount = option.amount,
+      name = option.label,
+      description = option.description,
+      selected = session.selectedIndex == index,
+      claimed = session.claimed == true,
+    })
+  end
+
+  return cards
+end
+
+function Game:getEncounterContinueLabel()
+  local session = self:getEncounterSession()
+
+  if session and (#(session.choices or {}) == 0 or session.claimed == true) then
+    return "Continue to Shop"
+  end
+
+  return "Claim Choice & Continue"
+end
+
+function Game:getEncounterLines()
+  local session = self:getEncounterSession()
+
+  if not session then
+    return { "No encounter is active for this stop." }
+  end
+
+  local lines = {
+    session.name or "Encounter",
+    session.description or "",
+    "",
+  }
+
+  if session.claimed and session.choice then
+    table.insert(lines, string.format("Chosen Option: %s", session.choice.label or session.choice.id or "n/a"))
+  elseif #(session.choices or {}) == 0 then
+    table.insert(lines, "No valid encounter choices remain; continue directly to the shop.")
+  else
+    table.insert(lines, "Choose one encounter option before continuing.")
+  end
+
+  return lines
+end
+
+function Game:getProjectedEncounterOutcome(projected)
+  if projected ~= nil then
+    return projected
+  end
+
+  if not self.runState then
+    return nil
+  end
+
+  local session = self:getEncounterSession()
+
+  if not session then
+    return nil
+  end
+
+  local projectedOutcome, errorMessage = EncounterSystem.buildProjectedOutcome(self.runState, session)
+
+  if not projectedOutcome then
+    self.logger:warn("Projected encounter outcome unavailable", { error = errorMessage or "unknown" })
+    return nil, errorMessage
+  end
+
+  return projectedOutcome
+end
+
+function Game:getProjectedEncounterImpactLines(projected)
+  local projectedOutcome = projected
+  local errorMessage = nil
+  local session = self:getEncounterSession()
+
+  if projectedOutcome == nil then
+    projectedOutcome, errorMessage = self:getProjectedEncounterOutcome()
+  end
+
+  if not projectedOutcome then
+    return { string.format("Projected encounter impact unavailable: %s", tostring(errorMessage or "n/a")) }
+  end
+
+  local lines = {}
+  local choice = projectedOutcome.choice
+
+  if choice then
+    table.insert(lines, string.format("Selected Option: %s", choice.label or choice.id or "Unknown"))
+  elseif session and #(session.choices or {}) > 0 and session.claimed ~= true then
+    table.insert(lines, "Selected Option: pending choice")
+  else
+    table.insert(lines, "Selected Option: none")
+  end
+
+  if projectedOutcome.shopPointsAfter ~= projectedOutcome.shopPointsBefore then
+    table.insert(lines, string.format(
+      "Shop Points: %d → %d (%+d)",
+      projectedOutcome.shopPointsBefore,
+      projectedOutcome.shopPointsAfter,
+      projectedOutcome.shopPointsAfter - projectedOutcome.shopPointsBefore
+    ))
+  end
+
+  if projectedOutcome.shopRerollsAfter ~= projectedOutcome.shopRerollsBefore then
+    table.insert(lines, string.format(
+      "Shop Rerolls: %d → %d (%+d)",
+      projectedOutcome.shopRerollsBefore,
+      projectedOutcome.shopRerollsAfter,
+      projectedOutcome.shopRerollsAfter - projectedOutcome.shopRerollsBefore
+    ))
+  end
+
+  if projectedOutcome.collectionSizeAfter ~= projectedOutcome.collectionSizeBefore then
+    table.insert(lines, string.format(
+      "Collection Size: %d → %d (%+d)",
+      projectedOutcome.collectionSizeBefore,
+      projectedOutcome.collectionSizeAfter,
+      projectedOutcome.collectionSizeAfter - projectedOutcome.collectionSizeBefore
+    ))
+  end
+
+  if projectedOutcome.upgradeCountAfter ~= projectedOutcome.upgradeCountBefore then
+    table.insert(lines, string.format(
+      "Owned Upgrades: %d → %d (%+d)",
+      projectedOutcome.upgradeCountBefore,
+      projectedOutcome.upgradeCountAfter,
+      projectedOutcome.upgradeCountAfter - projectedOutcome.upgradeCountBefore
+    ))
+  end
+
+  if choice and choice.type == "coin" then
+    table.insert(lines, "On continue, the coin is added to your collection before the shop opens.")
+  elseif choice and choice.type == "upgrade" then
+    table.insert(lines, "On continue, the upgrade becomes active immediately before the shop opens.")
+  elseif #(session and session.choices or {}) == 0 then
+    table.insert(lines, "No encounter reward will be added; the shop continues unchanged.")
+  end
+
+  return lines
+end
+
+function Game:getProjectedEncounterShopPreviewLines(projected)
+  local projectedOutcome = projected
+  local errorMessage = nil
+
+  if projectedOutcome == nil then
+    projectedOutcome, errorMessage = self:getProjectedEncounterOutcome()
+  end
+
+  if not projectedOutcome then
+    return {
+      "Next stop: shop",
+      string.format("Projected shop outlook unavailable: %s", tostring(errorMessage or "n/a")),
+    }
+  end
+
+  return self:getShopPreviewLinesForRun(projectedOutcome.projectedRunState or self.runState)
+end
+
+function Game:claimSelectedEncounterChoice()
+  local session = self:getEncounterSession()
+
+  if not session then
+    return false, "encounter_unavailable"
+  end
+
+  local ok, choiceOrError = EncounterSystem.claimChoice(self.runState, session)
+
+  if not ok then
+    return false, choiceOrError
+  end
+
+  if self.lastStageResult then
+    RunHistorySystem.recordStageEncounterChoice(self.lastStageResult, choiceOrError)
+  end
+
+  self:assertRuntimeInvariants("game.claimSelectedEncounterChoice", { history = true })
+  self.logger:info("Claimed encounter choice", {
+    id = choiceOrError and choiceOrError.id or "none",
+    type = choiceOrError and choiceOrError.type or "none",
+  })
+
+  if choiceOrError then
+    self:showFeedback(
+      "accent",
+      "Encounter Choice Taken",
+      string.format("%s is now active for the upcoming shop.", choiceOrError.label or choiceOrError.id or "Choice"),
+      { soundCue = "shop_purchase" }
+    )
+  end
+
+  local currentStateName = self.stateGraph and self.stateGraph:getCurrentName() or nil
+  if currentStateName == "encounter" then
+    self:saveActiveRun("claim_encounter_choice", currentStateName)
+  end
+
+  return true, choiceOrError
 end
 
 function Game:getProjectedRewardOutcome()
@@ -2378,7 +3085,13 @@ function Game:getProjectedShopPreviewLines(projected)
     }
   end
 
-  return self:getShopPreviewLinesForRun(projectedOutcome and projectedOutcome.projectedRunState or self.runState)
+  local lines = self:getShopPreviewLinesForRun(projectedOutcome and projectedOutcome.projectedRunState or self.runState)
+
+  if self:shouldUseEncounterEvent() and #lines > 0 then
+    lines[1] = "Shop outlook after the encounter"
+  end
+
+  return lines
 end
 
 function Game:getProjectedUpcomingStagePreviewData(projected)
@@ -2431,7 +3144,7 @@ function Game:ensureRewardSession()
     return self.rewardPreviewSession
   end
 
-  self.rewardPreviewSession = RewardSystem.buildPreview(self.runState, self.runRng)
+    self.rewardPreviewSession = RewardSystem.buildPreviewForStage(self.runState, self.lastStageResult)
   RunHistorySystem.recordStageRewardPreview(self.lastStageResult, self.rewardPreviewSession)
   self:assertRuntimeInvariants("game.ensureRewardSession", { history = true })
   return self.rewardPreviewSession
@@ -2509,14 +3222,14 @@ function Game:getRewardPreviewContinueLabel()
   local session = self:getRewardSession()
 
   if not session or #(session.options or {}) == 0 then
-    return "Continue to Shop"
+    return self:shouldUseEncounterEvent() and "Continue to Encounter" or "Continue to Shop"
   end
 
   if session.claimed == true then
-    return "Continue to Shop"
+    return self:shouldUseEncounterEvent() and "Continue to Encounter" or "Continue to Shop"
   end
 
-  return "Claim Reward & Continue"
+  return self:shouldUseEncounterEvent() and "Claim Reward & Continue to Encounter" or "Claim Reward & Continue"
 end
 
 function Game:getBossRewardContinueLabel()
@@ -2592,6 +3305,15 @@ function Game:claimSelectedReward()
   end
 
   RunHistorySystem.recordStageRewardChoice(self.lastStageResult, result)
+
+  if self:shouldUseBossRewardEvent() then
+    local appended, appendError = self:appendRunRecord(self.runState and self.runState.runStatus or "won", self.stageState)
+
+    if appended == false and self.runState and self.runState.runRecordSaved ~= true then
+      return false, appendError or "run_record_save_failed"
+    end
+  end
+
   self:assertRuntimeInvariants("game.claimSelectedReward", { history = true })
 
   if result then

@@ -64,6 +64,21 @@ local function createShopVisit(env, step)
     RunHistorySystem.recordStageRewardPreview(env.stageRecord, { options = {}, choice = nil })
   end
 
+  if env.stageRecord
+    and env.stageRecord.stageType == "normal"
+    and env.stageRecord.status == "cleared"
+    and env.runState.runStatus == "active"
+    and env.stageRecord.encounter == nil then
+    RunHistorySystem.recordStageEncounterPreview(env.stageRecord, {
+      encounterId = "quiet_hallway",
+      name = "Quiet Hallway",
+      description = "No encounter is active for this stop.",
+      choices = {},
+      choice = nil,
+      claimed = false,
+    })
+  end
+
   local shopFlow = ShopFlowSystem.createVisit(env.runState, env.stageState, env.metaProjection, env:ensureRng(), {
     sourceStageId = sourceStageId,
     roundIndex = roundIndex,
