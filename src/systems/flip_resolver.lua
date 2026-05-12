@@ -1,4 +1,5 @@
 local ActionQueue = require("src.core.action_queue")
+local BetSystem = require("src.systems.bet_system")
 local EffectiveValueSystem = require("src.systems.effective_value_system")
 local FlipBatch = require("src.domain.flip_batch")
 local HookRegistry = require("src.core.hook_registry")
@@ -44,6 +45,7 @@ function FlipResolver.buildResolutionContext(runState, stageState, metaProjectio
       temporaryEffectsConsumed = {},
     },
     rng = rng,
+    betResult = nil,
   })
 
   return context
@@ -193,6 +195,7 @@ function FlipResolver.buildBatchResult(runState, stageState, context, resolution
   batch.actions = context.trace.actions
   batch.trace = context.trace
   batch.scoreBreakdown = context.scoreBreakdown
+  batch.betResult = Utils.clone(context.betResult)
 
   return {
     batch = batch,
@@ -207,6 +210,7 @@ function FlipResolver.buildBatchResult(runState, stageState, context, resolution
     runTotalScore = runState.runTotalScore,
     shopPoints = runState.shopPoints,
     flipsRemaining = stageState.flipsRemaining,
+    betResult = Utils.clone(context.betResult),
   }
 end
 
@@ -283,6 +287,12 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
     return nil, validationResult
   end
 
+  ok, validationResult = BetSystem.validateSelectedBet(runState)
+
+  if not ok then
+    return nil, validationResult
+  end
+
   context = FlipResolver.projectBatchBeforeRoll(runState, stageState, metaProjection, call, rng)
 
   for _, coinRollState in ipairs(context.perCoin) do
@@ -296,10 +306,21 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
   FlipResolver.applyPhaseActions(runState, stageState, context, "score_assembly", scoringActions, 0)
 
   FlipResolver.runPhase(runState, stageState, context, "after_scoring")
+  local betResult, betError = BetSystem.resolveSelectedBet(runState, stageState, context)
+
+  if not betResult then
+    return nil, betError
+  end
+
   FlipResolver.updateCounters(runState, stageState, context)
   FlipResolver.runPhase(runState, stageState, context, "before_stage_end_check")
   FlipResolver.evaluateStageEnd(stageState, context)
   FlipResolver.runPhase(runState, stageState, context, "on_batch_end")
+
+  if GameConfig.get("scoring.clearOnThresholdAtBatchEnd", true) == true and stageState.stageScore >= stageState.targetScore then
+    stageState.stageStatus = "cleared"
+  end
+
   FlipResolver.updateTraceTerminalState(stageState, context)
 
   local undrainedPendingPhases = {}

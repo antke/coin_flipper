@@ -36,7 +36,7 @@ local GameConfig = {
     normalRoundCount = 3,
     bossRoundCount = 1,
     startingCoinSlots = 3,
-    startingFlipsPerStage = 3,
+    startingFlipsPerStage = 5,
     startingCollectionSize = 5,
   },
 
@@ -56,6 +56,7 @@ local GameConfig = {
     startingShopPoints = 0,
     startingShopRerolls = 0,
     shopPointMultiplier = 1.0,
+    stageClearShopPoints = 3,
   },
 
   flip = {

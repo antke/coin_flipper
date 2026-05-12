@@ -230,7 +230,7 @@ runCheck("transcript_trailing_stage_rejected", function()
 end)
 
 runCheck("active_run_encounter_roundtrip", function()
-  local result = SimulationSystem.simulateRun({ seed = 91 })
+  local result = SimulationSystem.simulateRun({ seed = 2 })
   local stageRecord = nil
   local stageHistoryIndex = nil
 
@@ -380,6 +380,99 @@ runCheck("active_run_encounter_roundtrip", function()
   assert(artifact.encounterSession.selectedIndex == session.selectedIndex)
   assert(artifact.encounterSession.choice == nil)
   assert(artifact.encounterSession.claimed == false)
+end)
+
+runCheck("active_run_shop_snapshot", function()
+  local result = SimulationSystem.simulateRun({ seed = 92 })
+  local stageRecord = nil
+  local stageHistoryIndex = nil
+  local shopVisit = nil
+
+  for index, record in ipairs(result.runState.history.stageResults or {}) do
+    if record.stageType == "normal" and record.status == "cleared" and record.runStatus == "active" then
+      for _, visit in ipairs(result.runState.history.shopVisits or {}) do
+        if visit.roundIndex == record.roundIndex and visit.sourceStageId == record.stageId and #(visit.offerSets or {}) > 0 then
+          stageRecord = record
+          stageHistoryIndex = index
+          shopVisit = visit
+          break
+        end
+      end
+    end
+
+    if stageRecord then
+      break
+    end
+  end
+
+  assert(stageRecord ~= nil, "expected at least one shop visit after a cleared normal stage")
+
+  local runState = Utils.clone(result.runState)
+  runState.roundIndex = stageRecord.roundIndex
+  runState.runStatus = "active"
+  runState.currentStageId = stageRecord.stageId
+  runState.history.stageResults = {}
+
+  for index = 1, stageHistoryIndex do
+    table.insert(runState.history.stageResults, Utils.clone(result.runState.history.stageResults[index]))
+  end
+
+  local filteredShopVisits = {}
+  for _, visit in ipairs(result.runState.history.shopVisits or {}) do
+    if visit.roundIndex <= stageRecord.roundIndex then
+      table.insert(filteredShopVisits, Utils.clone(visit))
+    end
+  end
+  runState.history.shopVisits = filteredShopVisits
+
+  local latestOfferSet = shopVisit.offerSets[#shopVisit.offerSets]
+  local shopOffers = Utils.clone(latestOfferSet.offers or {})
+
+  for index, offer in ipairs(shopOffers) do
+    offer.id = offer.id or string.format("offer_%02d", index)
+  end
+
+  local artifactOk, artifactError = SaveSystem.normalizeActiveRunForSave({
+    artifactType = SaveSystem.ACTIVE_RUN_ARTIFACT_TYPE,
+    version = SaveSystem.ACTIVE_RUN_VERSION,
+    currentState = "shop",
+    runState = runState,
+    stageState = {
+      stageId = stageRecord.stageId,
+      stageLabel = stageRecord.stageLabel,
+      stageType = stageRecord.stageType,
+      variantId = stageRecord.variantId,
+      variantName = stageRecord.variantName,
+      targetScore = stageRecord.targetScore,
+      stageScore = stageRecord.stageScore,
+      flipsRemaining = 0,
+      stageStatus = stageRecord.status,
+      activeBossModifierIds = Utils.copyArray(stageRecord.bossModifierIds or {}),
+      activeStageModifierIds = {},
+      effectiveValues = {},
+      resolvedValues = {},
+      batchIndex = 0,
+      streak = {},
+      lastCall = nil,
+      lastBatchResults = nil,
+      flags = {},
+    },
+    runRngSeed = runState.seed,
+    selectedCall = "heads",
+    lastBatchResult = nil,
+    lastStageResult = runState.history.stageResults[#runState.history.stageResults],
+    postResultNextState = "shop",
+    rewardPreviewSession = nil,
+    encounterSession = nil,
+    shopOffers = shopOffers,
+    shopSession = Utils.clone(shopVisit),
+    lastShopGenerationTrace = nil,
+    lastShopPurchaseTrace = nil,
+    currentStageDefinitionId = stageRecord.variantId or stageRecord.stageId,
+    screenState = nil,
+  })
+
+  assert(artifactOk, artifactError)
 end)
 
 print(string.format("Artifact verification: %d/%d passed", checksPassed, checksRun))

@@ -27,6 +27,7 @@ function RunState.new(options)
 
     shopPoints = math.max(0, tonumber(options.startingShopPoints) or 0),
     shopRerollsRemaining = math.max(0, tonumber(options.startingShopRerolls) or 0),
+    selectedBetId = options.selectedBetId or "none",
     runTotalScore = 0,
     metaRewardEarned = 0,
     metaRewardGranted = false,

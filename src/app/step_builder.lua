@@ -382,12 +382,21 @@ local RULES = {
     from = "result",
     event = "continue",
     build = function(context)
-      return buildInsertedFlow(context.insertedSteps and context.insertedSteps.post_result, {
+      local defaultSteps = {
         {
           type = "state",
           state = context.postResultDestinationState or "summary",
         },
-      })
+      }
+
+      if context.postResultDestinationState == "shop" then
+        defaultSteps = {
+          { type = "action", action = "prepare_shop" },
+          { type = "state", state = "shop" },
+        }
+      end
+
+      return buildInsertedFlow(context.insertedSteps and context.insertedSteps.post_result, defaultSteps)
     end,
   },
   {
@@ -404,6 +413,13 @@ local RULES = {
     from = "post_stage_analytics",
     event = "continue",
     build = function(context)
+      if context.postResultDestinationState == "shop" then
+        return {
+          { type = "action", action = "prepare_shop" },
+          { type = "state", state = "shop" },
+        }
+      end
+
       return {
         {
           type = "state",

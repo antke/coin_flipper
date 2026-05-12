@@ -1,0 +1,656 @@
+# Feature / Mechanics Ideas
+
+These are rough feature ideas converted into actionable design notes. The intent of each idea is preserved, but each one now includes requirements, technical considerations, balance risks, and evaluation questions.
+
+## Gut-feel priority ranking
+
+Ordered by likely value for the game right now, considering impact, implementation cost, clarity, and balance risk.
+
+1. **Stronger Feedback and Celebration**  
+   Best value-to-effort ratio. It can make the current game feel more dramatic without changing balance or adding heavy systems. Also helps future mechanics feel better because their effects become more visible.
+
+2. **Push Your Luck**  
+   Adds a clear, exciting decision at a natural point in the round. It is contained enough to prototype early and directly supports the gambling / risk-reward fantasy.
+
+3. **Pattern Matching Rewards**  
+   Strong build-variety idea that expands the goal beyond simply calling heads or tails. It should start with simple exact patterns and strong visual feedback.
+
+4. **Coins Affecting Neighbours**  
+   Good fit for a fixed-slot version of the game. It makes coin placement matter and adds strategy without requiring a full new metagame system.
+
+5. **Divine Interventions**  
+   Very thematic and potentially fun, but should start narrow because post-flip manipulation is extremely powerful. Best introduced as a small set of rare/simple effects first.
+
+6. **Improved Shop Structure**  
+   Important, but should be split into smaller updates. Better offers and rerolls are probably worth doing before selling, merging, permanent upgrades, and full collection management.
+
+7. **Inspectable Event Log**  
+   Not exciting by itself, but valuable once scoring becomes more complex. Keep it simple and hidden by default.
+
+8. **Coin Merging / Coin Upgrades**  
+   Appealing, but depends on having a good inventory/collection UI and enough duplicate coins for it to matter. Better after shop and collection handling are more mature.
+
+9. **Mulligan Option**  
+   Simple and clear, but too generic as a universal rule. Better as a character passive, intervention, or purchasable effect.
+
+10. **Luck and Karma Meters**  
+    Good emotional concept, but risks adding too much UI/system weight unless Luck and Karma are made very distinct. Karma/failure builds are the more interesting part.
+
+11. **Cursed Coin Type**  
+    Strong fantasy, but hard to balance until the player has enough control/protection tools to intentionally build around it.
+
+12. **Player Characters**  
+    High long-term replayability, but better after the game has proven build archetypes for characters to modify.
+
+13. **Score Estimate on Hover**  
+    Useful for clarity, but exact previews may solve too much of the game. Better as partial explanation/range info or a special character ability.
+
+14. **Offerings**  
+    Thematic, but currently overlaps too much with betting, Luck/Karma, and Divine Interventions. Needs a sharper identity before implementation.
+
+15. **Rooms / Stages / Map**  
+    Potentially useful much later, but too large for the current mechanics stage. It adds run structure before the core round/shop loop is fully proven.
+
+16. **Coin Purse / Drafted Flip Pool**  
+    Interesting, but it is basically an alternate version of the whole game. Treat as a separate prototype branch, not an incremental update.
+
+---
+
+## 1. Divine Interventions
+
+### Core idea
+Add post-flip special actions that let the player manipulate flip results after seeing them. These fit the current “goddess of luck” / divine fortune theme and act as powerful chase purchases. This effect could also happen only on the last flip - if player has not gathered enough points they get a final boost before their run ends (luck runs out), this could also happen just once per game. This way the powerful effect can be balanced in an easier way.
+
+### Example interventions
+- **Flip Gravity**: invert all current coin results, turning heads into tails and tails into heads.
+- **Vanish**: remove one coin from the current result set, useful for removing a coin that breaks a combo or pattern.
+- **Bad Luck Protection**: protect against a failed call or reduce the penalty from a bad flip.
+- **Risk Option**: take a stronger post-flip effect with a downside attached.
+
+### Requirements
+- Interventions are purchased similarly to coins, but likely as a separate shop category.
+- Each intervention can be used once per round.
+- Uses refresh at the start of the next round, regardless of whether the player won or lost the previous round.
+- Interventions need clear UI affordances after a flip so the player understands when they can be activated.
+- Effects must resolve before final score payout / failure calculation.
+
+### Technical notes
+- Add a new purchasable type, separate from coins and permanent upgrades.
+- Track intervention ownership and per-round usage state in the run state.
+- Add a post-flip resolution phase where available interventions can modify coin results before scoring finalizes.
+- Effects should be implemented as explicit result transformations, e.g. invert results, remove result, modify score, prevent penalty.
+
+### Design effect
+- Makes combo builds easier to assemble because players can remove or alter combo breakers.
+- Gives players a way to buy protection from bad luck.
+- Creates another high-value purchase path besides coins.
+
+### Risks
+- Could make the game too easy if effects are too strong or too cheap.
+- Could pull attention away from the flip itself if the post-flip layer becomes more important than the initial result.
+
+### Open questions
+- Should interventions be enabled by special coins, or should they be a separate shop product?
+- If separate, how often should they appear in the shop compared to coins and upgrades?
+- Should stronger interventions have charges, cooldowns, or costs to activate?
+
+### Evaluation criteria
+- Does the feature increase strategic decisions without making every failed flip easily fixable?
+- Does the player feel clever for using an intervention, rather than feeling required to use one every round?
+- Can intervention strength be balanced through cost, rarity, and once-per-round limits?
+
+### Comment
+Strong idea, but it should probably be introduced later rather than as an early core system. It has high fun potential because it gives the player agency after randomness happens, which is exactly where coin-flip games can otherwise feel helpless. The main danger is balance: post-flip correction effects are extremely powerful because the player uses them with full information. Effects like Vanish are easier to balance than global effects like Flip Gravity. I would start with one or two simple, narrow interventions and avoid making this a broad second ability system until the base flip/scoring loop is stable.
+
+---
+
+## 2. Pattern Matching Rewards
+
+### Core idea
+Add coins or upgrades that reward specific result patterns, such as `HTH`, `HHH`, alternating results, or other arrangements. This gives the player goals beyond simply calling heads or tails correctly.
+
+### Example effects
+- A coin rewards bonus points if the final visible result pattern is `HTH`.
+- An upgrade doubles score when the flip result matches a specific sequence.
+- A pattern-focused coin gives smaller regular value but a large payout when its pattern condition is met.
+
+### Requirements
+- Define how result patterns are represented and checked.
+- Pattern checks must happen after all result-modifying effects are resolved.
+- UI needs to show the required pattern clearly before the flip.
+- Scoring feedback should explain when a pattern matched and how much value it added.
+
+### Technical notes
+- Add pattern condition support to coin / upgrade definitions.
+- The scoring system needs access to ordered coin results, not just aggregate heads/tails counts.
+- Pattern matching should support exact sequences first; more complex patterns can come later if needed.
+- Interventions like Vanish or Flip Gravity should interact with pattern scoring through the final resolved result set.
+
+### Design effect
+- Creates build variety by allowing pattern-focused strategies.
+- Makes coin ordering and result manipulation more meaningful.
+- Works as an incremental score upgrade because normal flip scoring still applies even when the pattern misses.
+
+### Risks
+- Could feel unrewarding early if the player has too few coins or too little control to hit patterns reliably.
+- Could become too consistent if the player can stack several pattern coins and manipulate results every round.
+
+### Open questions
+- Should pattern rewards come from coins, upgrades, divine interventions, or all of them?
+- Should a player be allowed to stack multiple pattern conditions at once?
+- Should pattern rewards require exact slot positions, or just any matching sequence within the result?
+
+### Evaluation criteria
+- Does pattern matching give players a meaningful alternate build path?
+- Are early pattern rewards useful enough before the player has many manipulation tools?
+- Can the player understand why a pattern did or did not trigger?
+
+### Comment
+This is one of the better mechanical directions because it adds goals without replacing the existing heads/tails scoring. It is also fairly implementable if limited to exact ordered patterns. The biggest clarity issue is that players must understand whether order matters, whether removed coins count, and when the pattern is checked. It will be much easier to sell if the UI visually highlights the pattern target and then lights it up when matched. I would keep early patterns very simple, like `HHH`, `TTT`, `HTH`, or “all same”, and avoid complex wildcard logic at first.
+
+---
+
+## 3. Improved Shop Structure
+
+### Core idea
+Make the shop more decision-heavy by presenting the player with limited purchase categories and trade-offs after each round, instead of allowing unrestricted buying whenever they have enough points.
+
+### Proposed structure
+After a round, the player chooses between purchase paths such as:
+- Buy a coin from a visible selection.
+- Upgrade or add a coin slot.
+- Buy a divine intervention, upgrade, or similar special item.
+- Reroll the current offer for a cost.
+
+The original version limits the player to purchasing one thing per shop visit, creating tension between options.
+
+### Expanded shop actions
+The shop should eventually support more than just buying:
+- Buy coins.
+- Sell coins.
+- Buy upgrades.
+- Sell upgrades where appropriate.
+- Reroll offers.
+- Buy permanent run upgrades that cannot be sold.
+- Manage the coin collection, including combining coins, removing coins from the active pool, or similar actions.
+
+### Requirements
+- Shop needs clear categories and visible offers.
+- Rerolling should cost resources and refresh available offers.
+- Some purchase types should be mutually exclusive if the limited-choice shop model is used.
+- Selling must clearly communicate resale value and whether the sold item can appear again.
+- Permanent run upgrades must be marked as non-sellable.
+
+### Technical notes
+- Model shop offers as typed entries: coin, slot upgrade, intervention, permanent upgrade, etc.
+- Add shop state for current offers, reroll cost, and whether the player has already made the limited purchase for this shop visit.
+- Inventory management needs to support owned coins, active coins, inactive coins, upgrades, and non-sellable upgrades.
+- If selling is added, each item definition needs a sell value or sell value formula.
+
+### Design effect
+- Adds roguelike-style tension between spending now, saving, rerolling, and committing to a strategy.
+- Makes excess resources more interesting if there are multiple ways to use them.
+- Selling and collection management make the shop feel less one-dimensional.
+
+### Risks
+- If the player has earned many points, a strict “buy only one item” rule may feel frustrating or unrewarding.
+- Too many shop actions could make the shop feel overwhelming.
+- Inventory management could become a large UI burden.
+
+### Open questions
+- Is the strict “choose one purchase per round” model actually right for this game?
+- Would it be better to offer one strategic upgrade choice first, then move into a more normal coin shop?
+- Should rerolls be the main resource sink that creates trade-offs?
+
+### Evaluation criteria
+- Does the shop create interesting decisions without making earned points feel useless?
+- Does the player understand what they are giving up when choosing one option over another?
+- Does selling / management improve the shop enough to justify the extra UI complexity?
+
+### Comment
+This is important, but it is also where scope can explode fastest. A better shop is probably necessary eventually, but “buy/sell coins, buy/sell upgrades, reroll, permanent upgrades, collection management, combine, remove from pool” is too much as one feature. The strict one-purchase limit also feels risky: it creates tension, but can make rewards feel artificially blocked. I would split this into smaller changes: first improve offer presentation and rerolls, then add selling, then add collection management only if another mechanic such as merging or coin purse requires it.
+
+---
+
+## 4. Coin Merging / Coin Upgrades
+
+### Core idea
+Allow the player to merge three coins of the same type into one stronger version of that coin. This rewards commitment to a coin type and lets players strengthen an existing strategy instead of constantly looking for a new one.
+
+### Example
+- Merge three **Headhunter** coins into one upgraded Headhunter coin.
+- The upgraded coin has a higher stat, such as `+0.35` weight modifier instead of the base value.
+
+### Requirements
+- Player must be able to see owned duplicate coins.
+- The UI must clearly show when a merge is available.
+- Merging consumes the source coins and creates one upgraded coin.
+- The upgraded coin needs visibly different stats, name, tier, or presentation.
+- Merging should happen from the shop or collection management screen.
+
+### Technical notes
+- Coin instances need enough identity to distinguish base coins from upgraded versions.
+- Coin definitions need tiered stat values or a formula for upgraded stats.
+- Inventory logic must support removing three matching coins and adding one upgraded coin.
+- If coins can be active/inactive, merging needs rules for whether active coins can be consumed.
+
+### Design effect
+- Rewards players who commit to a specific coin type.
+- Creates a resource sink for duplicate purchases.
+- Supports focused builds without requiring a completely new strategy.
+
+### Risks
+- Could be difficult to track with the current coin collection model.
+- UI may become tricky because the player needs to inspect their collection while shopping.
+- If upgraded coins are too strong, the optimal strategy may become forcing duplicates every run.
+
+### Open questions
+- What is the clearest UI for showing owned coins and available merges?
+- Should merging cost only the three coins, or also points?
+- Can upgraded coins be merged again into higher tiers?
+
+### Evaluation criteria
+- Can the player immediately understand when and why a merge is available?
+- Does merging make duplicate purchases exciting rather than disappointing?
+- Does the upgraded coin feel worth losing three separate coins?
+
+### Comment
+Good idea, but it depends heavily on inventory UI. Mechanically it is understandable and familiar, so player clarity should be fine if the collection screen is clear. The hard part is making the value trade-off feel good: losing three coins for one stronger coin can feel bad unless slots are limited or upgraded coins are noticeably special. This works best if duplicate coins are already common and if the game has a reason to prefer fewer stronger coins over many weaker ones. Without that pressure, players may just prefer keeping all three.
+
+---
+
+## 5. Cursed Coin Type
+
+### Core idea
+Add cursed coins with extremely high reward and very severe downside. They should create high-risk, high-reward builds rather than being generally safe upgrades.
+
+### Example effect
+- If all coins match the player’s call, multiply the score by `5x`.
+- If any coin does not match the call, deduct `2.5x` the score from the player’s points.
+
+### Requirements
+- Cursed coin effects must communicate both reward and penalty very clearly.
+- The player must have ways to build around the risk, otherwise cursed coins may feel like traps.
+- Penalty timing must be clear: after score calculation, after failed call, or as a replacement for normal payout.
+- UI should use distinct cursed styling so the player understands the danger.
+
+### Technical notes
+- Add a cursed coin category or tag.
+- Scoring must support negative modifiers / penalties based on failed conditions.
+- Effects should be condition-based and deterministic, not hidden.
+- Balance values should be data-driven so reward and penalty can be tuned quickly.
+
+### Design effect
+- Gives risk-seeking players a dramatic strategy option.
+- Works well with result manipulation, luck control, or protection effects.
+- Could support “all-in” builds where the player tries to force perfect flips.
+
+### Risks
+- If players cannot meaningfully reduce the risk, they may never pick cursed coins.
+- If risk can be eliminated too easily, cursed coins may become overpowered.
+- Large penalties could create feel-bad run-ending moments.
+
+### Open questions
+- How does this fit into the current game loop?
+- Would players actually pick this coin without strong support tools?
+- Should cursed coins appear only after the player has access to manipulation / protection mechanics?
+
+### Evaluation criteria
+- Does the coin create a tempting but dangerous decision?
+- Can players build around it in a way that feels intentional?
+- Are losses from cursed coins understandable and fair?
+
+### Comment
+The fantasy is strong, but this is probably a later-game coin type rather than an early feature. Cursed effects are easy to make exciting and very easy to make either useless or broken. If the player has no control tools, the coin is mostly a trap. If the player has too many control tools, the downside disappears and the payout becomes free. This should only exist once there are enough support mechanics to build around it, and the penalty should probably avoid instantly ruining a run unless that kind of drama is explicitly desired.
+
+---
+
+## 6. Coin Purse / Drafted Flip Pool
+
+### Core idea
+Replace or supplement fixed coin slots with a “coin purse” system. The player owns a pool of coins, and each flip draws a subset from that pool. This makes the game more like a deckbuilder, where the player keeps adding useful coins to the purse.
+
+### Possible flip flows
+- Draw 5 coins, choose 3 to flip.
+- Draw 6 coins, discard 2, flip 4.
+- Draw coins automatically up to the number of flip slots.
+
+### Proposed round behavior
+- Coins in the purse are randomly drawn for each flip.
+- When a coin is flipped, it is removed from the available pool for the rest of the round.
+- At the start of the next round, the purse resets.
+- The starting purse may include regular baseline coins so the player does not run out of usable coins.
+- Example starting setup: 10 regular `$` coins plus 3 drafted special coins, with exact numbers to be balanced.
+
+### Requirements
+- Define purse size, draw size, flip size, and discard rules.
+- Add regular baseline coins to support the larger pool.
+- Coins likely need to be cheaper so players can fill the purse.
+- Add a maximum coin limit to prevent bloated or unmanageable pools.
+- UI must show drawn coins, available choices, discarded coins, and remaining purse state clearly enough to avoid confusion.
+
+### Technical notes
+- Replace or extend active slot logic with a draw pile / discard pile / exhausted pile model.
+- Track which coins have been drawn and removed for the current round.
+- Need deterministic resolution for draw, choose, discard, and flip phases.
+- Shop logic may need to shift toward frequent lower-cost coin purchases.
+
+### Design effect
+- Lets players keep buying build-related coins instead of being limited by a small slot count.
+- Creates deckbuilder-like decisions around pool quality, draw odds, and consistency.
+- Allows more long-term build shaping.
+
+### Risks
+- Added randomness may make builds feel less reliable.
+- It may become harder for players to understand or optimize their strategy.
+- The core slot-based identity of the game may become diluted.
+
+### Open questions
+- Is this the right direction for the game, or does it change the core concept too much?
+- Should players flip every coin in their purse each round, or should some coins remain unseen?
+- What should the maximum purse size be?
+- Should the maximum be based on `number of flips in round * number of slots`, or should it allow unused coins each round?
+
+### Evaluation criteria
+- Does the purse system create more satisfying build construction than fixed slots?
+- Does the added randomness feel exciting rather than frustrating?
+- Can players understand their odds and make informed purchases?
+
+### Comment
+This is the biggest structural change in the document. It could be fun, but it effectively turns the game into a deckbuilder and may invalidate a lot of slot-based design. Implementation is not just adding a feature; it changes inventory, shop pricing, round flow, UI, balancing, and how players think about builds. It is probably too large to mix with the current direction unless the fixed-slot model is not working. I would treat this as an alternate prototype branch, not an incremental feature.
+
+---
+
+## 7. Player Characters
+
+### Core idea
+At the beginning of a run, let the player choose a character. Each character has a passive skill that changes how the game is played. More characters can be unlocked through achievements or meta progression.
+
+### Example character
+- **Gambler**: receives `2x` payout for correctly guessed coins, but takes a penalty on incorrect calls.
+
+### Requirements
+- Add a character selection step before the run starts.
+- Each character needs a passive effect that meaningfully changes strategy.
+- Character effects should suggest or support different builds.
+- Unlock conditions need to be tracked and shown clearly.
+- If achievement unlocks are used, the achievement system must be reliable.
+- Alternative unlock path: award meta points at the end of every run, successful or failed, and let players spend them on characters.
+
+### Technical notes
+- Add character definitions with id, name, description, unlock condition, and passive effect.
+- Run state should reference the selected character and apply its passive during scoring, shop generation, or other relevant phases.
+- Achievement or meta-progression state must persist outside a single run.
+- Passive effects should be implemented through existing scoring / economy hooks where possible.
+
+### Design effect
+- Adds replayability by changing the starting rules of each run.
+- Gives players long-term goals through character unlocks.
+- Can guide players toward specific builds.
+
+### Risks
+- Creating multiple interesting, balanced characters may be a large design effort.
+- Weak or generic passives may not feel worth selecting.
+- Strong unlockable characters may create progression imbalance.
+
+### Open questions
+- Is the effort worth it? Current confidence: about 75% yes.
+- Should characters be unlocked by achievements, meta points, or both?
+- Should unlockable characters be stronger, or just different?
+
+### Evaluation criteria
+- Does each character create a distinct playstyle?
+- Are unlock goals motivating without being grindy?
+- Can character effects be balanced without requiring many one-off rules?
+
+### Comment
+High replayability value, but only after the core mechanics have enough depth for passives to modify. If added too early, characters will either be boring stat modifiers or require lots of special-case code. The unlock layer also adds persistence and progression design, which is separate from the run loop. This is worth keeping, but I would not prioritize it until there are several proven build archetypes that characters can push in different directions.
+
+---
+
+## 8. Luck and Karma Meters
+
+### Core idea
+Add round-based meters that build from player performance. Correct guesses build **Luck**. Incorrect guesses build **Karma**. The player can spend these meters to influence future outcomes or trigger special effects.
+
+### Luck behavior
+- Luck resets at the start of each round.
+- Correct guesses increase Luck.
+- Luck can be spent to increase the chance of the called side.
+- At 100% Luck, the called side could be guaranteed or receive `+100%` weighting.
+
+### Karma behavior
+- Karma resets at the start of each round.
+- Incorrect guesses increase Karma.
+- Karma can be spent on similar or thematically opposite effects.
+- Karma could support “fail builds” that gain value from guessing incorrectly.
+
+### Requirements
+- Define how much Luck / Karma is gained per flip result.
+- Define exactly when meters can be spent: before flip, after flip, or both.
+- Define whether Luck and Karma can both be held at once.
+- Add UI meters that reset each round.
+- Add coins or upgrades that improve meter gain, spending efficiency, or meter-based payouts.
+
+### Technical notes
+- Add round-scoped meter state for Luck and Karma.
+- Outcome generation needs a way to accept temporary weighting modifiers.
+- Scoring and coin effects need access to meter values and spending events.
+- Meter changes should be included in feedback / event logs so players understand why values changed.
+
+### Design effect
+- Gives players a way to recover from bad streaks or capitalize on good streaks.
+- Supports new builds around correct guesses, incorrect guesses, or meter manipulation.
+- Makes streaks feel more meaningful.
+
+### Risks
+- Luck and Karma may feel too similar unless they have clearly different uses.
+- Meter spending may become a cheap escape from bad situations.
+- Could add too many extra systems if combined with divine interventions and offerings.
+
+### Open questions
+- Is this too much additional complexity?
+- Should Luck and Karma have mirrored effects, or different thematic roles?
+- Should Karma be a comeback mechanic, a build-around mechanic, or both?
+
+### Evaluation criteria
+- Do the meters create interesting decisions rather than automatic spending?
+- Are Luck and Karma distinct enough?
+- Does the feature improve emotional pacing after streaks of wins or losses?
+
+### Comment
+The emotional idea is good, especially as a way to make streaks feel meaningful, but Luck and Karma risk becoming two versions of the same meter. If both are “spend to improve odds”, the system adds UI without much design payoff. Karma is the more interesting half because it can reward failure and enable weird builds. I would either make this a single meter first, or make Luck and Karma sharply different: Luck helps you press an advantage, Karma converts failure into alternate rewards. Otherwise this may be too much system weight for too little clarity.
+
+---
+
+## 9. Offerings
+
+### Core idea
+Expand the current basic betting system into an “offering” system. Before a flip, the player can sacrifice points or another resource to influence the outcome.
+
+### Example offering effects
+- Sacrifice points to increase the chance of the called side.
+- Sacrifice points to improve payout if the call succeeds.
+- Sacrifice points to protect against a partial loss.
+- Sacrifice a coin, charge, or meter value for a stronger temporary effect.
+
+### Requirements
+- Offerings happen before the flip.
+- The sacrifice and expected effect must be shown clearly.
+- Offering choices should not fully replace the existing call / bet decision unless intentionally redesigned.
+- The player must be able to skip offerings.
+
+### Technical notes
+- Add a pre-flip decision phase for optional offerings.
+- Outcome generation needs to accept offering-based modifiers.
+- Scoring needs to account for upfront sacrifices and conditional rewards.
+- Existing bet state should be reviewed to decide whether offerings extend or replace it.
+
+### Design effect
+- Adds more agency before the flip.
+- Gives players another way to manage risk.
+- Fits the divine / goddess theme well.
+
+### Risks
+- The idea is still loose and may overlap with Luck, Karma, or Divine Interventions.
+- If offerings are always mathematically optimal, they become automatic rather than strategic.
+
+### Open questions
+- What exactly can be offered: points, score, coins, meter value, or something else?
+- Should offerings be fixed choices, shop-bought options, or generated each round?
+- How is this meaningfully different from betting?
+
+### Evaluation criteria
+- Does the system create a real trade-off before flipping?
+- Does it feel thematically different from a normal bet?
+- Can it coexist with other manipulation mechanics without too much overlap?
+
+### Comment
+This is thematic, but currently too close to betting, Luck/Karma spending, and divine interventions. It needs a sharper identity before implementation. “Pay points to improve odds” is clear but may become a solvable math choice instead of an interesting choice. The best version is probably not a general system, but a small set of dramatic pre-flip choices with explicit trade-offs. Until then, this should stay lower priority.
+
+---
+
+# Loosely Defined Ideas
+
+## Push Your Luck
+
+### Core idea
+After reaching the required score, let the player either bank the win or continue flipping for bonus rewards with added risk.
+
+### Example
+“You scored 18 and need 15. You can bank the win now, or flip one more coin for bonus cash. If it misses, you lose the bonus and take a penalty.”
+
+### Requirements / tech notes
+- Add a post-success decision phase before ending the round.
+- Track banked reward vs bonus reward separately.
+- Define the penalty for failing the extra flip.
+- UI must make the risk and reward explicit.
+
+### Evaluation question
+- Does this create exciting tension without making players feel punished for engaging with it?
+
+### Comment
+Very promising and relatively contained. It adds drama at a natural decision point and does not require rewriting the whole game. The main balance issue is making the choice actually optional: if the expected value is obviously positive, players always push; if it is too punishing, they never do. This can probably be tuned with conservative rewards and clear penalties. It is a good candidate for an early prototype.
+
+---
+
+## Stronger Feedback and Celebration
+
+### Core idea
+Improve emotional feedback so the game celebrates player decisions and makes flips feel more dramatic.
+
+### Example feedback
+- `3 FLIP STREAK`
+- `OVERKILL`
+- `15% HIT`
+- Single-coin callouts for important coin results.
+- Dramatic messages on wins, rare hits, big payouts, or risky successes.
+
+### Requirements / tech notes
+- Add a feedback event system or extend current scoring feedback.
+- Detect notable events such as streaks, overkill, rare odds, large multipliers, and important combo triggers.
+- Display short, punchy messages during or after score resolution.
+
+### Evaluation question
+- Does stronger feedback make the same mechanics feel more satisfying and memorable?
+
+### Comment
+This is probably the highest value-to-effort idea. It does not need to change balance, but can make the existing game feel much better. The risk is mostly presentation overload: too many messages can become noise. Start with a small number of high-impact callouts and only trigger them for genuinely notable moments. This is worth doing early because it will also help evaluate other mechanics by making their impact more visible.
+
+---
+
+## Inspectable Event Log
+
+### Core idea
+Add an event log the player can inspect, but keep it hidden by default so it does not clutter the main UI.
+
+### Requirements / tech notes
+- Record important events during flip and scoring resolution.
+- Include coin effects, score changes, meter changes, interventions, pattern matches, and penalties.
+- Provide a toggle or expandable panel for inspection.
+
+### Evaluation question
+- Does the log help players understand complex scoring without overwhelming casual play?
+
+### Comment
+Useful, especially if the game adds more conditional scoring, pattern matches, interventions, or neighbour effects. It is not very exciting on its own, but it supports clarity and debugging. The main caution is not to build a huge log UI before the scoring system needs it. A simple hidden/expandable resolution log would be enough at first.
+
+---
+
+## Score Estimate on Hover
+
+### Core idea
+Show a score estimate when hovering over a possible action or coin, but consider limiting it because it might reveal too much.
+
+### Requirements / tech notes
+- Add score preview logic that can simulate likely or deterministic outcomes.
+- Decide whether preview shows exact score, expected value, score range, or partial explanation.
+- Could be used as a special character skill instead of a default feature.
+
+### Evaluation question
+- Does the estimate improve clarity, or does it remove too much uncertainty from the game?
+
+### Comment
+This could be helpful, but exact previews may undercut the uncertainty that makes the game work. It may also be technically awkward if scoring depends on random results, interventions, or conditional chains. A safer version is showing explanations or ranges rather than exact outcomes. Making exact score preview a character skill is a strong compromise because it turns clarity into a special playstyle instead of a default solver.
+
+---
+
+## Rooms / Stages / Map
+
+### Core idea
+Add a map, rooms, or stages structure to the run.
+
+### Requirements / tech notes
+- Define room types such as normal flip, shop, event, reward, boss, or rest.
+- Add progression state across rooms.
+- Decide how much this changes the current round-based loop.
+
+### Risk
+- This may be too large for the current scope and could distract from improving the core flip mechanics.
+
+### Evaluation question
+- Does a map structure meaningfully improve run decisions, or is it unnecessary complexity?
+
+### Comment
+This is likely too much for now. A map can add structure, but it also demands room design, encounter pacing, rewards, events, and navigation UI. Unless the current round/shop loop feels too flat after core mechanics improve, this is probably not worth the implementation cost. It is better treated as a future run-structure layer, not a mechanics priority.
+
+---
+
+## Mulligan Option
+
+### Core idea
+Allow one mulligan per round.
+
+### Requirements / tech notes
+- Define what the mulligan rerolls: one coin, all coins, the call, the shop offer, or something else.
+- Track one use per round and refresh at the start of the next round.
+- Communicate availability clearly.
+
+### Evaluation question
+- Does one mulligan per round improve fairness and reduce frustration without trivializing bad flips?
+
+### Comment
+Simple, clear, and easy to implement, but it may be too generic. A mulligan is useful as bad-luck protection, yet it overlaps with divine interventions and Luck/Karma. If used, it should have a very specific target, such as reroll one coin after the flip or redraw an offered coin, rather than being a vague reset button. It may work best as a character passive, shop item, or intervention rather than a universal rule.
+
+---
+
+## Coins Affecting Neighbours
+
+### Core idea
+Add coins that affect adjacent coins, such as coins to the left or right.
+
+### Example effects
+- A coin increases the score of the coin to its right.
+- A coin changes the weight of adjacent coins.
+- A coin doubles the payout of neighbouring coins if they match the call.
+
+### Requirements / tech notes
+- Coin slot order must matter and be visible.
+- Scoring must evaluate positional effects consistently.
+- UI should show adjacency targeting before and during resolution.
+
+### Evaluation question
+- Does positional scoring add interesting planning without making the board hard to read?
+
+### Comment
+Good fit if the game keeps fixed slots. It adds meaningful placement decisions without requiring a new resource system. Implementation difficulty is moderate because scoring order and effect targeting need to be consistent, but the player-facing concept is clear if adjacency is visually highlighted. This idea becomes much weaker or more confusing if the game moves toward the coin purse model, so it depends on committing to slot-based play.

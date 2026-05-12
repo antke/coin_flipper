@@ -164,33 +164,19 @@ function RunSetupState:draw(app)
 
   love.graphics.setFont(app.fonts.title)
   Layout.centeredText("Run Setup", 70, app.fonts.title, Theme.colors.text)
-  Layout.centeredText("Choose or generate a seed before the run begins", 108, app.fonts.heading, Theme.colors.accent)
 
   Panel.draw(panelX, panelY, panelWidth, panelHeight, "Seeded Run")
   local content = Panel.getContentArea(panelX, panelY, panelWidth, panelHeight, "Seeded Run")
 
-  local seedValue = self:getPreviewSeedText()
-  local previewLines = app:getRunSetupPreviewLines(seedValue)
   local warningLines = app:getRunSetupWarningLines()
   local lines = {
     string.format("Seed Input: %s", self.seedText ~= "" and self.seedText or "(using generated seed)"),
     self.statusMessage,
-    "",
   }
 
   for _, line in ipairs(warningLines) do
     table.insert(lines, line)
   end
-
-  table.insert(lines, "")
-
-  for _, line in ipairs(previewLines) do
-    table.insert(lines, line)
-  end
-
-  table.insert(lines, "")
-  table.insert(lines, "Type digits to set a seed, press R to regenerate, or press Enter to begin.")
-  table.insert(lines, "Clearing the field keeps the currently generated route preview until you regenerate again.")
 
   love.graphics.setFont(app.fonts.body)
   Layout.drawWrappedLines(lines, content.x, content.y, content.width, Theme.colors.text, Theme.spacing.lineHeight, content.height)

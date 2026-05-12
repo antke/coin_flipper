@@ -7,7 +7,7 @@ local definitions = {
     roundIndex = 1,
     label = "Round 1 — Opening Toss",
     stageType = "normal",
-    targetScore = 8,
+    targetScore = 10,
     activeStageModifierIds = { "bright_lights" },
   },
   {
@@ -16,7 +16,7 @@ local definitions = {
     roundIndex = 2,
     label = "Round 2 — Mid Table",
     stageType = "normal",
-    targetScore = 11,
+    targetScore = 15,
     activeStageModifierIds = { "crosswind_table" },
     variants = {
       {
@@ -45,7 +45,7 @@ local definitions = {
     roundIndex = 3,
     label = "Round 3 — Build Check",
     stageType = "normal",
-    targetScore = 14,
+    targetScore = 20,
     activeStageModifierIds = { "echo_chamber", "side_pot" },
     variants = {
       {
@@ -74,7 +74,7 @@ local definitions = {
     roundIndex = 4,
     label = "Boss — Final Table",
     stageType = "boss",
-    targetScore = 18,
+    targetScore = 25,
     bossModifierIds = { "anti_streak_warden", "loaded_ledger" },
     bossVariants = {
       {

@@ -35,7 +35,7 @@ return {
   assert = function(env, A)
     local offers = A.truthy(env.shopFlow and env.shopFlow.offers, "shop offers missing")
     A.equal(env.runState.maxActiveCoinSlots, 4, "max active coin slots")
-    A.equal(env.runState.shopPoints, 2, "starting shop points")
+    A.equal(env.runState.shopPoints, 5, "starting shop points plus clear reward")
     A.equal(env.runState.shopRerollsRemaining, 1, "starting shop rerolls")
     A.equal(#offers, 4, "shop offer count with contraband case")
 

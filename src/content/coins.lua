@@ -255,6 +255,134 @@ local definitions = {
     },
   },
   {
+    id = "heads_cache",
+    name = "Heads Cache",
+    rarity = "common",
+    description = "+2 shop points when this coin matches a Heads call.",
+    tags = { "heads", "economy", "match" },
+    triggers = {
+      {
+        hook = "after_coin_roll",
+        condition = { call = "heads", result = "heads" },
+        effects = {
+          { op = "add_shop_points", amount = 2 },
+        },
+      },
+    },
+  },
+  {
+    id = "tails_cache",
+    name = "Tails Cache",
+    rarity = "common",
+    description = "+2 shop points when this coin matches a Tails call.",
+    tags = { "tails", "economy", "match" },
+    triggers = {
+      {
+        hook = "after_coin_roll",
+        condition = { call = "tails", result = "tails" },
+        effects = {
+          { op = "add_shop_points", amount = 2 },
+        },
+      },
+    },
+  },
+  {
+    id = "echo_penny",
+    name = "Echo Penny",
+    rarity = "common",
+    description = "Repeated calls are worth 1.10x score.",
+    tags = { "streak", "multiplier" },
+    triggers = {
+      {
+        hook = "before_scoring",
+        condition = { repeated_call = true },
+        effects = {
+          { op = "apply_score_multiplier", value = 1.10 },
+        },
+      },
+    },
+  },
+  {
+    id = "perfect_penny",
+    name = "Perfect Penny",
+    rarity = "common",
+    description = "+2 stage score and +2 run score if every equipped coin matches this batch.",
+    tags = { "perfect", "score", "match" },
+    triggers = {
+      {
+        hook = "on_batch_end",
+        condition = { all_matched = true },
+        effects = {
+          { op = "add_stage_score", amount = 2 },
+          { op = "add_run_score", amount = 2 },
+        },
+      },
+    },
+  },
+  {
+    id = "comeback_cent",
+    name = "Comeback Cent",
+    rarity = "common",
+    description = "If no equipped coin matches this batch, gain +2 shop points.",
+    tags = { "miss", "safety", "economy" },
+    triggers = {
+      {
+        hook = "on_batch_end",
+        condition = { no_matches = true },
+        effects = {
+          { op = "add_shop_points", amount = 2 },
+        },
+      },
+    },
+  },
+  {
+    id = "heads_anchor",
+    name = "Heads Anchor",
+    rarity = "common",
+    description = "On Heads calls, this coin gains +0.10 Heads weight before rolling.",
+    tags = { "heads", "weight" },
+    triggers = {
+      {
+        hook = "before_coin_roll",
+        condition = { call = "heads" },
+        effects = {
+          { op = "modify_coin_weight", side = "heads", amount = 0.10 },
+        },
+      },
+    },
+  },
+  {
+    id = "tails_anchor",
+    name = "Tails Anchor",
+    rarity = "common",
+    description = "On Tails calls, this coin gains +0.10 Tails weight before rolling.",
+    tags = { "tails", "weight" },
+    triggers = {
+      {
+        hook = "before_coin_roll",
+        condition = { call = "tails" },
+        effects = {
+          { op = "modify_coin_weight", side = "tails", amount = 0.10 },
+        },
+      },
+    },
+  },
+  {
+    id = "banked_spark",
+    name = "Banked Spark",
+    rarity = "common",
+    description = "+1 shop point after scoring each batch.",
+    tags = { "economy", "score" },
+    triggers = {
+      {
+        hook = "after_scoring",
+        effects = {
+          { op = "add_shop_points", amount = 1 },
+        },
+      },
+    },
+  },
+  {
     id = "glass_nickel",
     name = "Glass Nickel",
     rarity = "rare",
@@ -348,6 +476,16 @@ local function extractSeed(source)
   return 1
 end
 
+local function hashText(text)
+  local hash = 0
+
+  for index = 1, #text do
+    hash = (hash * 131 + string.byte(text, index)) % 2147483647
+  end
+
+  return hash
+end
+
 local function buildUnlockedIndex(unlockedCoinIds)
   local unlockedIndex = {}
 
@@ -406,33 +544,48 @@ end
 
 function Coins.getStarterCoinIds(limit, unlockedCoinIds, source)
   local starterIds = {}
-  local addedIds = {}
   local unlockedIndex = buildUnlockedIndex(unlockedCoinIds)
-  local extraCandidates = {}
+  local candidates = {}
+  local fallbackCandidates = {}
+  local seed = extractSeed(source)
 
   for _, definition in ipairs(definitions) do
-    if definition.isStarter and Coins.isUnlocked(definition, unlockedIndex) then
-      table.insert(starterIds, definition.id)
-      addedIds[definition.id] = true
+    if Coins.isUnlocked(definition, unlockedIndex) then
+      local entry = {
+        id = definition.id,
+        hash = hashText(string.format("%s:%s", tostring(seed), definition.id)),
+      }
+
+      if definition.rarity == "common" then
+        table.insert(candidates, entry)
+      else
+        table.insert(fallbackCandidates, entry)
+      end
     end
   end
 
-  if limit and #starterIds < limit then
-    for _, definition in ipairs(definitions) do
-      if not addedIds[definition.id] and Coins.isUnlocked(definition, unlockedIndex) then
-        table.insert(extraCandidates, definition.id)
-      end
+  table.sort(candidates, function(left, right)
+    if left.hash == right.hash then
+      return left.id < right.id
     end
 
-    local seed = extractSeed(source)
+    return left.hash < right.hash
+  end)
 
-    for index = 1, math.min(limit - #starterIds, #extraCandidates) do
-      local candidateIndex = ((seed + index - 2) % #extraCandidates) + 1
-      local coinId = extraCandidates[candidateIndex]
-
-      table.insert(starterIds, coinId)
-      addedIds[coinId] = true
+  table.sort(fallbackCandidates, function(left, right)
+    if left.hash == right.hash then
+      return left.id < right.id
     end
+
+    return left.hash < right.hash
+  end)
+
+  for _, candidate in ipairs(candidates) do
+    table.insert(starterIds, candidate.id)
+  end
+
+  for _, candidate in ipairs(fallbackCandidates) do
+    table.insert(starterIds, candidate.id)
   end
 
   if limit and #starterIds > limit then

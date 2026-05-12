@@ -77,7 +77,7 @@ function EncounterState:getLayout(app)
   local topHeight = math.max(150, math.floor((availableHeight - gap) * 0.4))
   local bottomY = topY + topHeight + gap
   local bottomHeight = math.max(170, footerMetrics.contentBottomY - bottomY)
-  local bottomPanelWidth = math.floor((width - (padding * 2) - gap) / 2)
+  local bottomPanelWidth = width - (padding * 2)
 
   return {
     width = width,
@@ -233,14 +233,11 @@ end
 function EncounterState:draw(app)
   local optionArea = self:getOptionArea(app)
   local layout = optionArea.layout
-  local width = layout.width
   local padding = layout.padding
-  local gap = layout.gap
 
   local encounterLines = app:getEncounterLines()
   local projectedOutcome = app:getProjectedEncounterOutcome()
   local impactLines = app:getProjectedEncounterImpactLines(projectedOutcome)
-  local shopLines = app:getProjectedEncounterShopPreviewLines(projectedOutcome)
 
   love.graphics.setColor(Theme.colors.accent)
   Layout.centeredText("Encounter", 72, app.fonts.title, Theme.colors.accent)
@@ -254,26 +251,12 @@ function EncounterState:draw(app)
   end
   table.insert(topLines, "")
   table.insert(topLines, self.statusMessage)
-  if #(app:getEncounterOptionCards()) > 0 then
-    table.insert(topLines, "Encounter Choices:")
-    table.insert(topLines, "Use number keys, arrow keys, or click to compare and choose.")
-
-    for _, card in ipairs(app:getEncounterOptionCards()) do
-      local marker = card.selected and "*" or "-"
-      table.insert(topLines, string.format("%s %d. %s — %s", marker, card.index, card.name or card.id or "Unknown", card.description or "No description."))
-    end
-  end
   Layout.drawWrappedLines(topLines, topContent.x, topContent.y, topContent.width, Theme.colors.text, Theme.spacing.lineHeight, topTextHeight)
   Button.drawButtons(self:buildOptionButtons(app, optionArea), love.mouse.getX(), love.mouse.getY())
 
   Panel.draw(padding, layout.bottomY, layout.bottomPanelWidth, layout.bottomHeight, "Projected Impact")
   local projectedContent = Panel.getContentArea(padding, layout.bottomY, layout.bottomPanelWidth, layout.bottomHeight, "Projected Impact")
   Layout.drawWrappedLines(impactLines, projectedContent.x, projectedContent.y, projectedContent.width, Theme.colors.text, Theme.spacing.lineHeight, projectedContent.height)
-
-  local shopX = padding + layout.bottomPanelWidth + gap
-  Panel.draw(shopX, layout.bottomY, layout.bottomPanelWidth, layout.bottomHeight, "Shop Outlook")
-  local shopContent = Panel.getContentArea(shopX, layout.bottomY, layout.bottomPanelWidth, layout.bottomHeight, "Shop Outlook")
-  Layout.drawWrappedLines(shopLines, shopContent.x, shopContent.y, shopContent.width, Theme.colors.text, Theme.spacing.lineHeight, shopContent.height)
 
   Button.drawButtons(self:buildButtons(app), love.mouse.getX(), love.mouse.getY())
 end

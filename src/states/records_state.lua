@@ -152,8 +152,7 @@ function RecordsState:buildEntryButtons(app, area)
 
   for index = startIndex, endIndex do
     local record = records[index]
-    local seedSuffix = record.seed and string.format(" [Seed %s]", tostring(record.seed)) or ""
-    local label = string.format("%d. %s — %s (%d)%s", index, tostring(record.resultType or record.runStatus or "Run"), tostring(record.finalStageLabel or "n/a"), tonumber(record.runTotalScore or 0) or 0, seedSuffix)
+    local label = string.format("%d. %s — %s (%d)", index, tostring(record.resultType or record.runStatus or "Run"), tostring(record.finalStageLabel or "n/a"), tonumber(record.runTotalScore or 0) or 0)
     table.insert(buttons, {
       x = area.x,
       y = currentY,
@@ -275,22 +274,19 @@ function RecordsState:draw(app)
 
   love.graphics.setFont(app.fonts.title)
   Layout.centeredText("Run Records", 76, app.fonts.title, Theme.colors.text)
-  Layout.centeredText(string.format("%d stored run(s)", #records), 116, app.fonts.heading, Theme.colors.accent)
 
-  Panel.draw(layout.padding, layout.panelY, layout.listWidth, layout.panelHeight, "Records")
+  Panel.draw(layout.padding, layout.panelY, layout.listWidth, layout.panelHeight, string.format("Records (%d)", #records))
   Panel.draw(layout.padding + layout.listWidth + layout.gap, layout.panelY, layout.detailWidth, layout.panelHeight, "Details")
 
-  local listContent = Panel.getContentArea(layout.padding, layout.panelY, layout.listWidth, layout.panelHeight, "Records")
+  local listContent = Panel.getContentArea(layout.padding, layout.panelY, layout.listWidth, layout.panelHeight, string.format("Records (%d)", #records))
   local detailContent = Panel.getContentArea(layout.padding + layout.listWidth + layout.gap, layout.panelY, layout.detailWidth, layout.panelHeight, "Details")
 
-  local detailLines = {}
-  for _, line in ipairs(app:getRunRecordProgressLines()) do
-    table.insert(detailLines, line)
-  end
-  table.insert(detailLines, "")
-  for _, line in ipairs(app:getRunRecordDetailLines(record)) do
-    table.insert(detailLines, line)
-  end
+  local detailLines = record and {
+    string.format("Result: %s", tostring(record.resultType or record.runStatus or "n/a")),
+    string.format("Final Stage: %s", tostring(record.finalStageLabel or "n/a")),
+    string.format("Run Total Score: %s", tostring(record.runTotalScore or 0)),
+    string.format("Meta Reward Earned: %s", tostring(record.metaRewardEarned or 0)),
+  } or { "No run record selected." }
 
   love.graphics.setFont(app.fonts.body)
   local mouseX, mouseY = love.mouse.getPosition()

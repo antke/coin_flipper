@@ -1,6 +1,5 @@
 local Button = require("src.ui.button")
 local Layout = require("src.ui.layout")
-local Panel = require("src.ui.panel")
 local Theme = require("src.ui.theme")
 
 local MenuState = {}
@@ -205,50 +204,8 @@ function MenuState:keypressed(app, key)
 end
 
 function MenuState:draw(app)
-  local panelX = 80
-  local panelY = 180
-  local footerMetrics = Layout.getFooterMetrics(love.graphics.getHeight())
-  local panelWidth = love.graphics.getWidth() - 160
-  local panelHeight = math.max(220, math.min(280, footerMetrics.contentBottomY - panelY - 24))
-
   love.graphics.setFont(app.fonts.title)
-  Layout.centeredText("Coin-Flip Roguelike", 76, app.fonts.title, Theme.colors.text)
-  Layout.centeredText("Prototype Build", 116, app.fonts.heading, Theme.colors.accent)
-
-  Panel.draw(panelX, panelY, panelWidth, panelHeight, "Current Build")
-  local contentArea = Panel.getContentArea(panelX, panelY, panelWidth, panelHeight, "Current Build")
-
-  love.graphics.setFont(app.fonts.body)
-  local lines = {
-    "This prototype now has a playable run loop plus persistent meta progression.",
-    "",
-    "Implemented now:",
-    "- deterministic stage resolution and traceable hook/action flow",
-    "- loadout, stage, result, shop, summary, and meta screens",
-    "- save/load for MetaState via love.filesystem",
-    string.format("- current meta points: %d", app.metaState.metaPoints or 0),
-    string.format("- save status: %s", app.metaSaveStatus and app.metaSaveStatus.message or "unknown"),
-    "",
-    "Controls:",
-  }
-
-  if app:hasActiveRunSave() then
-    table.insert(lines, "- Click Continue Run or press Enter / Space / C")
-    table.insert(lines, "- Click Start Run or press N to open Run Setup")
-  else
-    table.insert(lines, "- Click Start Run or press Enter / Space / KPEnter to open Run Setup")
-  end
-
-  table.insert(lines, "- Click Collection or press B")
-  table.insert(lines, "- Click Records or press R")
-  table.insert(lines, "- Click How to Play or press H")
-  table.insert(lines, "- Click Meta Progression or press M")
-
-  if app:isDevControlsEnabled() then
-    table.insert(lines, "- F3: Toggle debug overlay")
-  end
-
-  Layout.drawWrappedLines(lines, contentArea.x, contentArea.y, contentArea.width, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height)
+  Layout.centeredText("coin flipper", 76, app.fonts.title, Theme.colors.text)
 
   local mouseX, mouseY = love.mouse.getPosition()
   Button.drawButtons(self:buildButtons(app), mouseX, mouseY)

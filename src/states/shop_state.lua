@@ -35,7 +35,7 @@ function ShopState:tryBuyOffer(app, offerIndex)
   end
 
   if app.runState.shopPoints < offer.price then
-    self.statusMessage = "Not enough shop points for that offer."
+    self.statusMessage = "Not enough chips for that offer."
     return false, "not_enough_shop_points"
   end
 
@@ -83,7 +83,7 @@ function ShopState:getLayout(app)
   local width = love.graphics.getWidth()
   local height = love.graphics.getHeight()
   local infoY = padding + 34
-  local infoHeight = 136
+  local infoHeight = 64
   local offerPanelY = infoY + infoHeight + gap
   local footerMetrics = Layout.getFooterMetrics(height, {
     statusHeight = 74,
@@ -189,7 +189,7 @@ function ShopState:buildFooterButtons(app, layout)
 end
 
 function ShopState:enter(app)
-  self.statusMessage = string.format("Buy with buttons or 1-%d, reroll with the button or R, then continue when ready.", #app.shopOffers)
+  self.statusMessage = "Choose an offer, reroll, or continue."
 end
 
 function ShopState:keypressed(app, key)
@@ -221,24 +221,16 @@ function ShopState:draw(app)
   love.graphics.print("Shop", layout.padding, layout.padding)
   love.graphics.setFont(app.fonts.body)
   Theme.applyColor(Theme.colors.mutedText)
-  love.graphics.print(string.format("Shop Points: %d", app.runState.shopPoints), layout.padding, layout.padding + 30)
+  love.graphics.print(string.format("Chips: %d", app.runState.shopPoints), layout.padding, layout.padding + 30)
 
-  local infoLines = app:getShopStatusLines()
+  local infoLines = {
+    string.format("Free rerolls: %d", app.runState.shopRerollsRemaining or 0),
+  }
   if upcomingStage then
     table.insert(infoLines, 1, string.format("Next stage: %s", upcomingStage.label))
 
     if upcomingStage.variantName then
       table.insert(infoLines, 2, string.format("Variant: %s", upcomingStage.variantName))
-    end
-  end
-
-  local traceLines = app:getShopTraceLines(4)
-
-  if #traceLines > 0 then
-    table.insert(infoLines, "")
-
-    for _, line in ipairs(traceLines) do
-      table.insert(infoLines, line)
     end
   end
 
@@ -278,23 +270,11 @@ function ShopState:draw(app)
 
     local lines = {
       string.format("%s", offer.name),
-      string.format("Type: %s", offer.type),
       string.format("Rarity: %s", offer.rarity),
-      string.format("Price: %d", offer.price),
-      offer.purchased and "Status: purchased" or "Status: available",
+      string.format("Price: %d chips", offer.price),
       "",
       app:getOfferDescription(offer),
     }
-
-    local metaLines = app:getOfferMetaLines(offer)
-
-    if #metaLines > 0 then
-      table.insert(lines, "")
-
-      for _, line in ipairs(metaLines) do
-        table.insert(lines, line)
-      end
-    end
 
     Layout.drawWrappedLines(lines, textX, textY, textWidth, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height - (buttonHeight + 8))
   end

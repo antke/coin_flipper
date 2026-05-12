@@ -82,8 +82,7 @@ function ResultState:draw(app)
     local bannerHeight = 58
     local cardsY = contentArea.y + bannerHeight + 12
     local cardGap = 10
-    local compactCards = false
-    local minSummaryHeight = 168
+    local compactCards = true
     local cardsHeight = 0
 
     local function computeCardsHeight(isCompact)
@@ -104,12 +103,7 @@ function ResultState:draw(app)
       return total
     end
 
-    cardsHeight = computeCardsHeight(false)
-
-    if (contentArea.height - (cardsY - contentArea.y) - cardsHeight) < minSummaryHeight then
-      compactCards = true
-      cardsHeight = computeCardsHeight(true)
-    end
+    cardsHeight = computeCardsHeight(compactCards)
 
     love.graphics.setColor(Theme.colors.danger[1], Theme.colors.danger[2], Theme.colors.danger[3], 0.16 + pulse)
     love.graphics.rectangle("fill", contentArea.x, contentArea.y, contentArea.width, bannerHeight, 12, 12)
@@ -120,9 +114,6 @@ function ResultState:draw(app)
     love.graphics.setFont(app.fonts.heading)
     Theme.applyColor(Theme.colors.text)
     love.graphics.print(result.status == "cleared" and "BOSS TABLE BROKEN" or "BOSS PRESSURE HELD", contentArea.x + 16, contentArea.y + 10)
-    love.graphics.setFont(app.fonts.body)
-    Theme.applyColor(Theme.colors.warning)
-    love.graphics.print(string.format("%d boss modifier(s) shaped this encounter", #cards), contentArea.x + 16, contentArea.y + 34)
 
     local currentY = cardsY
     for index, card in ipairs(cards) do
@@ -152,17 +143,11 @@ function ResultState:draw(app)
 
   local lines = {
     string.format("Stage: %s", result.stageLabel or "n/a"),
-    string.format("Stage Type: %s", result.stageType or "n/a"),
     string.format("Score: %s / %s", tostring(result.stageScore or 0), tostring(result.targetScore or 0)),
     string.format("Run Total Score: %s", tostring(result.runTotalScore or (app.runState and app.runState.runTotalScore or 0))),
     string.format("Run Status: %s", tostring(result.runStatus or "active")),
-    string.format("Shop Points: %s", tostring(result.shopPoints or (app.runState and app.runState.shopPoints or 0))),
-    string.format("Shop Rerolls Ready: %s", tostring(result.shopRerollsRemaining or (app.runState and app.runState.shopRerollsRemaining or 0))),
-    string.format("Loadout Key: %s", tostring(result.loadoutKey or app:getCurrentLoadoutKey())),
+    string.format("Chips: %s", tostring(result.shopPoints or (app.runState and app.runState.shopPoints or 0))),
     string.format("Next step: %s", destination),
-    "",
-    app.lastBatchResult and string.format("Final batch: %d (%s)", app.lastBatchResult.batchId, string.upper(app.lastBatchResult.call)) or "No final batch info.",
-    "Click Continue or press Enter to open the next review or reward step.",
   }
 
   if (result.metaRewardEarned or 0) > 0 then

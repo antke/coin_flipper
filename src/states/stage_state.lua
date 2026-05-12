@@ -64,6 +64,7 @@ function StageState:startReveal(app, batchResult)
     shopPoints = batchResult.shopPoints,
     flipsRemaining = batchResult.flipsRemaining,
     stageDelta = batchResult.scoreBreakdown and batchResult.scoreBreakdown.totalStageScoreDelta or 0,
+    betResult = batchResult.betResult,
     coins = coins,
   }
 end
@@ -215,6 +216,45 @@ function StageState:buildButtons(app, x, y, width)
   return self.buttons
 end
 
+function StageState:buildBetButtons(app, x, y, width)
+  local bets = app:getBetOptions()
+  local gap = Theme.spacing.itemGap
+  local buttonCount = math.max(1, #bets)
+  local buttonWidth = math.floor((width - (gap * (buttonCount - 1))) / buttonCount)
+  local buttonHeight = 34
+  local stageActive = self:isStageActive(app)
+  local revealActive = self:isRevealActive()
+  local selectedBet = app:getSelectedBet()
+  local buttons = {}
+
+  for index, bet in ipairs(bets) do
+    local canSelect = app:canSelectBet(bet.id)
+    local label = bet.shortLabel or string.upper(bet.name or bet.id)
+
+    if bet.stake and bet.stake > 0 then
+      label = string.format("%s (-%d/+%d)", label, bet.stake, bet.winAmount or 0)
+    end
+
+    table.insert(buttons, {
+      x = x + ((index - 1) * (buttonWidth + gap)),
+      y = y,
+      width = buttonWidth,
+      height = buttonHeight,
+      label = label,
+      variant = selectedBet and selectedBet.id == bet.id and "accent" or "default",
+      focused = selectedBet and selectedBet.id == bet.id,
+      disabled = not stageActive or revealActive or not canSelect,
+      onClick = function()
+        local ok, result = app:selectBet(bet.id)
+        self.statusMessage = ok and string.format("Selected bet: %s.", result.name or bet.name or bet.id) or tostring(result)
+        return ok, result
+      end,
+    })
+  end
+
+  return buttons
+end
+
 function StageState:getButtonLayout(app)
   local padding = Theme.spacing.screenPadding
   local width = love.graphics.getWidth()
@@ -250,7 +290,8 @@ function StageState:getHelpDialogLines(app)
   local lines = {
     "You are trying to hit the target score before flips run out.",
     "Pick HEADS or TAILS. Each pick resolves the full equipped coin batch.",
-    "Matching coins add score through the current scoring rules.",
+    "Stage score also becomes chips for the shop.",
+    "Optional bets can add or lose chips after scoring.",
     "",
     "Current Breakdown:",
   }
@@ -345,8 +386,8 @@ function StageState:drawStageSummary(app, area)
   local scoreColor = stage.stageScore >= stage.targetScore and Theme.colors.success or Theme.colors.text
   local stats = {
     { label = "Score", value = string.format("%d/%d", stage.stageScore, stage.targetScore), color = scoreColor },
+    { label = "Chips", value = tostring(app.runState and app.runState.shopPoints or 0), color = Theme.colors.text },
     { label = "Flips", value = tostring(stage.flipsRemaining), color = Theme.colors.text },
-    { label = "Shop", value = tostring(app.runState.shopPoints), color = Theme.colors.text },
     { label = "Call", value = string.upper(app.selectedCall), color = Theme.colors.text },
   }
 
@@ -438,10 +479,6 @@ function StageState:drawCoinRow(app, x, y, width, height)
   Theme.applyColor(Theme.colors.mutedText)
 
   local title = call and string.format("Last flip: %s", string.upper(call)) or "Ready coins"
-  if batchId then
-    title = string.format("%s  Batch %d", title, batchId)
-  end
-
   local titleHeight = 20
   love.graphics.printf(title, x, y, width, "center")
 
@@ -487,10 +524,6 @@ function StageState:drawCoinRow(app, x, y, width, height)
     love.graphics.setLineWidth(hasResult and 2 or 1)
     love.graphics.rectangle("line", cardX, cardY, cardWidth, cardHeight, 12, 12)
     love.graphics.setLineWidth(1)
-
-    love.graphics.setFont(app.fonts.small)
-    Theme.applyColor(Theme.colors.mutedText)
-    love.graphics.printf(string.format("Slot %d", coin.slotIndex or index), cardX + 8, cardY + 8, cardWidth - 16, "center")
 
     local coinSize = math.min(84, math.max(58, math.floor(cardWidth * 0.46)))
     CoinArt.draw(coin.coinId, cardX + math.floor((cardWidth - coinSize) / 2), cardY + 34, coinSize, {
@@ -616,9 +649,13 @@ function StageState:drawRevealOverlay(app)
   local statsLines = {
     string.format("Stage delta: %+d", reveal.stageDelta),
     string.format("Stage score: %d/%d", reveal.stageScore, reveal.targetScore),
-    string.format("Run total: %d", reveal.runTotalScore),
+    string.format("Chips: %d", reveal.shopPoints or 0),
     string.format("Flips remaining: %d", reveal.flipsRemaining),
   }
+
+  if reveal.betResult and reveal.betResult.id ~= "none" then
+    table.insert(statsLines, string.format("Bet: %s (%s %+d)", reveal.betResult.name or reveal.betResult.id, reveal.betResult.outcome or "none", reveal.betResult.amount or 0))
+  end
 
   if reveal.stageStatus ~= "active" then
     table.insert(statsLines, string.format("Outcome: %s", string.upper(reveal.stageStatus)))
@@ -648,9 +685,6 @@ function StageState:drawRevealOverlay(app)
     love.graphics.rectangle("line", cardX, cardY, cardWidth, cardHeight, 10, 10)
     love.graphics.setLineWidth(1)
 
-    love.graphics.setFont(app.fonts.small)
-    Theme.applyColor(Theme.colors.mutedText)
-    love.graphics.print(string.format("Slot %d • Order %d", coin.slotIndex or 0, coin.resolutionIndex or 0), cardX + 10, cardY + 8)
     CoinArt.draw(coin.coinId, cardX + math.floor((cardWidth - 38) / 2), cardY + 28, 38, {
       side = revealed and coin.result or nil,
       selected = revealed and coin.didMatch,
@@ -677,13 +711,6 @@ function StageState:drawRevealOverlay(app)
     end
   end
 
-  local footerY = overlayY + overlayHeight - 34
-  love.graphics.setFont(app.fonts.small)
-  Theme.applyColor(Theme.colors.mutedText)
-  local footerText = reveal.stageStatus ~= "active"
-    and "Press Enter, Space, or click Continue to finish the reveal."
-    or "Press Enter, Space, or click Skip Reveal to continue immediately."
-  love.graphics.printf(footerText, overlayX + padding, footerY, overlayWidth - (padding * 2), "center")
 end
 
 function StageState:keypressed(app, key)
@@ -821,7 +848,8 @@ function StageState:draw(app)
   local panelWidth = width - (padding * 2)
   local buttonLayout = self:getButtonLayout(app)
   local coinRowY = topY + topHeight + gap
-  local coinRowBottom = buttonLayout.y - 42
+  local betButtonY = buttonLayout.y - 44
+  local coinRowBottom = betButtonY - 42
   local coinRowHeight = math.max(120, coinRowBottom - coinRowY)
   local mouseX, mouseY = love.mouse.getPosition()
 
@@ -838,8 +866,9 @@ function StageState:draw(app)
 
   love.graphics.setFont(app.fonts.small)
   Theme.applyColor(Theme.colors.mutedText)
-  love.graphics.printf(self.statusMessage, padding, buttonLayout.y - 28, panelWidth, "center")
+  love.graphics.printf(self.statusMessage, padding, betButtonY - 26, panelWidth, "center")
 
+  Button.drawButtons(self:buildBetButtons(app, buttonLayout.x, betButtonY, buttonLayout.width), mouseX, mouseY)
   Button.drawButtons(self:buildButtons(app, buttonLayout.x, buttonLayout.y, buttonLayout.width), mouseX, mouseY)
 
   Button.drawButtons({ self:getHelpButtonLayout() }, mouseX, mouseY)
@@ -872,6 +901,13 @@ function StageState:mousepressed(app, x, y, button)
   end
 
   local buttonLayout = self:getButtonLayout(app)
+  local betButtonY = buttonLayout.y - 44
+  local handledBet = Button.handleMousePressed(self:buildBetButtons(app, buttonLayout.x, betButtonY, buttonLayout.width), x, y)
+
+  if handledBet then
+    return
+  end
+
   Button.handleMousePressed(self:buildButtons(app, buttonLayout.x, buttonLayout.y, buttonLayout.width), x, y)
 end
 

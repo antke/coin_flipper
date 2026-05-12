@@ -151,6 +151,7 @@ local VALID_POST_RESULT_NEXT_STATES = {
   post_stage_analytics = true,
   reward_preview = true,
   boss_reward = true,
+  shop = true,
   summary = true,
 }
 

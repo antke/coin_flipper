@@ -1,5 +1,8 @@
 local Bosses = require("src.content.bosses")
+local AnalyticsSystem = require("src.systems.analytics_system")
 local AudioSystem = require("src.systems.audio_system")
+local Bets = require("src.content.bets")
+local BetSystem = require("src.systems.bet_system")
 local Coins = require("src.content.coins")
 local EncounterSystem = require("src.systems.encounter_system")
 local DebugOverlay = require("src.ui.debug_overlay")
@@ -377,6 +380,9 @@ function Game:resumeSavedRun()
   end
 
   self.runState = Utils.clone(artifact.runState)
+  if self.runState and not Bets.getById(self.runState.selectedBetId) then
+    self.runState.selectedBetId = Bets.getDefaultId()
+  end
   self.metaProjection = self.runState and self.runState.metaProjection or nil
   self.runRng = RNG.new(artifact.runRngSeed)
   self.stageState = Utils.clone(artifact.stageState)
@@ -1068,6 +1074,7 @@ function Game:startNewRun(options)
     seed = seed,
   })
   self.runRng = RNG.new(seed)
+  self.runState.selectedBetId = Bets.getDefaultId()
   self.stageState = nil
   self.currentStageDefinition = nil
   self.selectedCall = "heads"
@@ -1406,6 +1413,44 @@ function Game:resolveCurrentBatch(call)
   self:triggerBatchFeedback(batchResult)
   self:saveActiveRun("resolve_batch", "stage")
   return batchResult
+end
+
+function Game:getSelectedBet()
+  return BetSystem.getSelectedBet(self.runState)
+end
+
+function Game:getBetOptions()
+  return Bets.getAll()
+end
+
+function Game:canSelectBet(betId)
+  local bet = Bets.getById(betId)
+
+  if not bet then
+    return false, "unknown_bet"
+  end
+
+  if not BetSystem.canAfford(self.runState, bet) then
+    return false, "not_enough_chips_for_bet"
+  end
+
+  return true, bet
+end
+
+function Game:selectBet(betId)
+  if not self.runState then
+    return false, "run_not_initialized"
+  end
+
+  local ok, result = self:canSelectBet(betId)
+
+  if not ok then
+    return false, result
+  end
+
+  self.runState.selectedBetId = betId
+  self:saveActiveRun("select_bet", "stage")
+  return true, result
 end
 
 function Game:isDevControlsEnabled()
@@ -2320,7 +2365,7 @@ function Game:getShopStatusLines()
   })
   local lines = {
     string.format("Free rerolls remaining: %d", self.runState and self.runState.shopRerollsRemaining or 0),
-    string.format("Paid reroll cost: %d shop point(s)", shopRules.rerollCost),
+    string.format("Paid reroll cost: %d chip(s)", shopRules.rerollCost),
     string.format("Unlocked coin pool: %d/%d", #(Coins.getUnlockedIds(self.runState and self.runState.unlockedCoinIds or {}) or {}), #(Coins.getAll() or {})),
     string.format("Unlocked upgrade pool: %d/%d", #(Upgrades.getUnlockedIds(self.runState and self.runState.unlockedUpgradeIds or {}) or {}), #(Upgrades.getAll() or {})),
   }
@@ -2438,8 +2483,11 @@ function Game:getPostResultDestinationState()
     return "boss_reward"
   end
 
-  if self:shouldUseRewardPreview() then
-    return "reward_preview"
+  if self.lastStageResult.stageType ~= "boss"
+    and self.lastStageResult.status == "cleared"
+    and self.runState ~= nil
+    and self.runState.runStatus == "active" then
+    return "shop"
   end
 
   return "summary"
@@ -2490,12 +2538,8 @@ function Game:getPostStageReviewFollowupLine()
     return "Victory reward follows."
   end
 
-  if destination == "reward_preview" then
-    if self:shouldUseEncounterEvent() then
-      return "Reward preview, encounter, and shop follow."
-    end
-
-    return "Reward preview and shop follow."
+  if destination == "shop" then
+    return "Shop follows."
   end
 
   return "Run summary follows."
@@ -2576,13 +2620,7 @@ function Game:getRewardPreviewLines()
 end
 
 function Game:shouldUseEncounterEvent()
-  local result = self.lastStageResult
-
-  return result ~= nil
-    and result.stageType == "normal"
-    and result.status == "cleared"
-    and self.runState ~= nil
-    and self.runState.runStatus == "active"
+  return false
 end
 
 function Game:prepareEncounterEvent()
@@ -3155,11 +3193,7 @@ function Game:ensureRewardSession()
 end
 
 function Game:shouldUseRewardPreview()
-  return self.lastStageResult ~= nil
-    and self.lastStageResult.stageType ~= "boss"
-    and self.lastStageResult.status == "cleared"
-    and self.runState ~= nil
-    and self.runState.runStatus == "active"
+  return false
 end
 
 function Game:ensureRewardPreview()

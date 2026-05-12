@@ -7,40 +7,29 @@ local SECTIONS = {
   {
     title = "Run Objective",
     lines = {
-      "Call Heads or Tails, then resolve every equipped coin as a full batch.",
-      "Score enough points before you run out of flips to clear the stage.",
-      "Clear normal stages to earn a reward, visit the shop, and prepare for the next round.",
-      "Clear the final boss to win the run and bank meta progress.",
+      "Call Heads or Tails, then flip your equipped coins.",
+      "Clear stages, improve the run, and beat the final boss.",
     },
   },
   {
     title = "Stage Loop",
     lines = {
-      "Loadout: choose which coins are equipped for the next stage.",
-      "Stage: call a side, resolve the full batch, and react to the result.",
-      "Result / Review: see what happened, why it paid out, and where the flow goes next.",
-      "Reward / Encounter / Shop: claim gains, take side events, and improve the run.",
-      "Summary / Meta: close the run, spend meta points, and unlock future variety.",
+      "Loadout → Stage → Reward → Shop.",
+      "Meta progress persists after the run.",
     },
   },
   {
     title = "Resources",
     lines = {
-      "Stage Score: score for the current stage only.",
-      "Run Total Score: your total score across the run.",
-      "Flips Remaining: how many more batches you can resolve this stage.",
-      "Shop Points: currency for the shop after a cleared stage.",
-      "Shop Rerolls: free shop refreshes that do not cost points.",
+      "Score clears stages before flips run out.",
+      "Chips buy coins and upgrades between stages.",
     },
   },
   {
     title = "Controls",
     lines = {
-      "Menu: Start Run opens Run Setup, Continue Run resumes a save, and Collection / Records / Meta / Help stay available.",
-      "Loadout: click a coin for the next slot, drag to a slot, or click a filled slot to clear it.",
-      "Stage: click Heads or Tails once to call and flip the full batch.",
-      "Reward / Encounter / Shop / Meta: click options or use number keys plus the labeled shortcuts on screen.",
-      "Pause: press Esc or P during a run to resume, save and quit, or abandon the run.",
+      "Click buttons to choose actions.",
+      "Esc pauses or backs out where available.",
     },
   },
 }
@@ -165,10 +154,6 @@ function HelpState:draw(app)
   if #lines > 0 then
     table.remove(lines, #lines)
   end
-  table.insert(lines, "")
-  table.insert(lines, "Use Left/Right/Up/Down or click Previous/Next to change sections.")
-  table.insert(lines, "Press Enter, Esc, or Backspace, or click Back to Menu when you are ready.")
-
   love.graphics.setFont(app.fonts.body)
   Layout.drawWrappedLines(lines, contentArea.x, contentArea.y, contentArea.width, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height)
 

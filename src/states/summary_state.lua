@@ -107,46 +107,31 @@ function SummaryState:draw(app)
   local statsPanelY = 132
   local statsPanelWidth = width - (padding * 2)
   local availableContentHeight = math.max(320, footerMetrics.contentBottomY - statsPanelY)
-  local statsPanelHeight = math.min(220, math.max(140, math.floor((availableContentHeight - gap) * 0.42)))
+  local statsPanelHeight = math.min(180, math.max(120, math.floor((availableContentHeight - gap) * 0.34)))
   local historyPanelY = statsPanelY + statsPanelHeight + gap
   local historyPanelHeight = math.max(140, footerMetrics.contentBottomY - historyPanelY)
-  local historyPanelWidth = math.floor((statsPanelWidth - gap) / 2)
 
   love.graphics.setFont(app.fonts.title)
   Layout.centeredText("Run Summary", 76, app.fonts.title, color)
 
   Panel.draw(statsPanelX, statsPanelY, statsPanelWidth, statsPanelHeight, "Summary")
-  Panel.draw(statsPanelX, historyPanelY, historyPanelWidth, historyPanelHeight, "Stage History")
-  Panel.draw(statsPanelX + historyPanelWidth + gap, historyPanelY, historyPanelWidth, historyPanelHeight, "Shop History")
+  Panel.draw(statsPanelX, historyPanelY, statsPanelWidth, historyPanelHeight, "Stage History")
 
   local statsContent = Panel.getContentArea(statsPanelX, statsPanelY, statsPanelWidth, statsPanelHeight, "Summary")
-  local stageHistoryContent = Panel.getContentArea(statsPanelX, historyPanelY, historyPanelWidth, historyPanelHeight, "Stage History")
-  local shopHistoryContent = Panel.getContentArea(statsPanelX + historyPanelWidth + gap, historyPanelY, historyPanelWidth, historyPanelHeight, "Shop History")
+  local stageHistoryContent = Panel.getContentArea(statsPanelX, historyPanelY, statsPanelWidth, historyPanelHeight, "Stage History")
 
   local summaryLines = {
     string.format("Run Status: %s", summary.runStatus),
-    string.format("Seed: %s", tostring(summary.seed or "n/a")),
     string.format("Final Round Reached: %d", summary.roundIndex),
     string.format("Run Total Score: %d", summary.runTotalScore),
-    string.format("Shop Points Remaining: %d", summary.shopPoints),
-    string.format("Collection Size: %d", summary.collectionSize),
-    string.format("Upgrade Count: %d", summary.upgradeCount),
-    string.format("Shop Visits: %d", summary.shopVisitCount or 0),
-    string.format("Total Rerolls Used: %d", summary.totalRerollsUsed or 0),
     string.format("Meta Reward Earned: %d", summary.metaRewardEarned or 0),
-    string.format("Total Flips: %d", summary.totalFlips),
-    string.format("Matches / Misses: %d / %d", summary.totalMatches, summary.totalMisses),
     string.format("Final Stage: %s", summary.finalStageLabel),
     string.format("Final Stage Status: %s", summary.finalStageStatus),
-    "",
   }
 
   for _, line in ipairs(app:getSummaryMetaHandoffLines()) do
     table.insert(summaryLines, line)
   end
-
-  table.insert(summaryLines, "")
-  table.insert(summaryLines, "Click Open Meta Progression, Open Records, or Return to Menu. Press M for Meta, R for Records, or Enter to leave.")
 
   local stageHistoryLines = {}
   for _, stageRecord in ipairs(summary.stageHistory or {}) do
@@ -165,14 +150,9 @@ function SummaryState:draw(app)
     stageHistoryLines = { "- No stage history recorded." }
   end
 
-  local shopHistoryLines = app:getPurchaseHistoryLines(14)
-  table.insert(shopHistoryLines, 1, string.format("Rerolls Used: %d", summary.totalRerollsUsed or 0))
-  table.insert(shopHistoryLines, 1, string.format("Shop Visits: %d", summary.shopVisitCount or 0))
-
   love.graphics.setFont(app.fonts.body)
   Layout.drawWrappedLines(summaryLines, statsContent.x, statsContent.y, statsContent.width, Theme.colors.text, Theme.spacing.lineHeight, statsContent.height)
   Layout.drawWrappedLines(stageHistoryLines, stageHistoryContent.x, stageHistoryContent.y, stageHistoryContent.width, Theme.colors.text, Theme.spacing.lineHeight, stageHistoryContent.height)
-  Layout.drawWrappedLines(shopHistoryLines, shopHistoryContent.x, shopHistoryContent.y, shopHistoryContent.width, Theme.colors.text, Theme.spacing.lineHeight, shopHistoryContent.height)
 
   local mouseX, mouseY = love.mouse.getPosition()
   Button.drawButtons(self:buildButtons(app), mouseX, mouseY)

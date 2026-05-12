@@ -90,9 +90,7 @@ function CollectionState:getEntries(app)
           definition.description,
           "",
           string.format("Rarity: %s", definition.rarity or "unknown"),
-          string.format("Tags: %s", table.concat(definition.tags or {}, ", ")),
-          string.format("Status: %s", unlocked and "Unlocked" or "Locked"),
-          unlockSource,
+          unlocked and "Unlocked" or unlockSource,
         },
       })
     end
@@ -117,9 +115,7 @@ function CollectionState:getEntries(app)
           definition.description,
           "",
           string.format("Rarity: %s", definition.rarity or "unknown"),
-          string.format("Tags: %s", table.concat(definition.tags or {}, ", ")),
-          string.format("Status: %s", unlocked and "Unlocked" or "Locked"),
-          unlockSource,
+          unlocked and "Unlocked" or unlockSource,
         },
       })
     end
@@ -135,28 +131,16 @@ function CollectionState:getEntries(app)
       "",
       string.format("Cost: %d meta point(s)", definition.cost or 0),
       string.format("Status: %s", purchased and "Purchased" or "Available"),
-      string.format("Tags: %s", table.concat(definition.tags or {}, ", ")),
     }
 
     if #(definition.unlockCoinIds or {}) > 0 or #(definition.unlockUpgradeIds or {}) > 0 then
-      table.insert(detailLines, "")
-      table.insert(detailLines, "Unlocks:")
-
-      for _, coinId in ipairs(definition.unlockCoinIds or {}) do
-        table.insert(detailLines, "- Coin: " .. app:getCoinName(coinId))
-      end
-
-      for _, upgradeId in ipairs(definition.unlockUpgradeIds or {}) do
-        table.insert(detailLines, "- Upgrade: " .. app:getUpgradeName(upgradeId))
-      end
+      table.insert(detailLines, string.format("Unlocks: %d coin(s), %d upgrade(s)", #(definition.unlockCoinIds or {}), #(definition.unlockUpgradeIds or {})))
     end
 
     local effectLines = app:getEffectiveValueLines(EffectiveValueSystem.getDefinitionEffectiveValues(definition))
     if #effectLines > 0 and not (#effectLines == 1 and effectLines[1] == "No persistent run modifiers yet.") then
-      table.insert(detailLines, "")
-      table.insert(detailLines, "Run effect:")
       for _, line in ipairs(effectLines) do
-        table.insert(detailLines, "- " .. line)
+        table.insert(detailLines, line)
       end
     end
 
@@ -178,10 +162,6 @@ function CollectionState:getSummaryLines(app)
     string.format("Unlocked Coins: %d/%d", unlockedCoinCount, #(Coins.getAll() or {})),
     string.format("Unlocked Upgrades: %d/%d", unlockedUpgradeCount, #(Upgrades.getAll() or {})),
     string.format("Purchased Meta Upgrades: %d/%d", #(app.metaState.purchasedMetaUpgradeIds or {}), #(MetaUpgrades.getAll() or {})),
-    string.format("Viewing: %s", self:getCategory().label),
-    "Use 1/2/3 or Left/Right to change category.",
-    "Use Up/Down or click entries to inspect details.",
-    string.format("Press Esc or Backspace, or click %s, to leave the compendium.", self:getBackLabel()),
   }
 end
 
@@ -192,7 +172,7 @@ function CollectionState:getLayout(app)
   local height = love.graphics.getHeight()
   local footerMetrics = Layout.getFooterMetrics(height, { statusHeight = 28 })
   local topY = 108
-  local summaryHeight = 138
+  local summaryHeight = 84
   local tabsY = topY + summaryHeight + gap
   local tabsHeight = 42
   local contentY = tabsY + tabsHeight + gap

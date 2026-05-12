@@ -389,33 +389,19 @@ function MetaState:draw(app)
   local listContent = Panel.getContentArea(layout.padding, layout.bottomPanelY, layout.leftPanelWidth, layout.bottomPanelHeight, "Meta Upgrade Catalog")
   local detailContent = Panel.getContentArea(layout.padding + layout.leftPanelWidth + layout.gap, layout.bottomPanelY, layout.rightPanelWidth, layout.bottomPanelHeight, "Selected Upgrade")
 
-  local projectionLines = app:getMetaSaveLines()
-  table.insert(projectionLines, "")
-  table.insert(projectionLines, "Current next-run projection:")
-
-  for _, line in ipairs(app:getMetaProjectionLines()) do
-    table.insert(projectionLines, "- " .. line)
-  end
+  local statusLines = app:getMetaStatusLines()
+  local projectionLines = {
+    string.format("Save Status: %s", app.metaSaveStatus and app.metaSaveStatus.message or "unknown"),
+  }
 
   local detailLines = selected and app:getMetaUpgradeDetailLines(selected.id) or { "No upgrade selected." }
-  table.insert(detailLines, "")
-  table.insert(detailLines, "Controls:")
-  table.insert(detailLines, "- Click an upgrade row or use arrow keys")
-  table.insert(detailLines, "- Click Purchase or press Enter")
-  table.insert(detailLines, "- Click Save Now or press S")
-  if app:canStartRunFromMeta() then
-    table.insert(detailLines, "- Click Start Next Run or press N")
-  end
-  table.insert(detailLines, "- Click Collection or press B")
-  table.insert(detailLines, "- Click Records or press R")
-  table.insert(detailLines, string.format("- Click %s or press Esc", app:getMetaBackLabel()))
 
   local actionButtonY = detailContent.y + detailContent.height - 46
   local actionButtons = self:buildActionButtons(app, detailContent.x, actionButtonY, detailContent.width)
   local optionButtons = self:buildOptionButtons(app, listContent.x, listContent.y, listContent.width, listContent.height)
 
   love.graphics.setFont(app.fonts.body)
-  Layout.drawWrappedLines(app:getMetaStatusLines(), statsContent.x, statsContent.y, statsContent.width, Theme.colors.text, Theme.spacing.lineHeight, statsContent.height)
+  Layout.drawWrappedLines({ statusLines[1], statusLines[3], statusLines[4], statusLines[5] }, statsContent.x, statsContent.y, statsContent.width, Theme.colors.text, Theme.spacing.lineHeight, statsContent.height)
   Layout.drawWrappedLines(projectionLines, projectionContent.x, projectionContent.y, projectionContent.width, Theme.colors.text, Theme.spacing.lineHeight, projectionContent.height)
   Button.drawButtons(optionButtons, love.mouse.getX(), love.mouse.getY())
   Layout.drawWrappedLines(detailLines, detailContent.x, detailContent.y, detailContent.width, Theme.colors.text, Theme.spacing.lineHeight, detailContent.height - 58)

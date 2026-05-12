@@ -568,6 +568,17 @@ function ActionQueue.apply(runState, stageState, context, action)
     requireStageState(stageState, action.op)
     stageState.stageScore = stageState.stageScore + action.amount
     context.scoreBreakdown.totalStageScoreDelta = context.scoreBreakdown.totalStageScoreDelta + action.amount
+    runState.shopPoints = runState.shopPoints + action.amount
+    context.scoreBreakdown.totalShopPointDelta = context.scoreBreakdown.totalShopPointDelta + action.amount
+
+    table.insert(context.scoreBreakdown.shopPointChanges, {
+      op = "add_shop_points",
+      amount = action.amount,
+      appliedAmount = action.amount,
+      category = "stage_score_chips",
+      label = action.label or "Stage score chips",
+      trace = Utils.clone(action._trace),
+    })
 
     if action.category ~= "base_score" then
       addScoreBreakdownEntry(context.scoreBreakdown.additiveBonuses, action, {

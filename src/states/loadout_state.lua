@@ -571,7 +571,6 @@ function LoadoutState:draw(app)
   local selectedBuildKey = self:formatBuildSummary(self.selectionSlots, app.runState.maxActiveCoinSlots)
   local reconciledBuildKey = self.reconciliation and self:formatBuildSummary(self.reconciliation.selectionSlots, app.runState.maxActiveCoinSlots) or nil
   local stageTitle = stageDefinition and (stageDefinition.label or stageDefinition.name or stageDefinition.id) or "Loadout"
-  local ruleCount = #(stagePreview.cards or {})
 
   love.graphics.setFont(app.fonts.heading)
   Theme.applyColor(Theme.colors.text)
@@ -580,10 +579,9 @@ function LoadoutState:draw(app)
   Theme.applyColor(Theme.colors.mutedText)
   love.graphics.printf(
     string.format(
-      "Target %d  |  Flips %d  |  Rules %s",
+      "Target %d  |  Flips %d",
       stageDefinition and stageDefinition.targetScore or 0,
-      stagePreview.flipsPerStage or 0,
-      ruleCount > 0 and tostring(ruleCount) or "none"
+      stagePreview.flipsPerStage or 0
     ),
     layout.padding,
     layout.headerY + 6,
@@ -605,7 +603,7 @@ function LoadoutState:draw(app)
 
   local slotLines = {
     string.format("%d/%d slots", Loadout.countEquipped(self.selectionSlots, app.runState.maxActiveCoinSlots), app.runState.maxActiveCoinSlots),
-    "Click slot: clear | Drop coin: place",
+    "Click or drag to equip.",
   }
 
   if reconciledBuildKey and reconciledBuildKey ~= selectedBuildKey then
@@ -646,10 +644,7 @@ function LoadoutState:draw(app)
 
       love.graphics.setFont(app.fonts.body)
       Theme.applyColor(Theme.colors.text)
-      love.graphics.printf(coin and coin.name or coinId, cardX + 126, cardY + 26, slotCardWidth - 146, "left")
-      love.graphics.setFont(app.fonts.small)
-      Theme.applyColor(Theme.colors.mutedText)
-      love.graphics.printf(coin and coin.description or "", cardX + 126, cardY + 54, slotCardWidth - 146, "left")
+      love.graphics.printf(coin and coin.name or coinId, cardX + 126, cardY + 48, slotCardWidth - 146, "left")
     else
       Theme.applyColor(Theme.colors.panelBorder)
       love.graphics.rectangle("line", cardX + math.floor((slotCardWidth - 44) / 2), cardY + 10, 44, 44)

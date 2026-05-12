@@ -1,4 +1,5 @@
 local MetaProgressionSystem = require("src.systems.meta_progression_system")
+local GameConfig = require("src.app.config")
 local Loadout = require("src.domain.loadout")
 local ProgressionSystem = require("src.systems.progression_system")
 local Utils = require("src.core.utils")
@@ -218,6 +219,13 @@ function RunHistorySystem.recordReroll(shopSession, mode)
 end
 
 function RunHistorySystem.finalizeStage(runState, stageState, metaState)
+  local stageClearShopPoints = GameConfig.get("economy.stageClearShopPoints", 3)
+
+  if stageState.stageStatus == "cleared" and stageState.stageClearShopPointsGranted ~= true and stageClearShopPoints > 0 then
+    runState.shopPoints = runState.shopPoints + stageClearShopPoints
+    stageState.stageClearShopPointsGranted = true
+  end
+
   local stageRecord = {
     roundIndex = runState.roundIndex,
     stageId = stageState.stageId,
@@ -231,6 +239,7 @@ function RunHistorySystem.finalizeStage(runState, stageState, metaState)
     bossModifierIds = Utils.copyArray(stageState.activeBossModifierIds or {}),
     runTotalScore = runState.runTotalScore,
     shopPoints = runState.shopPoints,
+    stageClearShopPoints = stageState.stageClearShopPointsGranted and stageClearShopPoints or 0,
     shopRerollsRemaining = runState.shopRerollsRemaining,
     loadoutKey = Loadout.toCanonicalKey(runState.equippedCoinSlots, runState.maxActiveCoinSlots),
   }

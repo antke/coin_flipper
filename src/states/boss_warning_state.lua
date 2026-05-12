@@ -33,7 +33,7 @@ end
 
 function BossWarningState.new()
   return setmetatable({
-    statusMessage = "Click Face the Boss or Back to Loadout, or use Enter / Esc.",
+    statusMessage = "Face the boss or adjust your loadout.",
     buttons = {},
   }, BossWarningState)
 end
@@ -78,7 +78,7 @@ end
 
 function BossWarningState:enter(app)
   app:ensureCurrentStage()
-  self.statusMessage = "Click Face the Boss or Back to Loadout, or use Enter / Esc."
+  self.statusMessage = "Face the boss or adjust your loadout."
   app:showFeedback("boss", "Boss Incoming", app.currentStageDefinition and app.currentStageDefinition.label or "A dangerous table waits ahead.", {
     duration = 1.8,
     flashAlpha = 0.06,
@@ -116,9 +116,6 @@ function BossWarningState:draw(app)
 
   Panel.draw(panelX, panelY, panelWidth, panelHeight, app.currentStageDefinition and app.currentStageDefinition.label or "Boss")
   local contentArea = Panel.getContentArea(panelX, panelY, panelWidth, panelHeight, app.currentStageDefinition and app.currentStageDefinition.label or "Boss")
-  local pulse = app:getUiPulse(4.0, 0.12, 0.24)
-  local bannerHeight = 62
-  local bannerY = contentArea.y
   local cards = app:getBossModifierCards()
   local cardGap = 10
   local keyLines = {
@@ -126,28 +123,10 @@ function BossWarningState:draw(app)
     string.format("Flips Available: %d", app.stageState and app.stageState.flipsRemaining or 0),
     string.format("Current Build: %s", app:getCurrentLoadoutKey()),
   }
-  local equippedNames = app:getEquippedCoinNames()
-
-  if #equippedNames > 0 then
-    table.insert(keyLines, string.format("Equipped: %s", table.concat(equippedNames, ", ")))
-  end
 
   table.insert(keyLines, self.statusMessage)
 
-  love.graphics.setColor(Theme.colors.danger[1], Theme.colors.danger[2], Theme.colors.danger[3], 0.18 + pulse)
-  love.graphics.rectangle("fill", contentArea.x, bannerY, contentArea.width, bannerHeight, 12, 12)
-  love.graphics.setColor(Theme.colors.warning[1], Theme.colors.warning[2], Theme.colors.warning[3], 0.9)
-  love.graphics.setLineWidth(2)
-  love.graphics.rectangle("line", contentArea.x, bannerY, contentArea.width, bannerHeight, 12, 12)
-
-  love.graphics.setFont(app.fonts.heading)
-  Theme.applyColor(Theme.colors.text)
-  love.graphics.print("THREAT LEVEL: HIGH", contentArea.x + 16, bannerY + 10)
-  love.graphics.setFont(app.fonts.body)
-  Theme.applyColor(Theme.colors.warning)
-  love.graphics.print(string.format("%d boss modifier(s) active", #cards), contentArea.x + 16, bannerY + 34)
-
-  local infoY = bannerY + bannerHeight + 12
+  local infoY = contentArea.y
   local infoHeight = getWrappedLinesHeight(keyLines, contentArea.width) + 6
   local buttonsReserve = footerMetrics.buttonsHeight + Theme.spacing.itemGap + 12
   local remainingHeight = math.max(0, contentArea.height - (infoY - contentArea.y) - infoHeight - buttonsReserve)
@@ -168,11 +147,8 @@ function BossWarningState:draw(app)
     return total
   end
 
-  cardsHeight = computeCardsHeight(false)
-  if cardsHeight > remainingHeight then
-    compactCards = true
-    cardsHeight = computeCardsHeight(true)
-  end
+  compactCards = true
+  cardsHeight = computeCardsHeight(compactCards)
 
   love.graphics.setFont(app.fonts.body)
   Layout.drawWrappedLines(keyLines, contentArea.x, infoY, contentArea.width, Theme.colors.text, Theme.spacing.lineHeight, infoHeight)

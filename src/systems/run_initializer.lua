@@ -45,6 +45,7 @@ function RunInitializer.createNewRun(metaState, options)
     baseFlipsPerStage = resolvedValues.baseFlipsPerStage,
     startingShopPoints = resolvedValues.startingShopPoints,
     startingShopRerolls = resolvedValues.startingShopRerolls,
+    selectedBetId = options.selectedBetId,
   })
 
   runState.history.bootstrap = {

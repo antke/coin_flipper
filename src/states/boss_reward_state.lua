@@ -56,9 +56,9 @@ function BossRewardState:getLayout(app)
   local topHeight = math.max(180, math.floor((availableHeight - gap) * 0.38))
   local bottomY = topY + topHeight + gap
   local bottomHeight = math.max(160, footerMetrics.contentBottomY - bottomY)
-  local columnWidth = math.floor((width - (padding * 2) - (gap * 2)) / 3)
+  local columnWidth = math.floor((width - (padding * 2) - gap) / 2)
   local middleX = padding + columnWidth + gap
-  local rightX = middleX + columnWidth + gap
+  local rightX = middleX
   local rightWidth = width - rightX - padding
 
   return {
@@ -199,7 +199,6 @@ function BossRewardState:draw(app)
   local rewardLines = app:getBossRewardLines()
   local projectedOutcome = app:getProjectedRewardOutcome()
   local projectedImpactLines = app:getProjectedRewardImpactLines({ finalReward = true }, projectedOutcome)
-  local summaryLines = app:getBossRewardSummaryLines()
   local handoffLines = app:getSummaryMetaHandoffLines()
 
   love.graphics.setFont(app.fonts.title)
@@ -207,12 +206,10 @@ function BossRewardState:draw(app)
 
   Panel.draw(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Choose Final Reward")
   Panel.draw(layout.padding, layout.bottomY, layout.columnWidth, layout.bottomHeight, "Projected Impact")
-  Panel.draw(layout.middleX, layout.bottomY, layout.columnWidth, layout.bottomHeight, "Run Complete")
   Panel.draw(layout.rightX, layout.bottomY, layout.rightWidth, layout.bottomHeight, "Meta Handoff")
 
   local rewardArea = Panel.getContentArea(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Choose Final Reward")
   local projectedArea = Panel.getContentArea(layout.padding, layout.bottomY, layout.columnWidth, layout.bottomHeight, "Projected Impact")
-  local summaryArea = Panel.getContentArea(layout.middleX, layout.bottomY, layout.columnWidth, layout.bottomHeight, "Run Complete")
   local handoffArea = Panel.getContentArea(layout.rightX, layout.bottomY, layout.rightWidth, layout.bottomHeight, "Meta Handoff")
 
   table.insert(rewardLines, "")
@@ -221,18 +218,8 @@ function BossRewardState:draw(app)
   local rewardButtonsHeight = 0
   if #(rewardSession and rewardSession.options or {}) > 0 then
     rewardButtonsHeight = (#rewardSession.options * 44) + math.max(0, (#rewardSession.options - 1) * Theme.spacing.itemGap) + Theme.spacing.itemGap
-    table.insert(rewardLines, "")
-    table.insert(rewardLines, "Reward Options:")
-    table.insert(rewardLines, "Use number keys, arrow keys, or click to compare and choose between the available rewards.")
-
-    for _, card in ipairs(app:getRewardPreviewOptionCards()) do
-      local marker = card.selected and "*" or "-"
-      local rarity = card.rarity and string.format(" [%s]", tostring(card.rarity)) or ""
-      table.insert(rewardLines, string.format("%s %d. %s%s — %s", marker, card.index, card.name or card.contentId or "Unknown", rarity, card.description or "No description."))
-    end
   else
     table.insert(rewardLines, "")
-    table.insert(rewardLines, "Reward Options:")
     table.insert(rewardLines, "No final rewards remain for this victory.")
   end
 
@@ -246,41 +233,6 @@ function BossRewardState:draw(app)
     local rewardButtonsY = rewardArea.y + rewardArea.height - rewardButtonsHeight + Theme.spacing.itemGap
     local rewardButtonArea = { x = rewardArea.x, y = rewardButtonsY, width = rewardArea.width }
     Button.drawButtons(self:buildRewardButtons(app, rewardButtonArea), mouseX, mouseY)
-  end
-
-  local summaryTextHeight = 0
-  for _, line in ipairs(summaryArea.height > 0 and summaryLines or {}) do
-    summaryTextHeight = summaryTextHeight + (getWrappedLineCount(line, summaryArea.width) * Theme.spacing.lineHeight)
-  end
-
-  local summaryLinesHeight = math.min(summaryArea.height, summaryTextHeight)
-  Layout.drawWrappedLines(summaryLines, summaryArea.x, summaryArea.y, summaryArea.width, Theme.colors.text, Theme.spacing.lineHeight, summaryLinesHeight)
-
-  local cardY = summaryArea.y + summaryLinesHeight + Theme.spacing.itemGap
-  local remainingHeight = summaryArea.height - summaryLinesHeight - Theme.spacing.itemGap
-
-  for _, card in ipairs(app:getBossModifierCards((app.lastStageResult and app.lastStageResult.bossModifierIds) or {})) do
-    local cardHeight = getRewardCardHeight(card, summaryArea.width)
-    if cardY + cardHeight > (summaryArea.y + summaryArea.height) then
-      break
-    end
-
-    love.graphics.setColor(Theme.colors.danger)
-    love.graphics.rectangle("fill", summaryArea.x, cardY, 6, cardHeight, 4, 4)
-    love.graphics.setColor(Theme.colors.panel)
-    love.graphics.rectangle("fill", summaryArea.x + 8, cardY, summaryArea.width - 8, cardHeight, 8, 8)
-    love.graphics.setColor(Theme.colors.panelBorder)
-    love.graphics.rectangle("line", summaryArea.x + 8, cardY, summaryArea.width - 8, cardHeight, 8, 8)
-
-    love.graphics.setColor(Theme.colors.text)
-    love.graphics.print(card.name, summaryArea.x + 18, cardY + 8)
-    Layout.drawWrappedText(card.description or "", summaryArea.x + 18, cardY + 26, summaryArea.width - 28, Theme.colors.mutedText, Theme.spacing.lineHeight)
-    cardY = cardY + cardHeight + Theme.spacing.itemGap
-    remainingHeight = remainingHeight - cardHeight - Theme.spacing.itemGap
-
-    if remainingHeight <= 0 then
-      break
-    end
   end
 
   local mouseX, mouseY = love.mouse.getPosition()

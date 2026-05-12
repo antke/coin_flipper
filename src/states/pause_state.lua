@@ -16,27 +16,15 @@ end
 
 function PauseState:getSummaryLines(app)
   local lines = {}
-  local pausedState = app:getPauseResumeStateName() or "run"
-
-  table.insert(lines, string.format("Paused screen: %s", pausedState))
 
   if app.stageState then
     table.insert(lines, string.format("Stage: %s", app.stageState.stageLabel or app.stageState.stageId or "n/a"))
-    table.insert(lines, string.format("Stage status: %s", app.stageState.stageStatus or "n/a"))
   elseif app.runState then
     table.insert(lines, string.format("Round: %d", app.runState.roundIndex or 0))
   end
 
   if app.runState then
     table.insert(lines, string.format("Run score: %d", app.runState.runTotalScore or 0))
-    table.insert(lines, string.format("Shop points: %d", app.runState.shopPoints or 0))
-    table.insert(lines, string.format("Shop rerolls: %d", app.runState.shopRerollsRemaining or 0))
-  end
-
-  if app:hasActiveRunSave() then
-    table.insert(lines, "Save & Quit keeps this run available from the menu.")
-  else
-    table.insert(lines, "No active run save is currently available.")
   end
 
   table.insert(lines, "")
@@ -151,7 +139,6 @@ function PauseState:draw(app)
 
   love.graphics.setFont(app.fonts.title)
   Layout.centeredText("Run Paused", 92, app.fonts.title, Theme.colors.text)
-  Layout.centeredText("Manage your current run", 132, app.fonts.heading, Theme.colors.accent)
 
   Panel.draw(panelX, panelY, panelWidth, panelHeight, "Pause Menu")
   local contentArea = Panel.getContentArea(panelX, panelY, panelWidth, panelHeight, "Pause Menu")

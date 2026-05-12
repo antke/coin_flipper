@@ -33,8 +33,7 @@ local function getWrappedLineCount(text, width)
 end
 
 local function getPreviewCardHeight(card, width)
-  local descriptionLines = getWrappedLineCount(card.description, math.max(1, width - 18))
-  return 24 + (descriptionLines * Theme.spacing.lineHeight) + 8
+  return 32
 end
 
 function RewardPreviewState.new()
@@ -56,9 +55,9 @@ function RewardPreviewState:getLayout(app)
   local topHeight = math.max(180, math.floor((availableHeight - gap) * 0.38))
   local bottomY = topY + topHeight + gap
   local bottomHeight = math.max(160, footerMetrics.contentBottomY - bottomY)
-  local columnWidth = math.floor((width - (padding * 2) - (gap * 2)) / 3)
+  local columnWidth = math.floor((width - (padding * 2) - gap) / 2)
   local middleX = padding + columnWidth + gap
-  local rightX = middleX + columnWidth + gap
+  local rightX = middleX
   local rightWidth = width - rightX - padding
 
   return {
@@ -199,7 +198,6 @@ function RewardPreviewState:draw(app)
   local rewardSession = app:ensureRewardPreview()
   local projectedOutcome = app:getProjectedRewardOutcome()
   local projectedImpactLines = app:getProjectedRewardImpactLines({}, projectedOutcome)
-  local shopLines = app:getProjectedShopPreviewLines(projectedOutcome)
   local stagePreview = app:getProjectedUpcomingStagePreviewData(projectedOutcome)
 
   love.graphics.setFont(app.fonts.title)
@@ -207,12 +205,10 @@ function RewardPreviewState:draw(app)
 
   Panel.draw(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Choose Reward")
   Panel.draw(layout.padding, layout.bottomY, layout.columnWidth, layout.bottomHeight, "Projected Impact")
-  Panel.draw(layout.middleX, layout.bottomY, layout.columnWidth, layout.bottomHeight, "Shop Outlook")
   Panel.draw(layout.rightX, layout.bottomY, layout.rightWidth, layout.bottomHeight, stagePreview.title or "After the Shop")
 
   local rewardArea = Panel.getContentArea(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Choose Reward")
   local impactArea = Panel.getContentArea(layout.padding, layout.bottomY, layout.columnWidth, layout.bottomHeight, "Projected Impact")
-  local shopArea = Panel.getContentArea(layout.middleX, layout.bottomY, layout.columnWidth, layout.bottomHeight, "Shop Outlook")
   local stageArea = Panel.getContentArea(layout.rightX, layout.bottomY, layout.rightWidth, layout.bottomHeight, stagePreview.title or "After the Shop")
 
   local rewardLines = app:getRewardPreviewLines()
@@ -221,25 +217,14 @@ function RewardPreviewState:draw(app)
   local rewardButtonsHeight = 0
   if #(rewardSession and rewardSession.options or {}) > 0 then
     rewardButtonsHeight = (#rewardSession.options * 44) + math.max(0, (#rewardSession.options - 1) * Theme.spacing.itemGap) + Theme.spacing.itemGap
-    table.insert(rewardLines, "")
-    table.insert(rewardLines, "Reward Options:")
-    table.insert(rewardLines, "Use number keys, arrow keys, or click to compare and choose between the available rewards.")
-
-    for _, card in ipairs(app:getRewardPreviewOptionCards()) do
-      local marker = card.selected and "*" or "-"
-      local rarity = card.rarity and string.format(" [%s]", tostring(card.rarity)) or ""
-      table.insert(rewardLines, string.format("%s %d. %s%s — %s", marker, card.index, card.name or card.contentId or "Unknown", rarity, card.description or "No description."))
-    end
   else
     table.insert(rewardLines, "")
-    table.insert(rewardLines, "Reward Options:")
     table.insert(rewardLines, "No valid reward options remain for this stage.")
   end
 
   love.graphics.setFont(app.fonts.body)
   Layout.drawWrappedLines(rewardLines, rewardArea.x, rewardArea.y, rewardArea.width, Theme.colors.text, Theme.spacing.lineHeight, math.max(0, rewardArea.height - rewardButtonsHeight))
   Layout.drawWrappedLines(projectedImpactLines, impactArea.x, impactArea.y, impactArea.width, Theme.colors.text, Theme.spacing.lineHeight, impactArea.height)
-  Layout.drawWrappedLines(shopLines, shopArea.x, shopArea.y, shopArea.width, Theme.colors.text, Theme.spacing.lineHeight, shopArea.height)
 
   if rewardButtonsHeight > 0 then
     local mouseX, mouseY = love.mouse.getPosition()
@@ -274,7 +259,6 @@ function RewardPreviewState:draw(app)
 
     love.graphics.setColor(Theme.colors.text)
     love.graphics.print(card.name, stageArea.x + 18, cardY + 8)
-    Layout.drawWrappedText(card.description or "", stageArea.x + 18, cardY + 26, stageArea.width - 28, Theme.colors.mutedText, Theme.spacing.lineHeight)
     cardY = cardY + cardHeight + Theme.spacing.itemGap
     remainingHeight = remainingHeight - cardHeight - Theme.spacing.itemGap
 

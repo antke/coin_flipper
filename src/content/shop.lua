@@ -1,8 +1,8 @@
 local ShopContent = {
   rarityPrices = {
-    common = 3,
-    uncommon = 5,
-    rare = 8,
+    common = 8,
+    uncommon = 15,
+    rare = 25,
   },
 }
 
