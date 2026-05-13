@@ -16,6 +16,7 @@ local MetaProgressionSystem = require("src.systems.meta_progression_system")
 local MetaState = require("src.domain.meta_state")
 local MetaUpgrades = require("src.content.meta_upgrades")
 local ProgressionSystem = require("src.systems.progression_system")
+local PurseSystem = require("src.systems.purse_system")
 local RNG = require("src.core.rng")
 local RewardSystem = require("src.systems.reward_system")
 local RunHistorySystem = require("src.systems.run_history_system")
@@ -89,7 +90,7 @@ function Game.new()
     runRng = nil,
     stageState = nil,
     currentStageDefinition = nil,
-    selectedCall = "heads",
+    selectedCall = nil,
     lastBatchResult = nil,
     lastStageResult = nil,
     postResultNextState = nil,
@@ -1077,7 +1078,7 @@ function Game:startNewRun(options)
   self.runState.selectedBetId = Bets.getDefaultId()
   self.stageState = nil
   self.currentStageDefinition = nil
-  self.selectedCall = "heads"
+  self.selectedCall = nil
   self.lastBatchResult = nil
   self.lastStageResult = nil
   self.postResultNextState = nil
@@ -1107,7 +1108,7 @@ function Game:clearRunState()
   self.shopSession = nil
   self.lastShopGenerationTrace = nil
   self.lastShopPurchaseTrace = nil
-  self.selectedCall = "heads"
+  self.selectedCall = nil
   self.pauseFlowContext = nil
 end
 
@@ -1385,6 +1386,101 @@ function Game:commitLoadout(selectionSlots)
   self:assertRuntimeInvariants("game.commitLoadout", { history = true })
   self:saveActiveRun("commit_loadout", "loadout")
   return committedSlots
+end
+
+function Game:recordRunStartIfNeeded()
+  if self.runState and not self.runState.runStartRecorded then
+    self.runState.runStartRecorded = true
+    self.metaState.stats.runsStarted = (self.metaState.stats.runsStarted or 0) + 1
+    self:saveMetaState("run_start")
+    self.logger:info("Recorded run start", { seed = self.runState.seed, round = self.runState.roundIndex })
+  end
+
+  return true
+end
+
+function Game:ensureHandDrawn()
+  if not self.runState or not self.stageState or self.stageState.stageStatus ~= "active" then
+    return nil, "stage_not_active"
+  end
+
+  local handSlots, warning = PurseSystem.drawHand(self.runState, self.stageState, self.runRng)
+
+  if warning == "purse_empty" then
+    return nil, warning
+  end
+
+  self:assertRuntimeInvariants("game.ensureHandDrawn", { history = true })
+  return handSlots, warning
+end
+
+function Game:sleightHandSlot(slotIndex)
+  if not self.runState or not self.stageState then
+    return false, "run or stage has not been initialized"
+  end
+
+  if not self.selectedCall then
+    return false, "choose_call_before_sleight"
+  end
+
+  local ok, result = PurseSystem.sleightSlot(self.runState, self.stageState, slotIndex, self.runRng, self.selectedCall)
+
+  if not ok then
+    return false, result
+  end
+
+  self.stageState.purse.callLocked = true
+  self.runState.counters.totalSleights = (self.runState.counters.totalSleights or 0) + 1
+  self:assertRuntimeInvariants("game.sleightHandSlot", { history = true })
+  self:saveActiveRun("sleight_hand_slot", "stage")
+  return true, result
+end
+
+function Game:moveHandSlot(slotIndex, direction)
+  if not self.stageState then
+    return false, "stage_not_initialized"
+  end
+
+  local ok, result = PurseSystem.moveHandSlot(self.stageState, slotIndex, direction)
+
+  if not ok then
+    return false, result
+  end
+
+  self:assertRuntimeInvariants("game.moveHandSlot", { history = true })
+  self:saveActiveRun("move_hand_slot", "stage")
+  return true, result
+end
+
+function Game:getPurseInspectionLines(stageState)
+  if not self.runState then
+    return { "No active run." }
+  end
+
+  local counts = PurseSystem.countZonesByDefinition(self.runState, stageState)
+  local lines = {
+    string.format("Purse size: %d coin(s)", #(self.runState.coinInstances or {})),
+    string.format("Hand size: %d", PurseSystem.getHandSize(self.runState)),
+  }
+
+  local ids = {}
+  for definitionId in pairs(counts) do
+    table.insert(ids, definitionId)
+  end
+  table.sort(ids)
+
+  for _, definitionId in ipairs(ids) do
+    local count = counts[definitionId]
+    local name = self:getCoinName(definitionId)
+
+    if stageState and stageState.purse then
+      table.insert(lines, string.format("- %s x%d (available %d, hand %d, exhausted %d)", name, count.total, count.available, count.hand, count.exhausted))
+    else
+      table.insert(lines, string.format("- %s x%d", name, count.total))
+    end
+  end
+
+  return lines
 end
 
 function Game:resolveCurrentBatch(call)
@@ -1732,30 +1828,6 @@ function Game:prepareShopOffers()
 
   if self.lastStageResult.stageType == "boss" then
     return false, "boss_stage_has_no_shop"
-  end
-
-  local rewardSession = self:ensureRewardPreview()
-  if rewardSession and rewardSession.claimed ~= true then
-    if #(rewardSession.options or {}) > 0 then
-      return false, "reward_choice_required"
-    end
-
-    local claimOk, claimError = self:claimSelectedReward()
-    if claimOk ~= true then
-      return false, claimError or "reward_choice_required"
-    end
-  end
-
-  local encounterSession = self:ensureEncounterSession()
-  if encounterSession and encounterSession.claimed ~= true then
-    if #(encounterSession.choices or {}) > 0 then
-      return false, "encounter_choice_required"
-    end
-
-    local encounterOk, encounterError = self:claimSelectedEncounterChoice()
-    if encounterOk ~= true then
-      return false, encounterError or "encounter_choice_required"
-    end
   end
 
   local shopFlow = self:createShopFlow()
@@ -2494,10 +2566,6 @@ function Game:getPostResultDestinationState()
 end
 
 function Game:computePostResultNextState()
-  if self.config.get("debug.postStageAnalyticsEnabled") == true and self.lastStageResult ~= nil then
-    return "post_stage_analytics"
-  end
-
   return self:getPostResultDestinationState()
 end
 

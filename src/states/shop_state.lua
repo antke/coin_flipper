@@ -14,6 +14,7 @@ function ShopState.new()
     statusMessage = "",
     offerButtons = {},
     footerButtons = {},
+    purseDialogOpen = false,
   }, ShopState)
 end
 
@@ -154,7 +155,7 @@ end
 function ShopState:buildFooterButtons(app, layout)
   local padding = layout.padding
   local gap = Theme.spacing.itemGap
-  local buttonWidth = math.floor((layout.width - (padding * 2) - gap) / 2)
+  local buttonWidth = math.floor((layout.width - (padding * 2) - (gap * 2)) / 3)
   local buttonHeight = layout.footerMetrics.buttonHeight
   local y = layout.footerMetrics.buttonY
   local canReroll = self:canReroll(app)
@@ -177,6 +178,18 @@ function ShopState:buildFooterButtons(app, layout)
       y = y,
       width = buttonWidth,
       height = buttonHeight,
+      label = "Inspect Purse",
+      variant = "default",
+      onClick = function()
+        self.purseDialogOpen = true
+        return true
+      end,
+    },
+    {
+      x = padding + ((buttonWidth + gap) * 2),
+      y = y,
+      width = buttonWidth,
+      height = buttonHeight,
       label = "Continue",
       variant = "success",
       onClick = function()
@@ -189,10 +202,69 @@ function ShopState:buildFooterButtons(app, layout)
 end
 
 function ShopState:enter(app)
+  self.purseDialogOpen = false
   self.statusMessage = "Choose an offer, reroll, or continue."
 end
 
+function ShopState:getPurseDialogLayout()
+  local width = love.graphics.getWidth()
+  local height = love.graphics.getHeight()
+  local padding = Theme.spacing.screenPadding
+  local dialogWidth = math.min(700, math.max(280, width - (padding * 4)))
+  local dialogHeight = math.min(460, math.max(260, height - (padding * 4)))
+
+  return {
+    x = math.floor((width - dialogWidth) / 2),
+    y = math.floor((height - dialogHeight) / 2),
+    width = dialogWidth,
+    height = dialogHeight,
+  }
+end
+
+function ShopState:getPurseCloseButton(dialog)
+  local size = 32
+
+  return {
+    x = dialog.x + dialog.width - Theme.spacing.panelPadding - size,
+    y = dialog.y + Theme.spacing.panelPadding - 4,
+    width = size,
+    height = size,
+    label = "X",
+    onClick = function()
+      self.purseDialogOpen = false
+      return true
+    end,
+  }
+end
+
+function ShopState:drawPurseDialog(app)
+  if not self.purseDialogOpen then
+    return
+  end
+
+  local width = love.graphics.getWidth()
+  local height = love.graphics.getHeight()
+  local dialog = self:getPurseDialogLayout()
+  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
+  local mouseX, mouseY = love.mouse.getPosition()
+
+  love.graphics.setColor(0, 0, 0, 0.50)
+  love.graphics.rectangle("fill", 0, 0, width, height)
+  Panel.draw(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
+  Button.drawButtons({ self:getPurseCloseButton(dialog) }, mouseX, mouseY)
+  love.graphics.setFont(app.fonts.body)
+  Layout.drawWrappedLines(app:getPurseInspectionLines(nil), contentArea.x, contentArea.y, contentArea.width, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height)
+end
+
 function ShopState:keypressed(app, key)
+  if self.purseDialogOpen then
+    if key == "escape" or key == "p" or key == "return" or key == "kpenter" then
+      self.purseDialogOpen = false
+    end
+
+    return
+  end
+
   local offerIndex = tonumber(key)
 
   if offerIndex and offerIndex >= 1 and offerIndex <= #app.shopOffers then
@@ -204,6 +276,11 @@ function ShopState:keypressed(app, key)
   if key == "r" then
     self:tryReroll(app)
 
+    return
+  end
+
+  if key == "p" then
+    self.purseDialogOpen = true
     return
   end
 
@@ -224,6 +301,7 @@ function ShopState:draw(app)
   love.graphics.print(string.format("Chips: %d", app.runState.shopPoints), layout.padding, layout.padding + 30)
 
   local infoLines = {
+    string.format("Purse: %d coin(s)", #(app.runState.coinInstances or {})),
     string.format("Free rerolls: %d", app.runState.shopRerollsRemaining or 0),
   }
   if upcomingStage then
@@ -276,6 +354,10 @@ function ShopState:draw(app)
       app:getOfferDescription(offer),
     }
 
+    if offer.type == "coin" then
+      table.insert(lines, 4, "Adds +1 coin instance to your purse.")
+    end
+
     Layout.drawWrappedLines(lines, textX, textY, textWidth, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height - (buttonHeight + 8))
   end
 
@@ -285,6 +367,7 @@ function ShopState:draw(app)
 
   Theme.applyColor(Theme.colors.warning)
   love.graphics.printf(self.statusMessage, layout.padding, layout.height - layout.footerMetrics.statusHeight + Theme.spacing.statusPadding, layout.width - (layout.padding * 2), "left")
+  self:drawPurseDialog(app)
 end
 
 function ShopState:mousepressed(app, x, y, button)
@@ -293,6 +376,20 @@ function ShopState:mousepressed(app, x, y, button)
   end
 
   local layout = self:getLayout(app)
+
+  if self.purseDialogOpen then
+    local dialog = self:getPurseDialogLayout()
+
+    if Button.handleMousePressed({ self:getPurseCloseButton(dialog) }, x, y) then
+      return
+    end
+
+    if x < dialog.x or x > dialog.x + dialog.width or y < dialog.y or y > dialog.y + dialog.height then
+      self.purseDialogOpen = false
+    end
+
+    return
+  end
 
   if Button.handleMousePressed(self:buildOfferButtons(app, layout.panelLayout), x, y) then
     return

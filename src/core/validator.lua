@@ -3,6 +3,7 @@ local EffectiveValueSystem = require("src.systems.effective_value_system")
 local GameConfig = require("src.app.config")
 local HookRegistry = require("src.core.hook_registry")
 local Loadout = require("src.domain.loadout")
+local PurseSystem = require("src.systems.purse_system")
 local Utils = require("src.core.utils")
 
 local Validator = {}
@@ -166,6 +167,7 @@ local VALID_REPLAY_TRANSCRIPT_KEYS = {
 local VALID_REPLAY_BOOTSTRAP_KEYS = {
   seed = true,
   starterCollection = true,
+  starterPurse = true,
   equippedCoinSlots = true,
   persistedLoadoutSlots = true,
   ownedUpgradeIds = true,
@@ -233,13 +235,17 @@ local VALID_REPLAY_BATCH_KEYS = {
 
 local VALID_REPLAY_RESOLUTION_ENTRY_KEYS = {
   coinId = true,
+  instanceId = true,
+  originalDrawIndex = true,
   slotIndex = true,
   resolutionIndex = true,
+  sleightUsed = true,
 }
 
 local VALID_REPLAY_FORCED_RESULT_KEYS = {
   result = true,
   coinId = true,
+  instanceId = true,
   slotIndex = true,
   resolutionIndex = true,
   rngRoll = true,
@@ -296,6 +302,20 @@ local function validateIdList(values, label, resolver)
   end
 
   return true, seen
+end
+
+local function validateIdArray(values, label, resolver)
+  for index, value in ipairs(values or {}) do
+    if type(value) ~= "string" or value == "" then
+      return false, string.format("%s contains invalid id at index %d", label, index)
+    end
+
+    if resolver and not resolver(value) then
+      return false, string.format("%s references unknown id %s", label, value)
+    end
+  end
+
+  return true
 end
 
 local function valuesDeepEqual(left, right)
@@ -396,18 +416,19 @@ local function validateBatchSnapshot(batch)
     return false, string.format("batch snapshot has invalid stageType %s", tostring(batch.stageType))
   end
 
+  local equippedSlotCount = getMaxNumericIndex(batch.equippedCoinSlots)
   local maxSlots = math.max(
-    getMaxNumericIndex(batch.equippedCoinSlots),
+    equippedSlotCount,
     #(batch.resolutionCoinIds or {}),
     #(batch.resolvedCoinResults or {})
   )
-  local ok, normalizedSlots = validateSlotState(batch.equippedCoinSlots or {}, maxSlots, nil, "batch equippedCoinSlots", true)
+  local ok, normalizedSlots = validateSlotState(batch.equippedCoinSlots or {}, maxSlots, nil, "batch equippedCoinSlots", equippedSlotCount > 0)
 
   if not ok then
     return false, normalizedSlots
   end
 
-  local compactSlots = Loadout.compactSlots(normalizedSlots, maxSlots)
+  local compactSlots = equippedSlotCount > 0 and Loadout.compactSlots(normalizedSlots, maxSlots) or Utils.copyArray(batch.resolutionCoinIds or {})
   local resolutionOrder = batch.resolutionCoinIds or {}
   local resolutionEntries = batch.resolutionEntries or {}
 
@@ -422,20 +443,29 @@ local function validateBatchSnapshot(batch)
 
   local resolutionIndex = {}
   local resolvedByCoinId = {}
+  local resolvedByInstanceId = {}
   for index, coinId in ipairs(resolutionOrder) do
     if type(coinId) ~= "string" or coinId == "" then
       return false, string.format("batch resolution order has invalid coin at index %d", index)
     end
 
-    if resolutionIndex[coinId] then
+    if equippedSlotCount > 0 and resolutionIndex[coinId] then
       return false, string.format("batch resolution order contains duplicate coin %s", coinId)
     end
 
-    if not compactIndex[coinId] then
+    if equippedSlotCount > 0 and not compactIndex[coinId] then
       return false, string.format("batch resolution order contains unequipped coin %s", coinId)
     end
 
     resolutionIndex[coinId] = true
+  end
+
+  local function getResolvedCoin(entry)
+    if entry and entry.instanceId ~= nil then
+      return resolvedByInstanceId[entry.instanceId]
+    end
+
+    return entry and resolvedByCoinId[entry.coinId]
   end
 
   if #resolutionEntries > 0 and #resolutionEntries ~= #resolutionOrder then
@@ -455,7 +485,7 @@ local function validateBatchSnapshot(batch)
       return false, string.format("batch resolutionEntries[%d].slotIndex must be a positive integer", index)
     end
 
-    if normalizedSlots[entry.slotIndex] ~= entry.coinId then
+    if equippedSlotCount > 0 and normalizedSlots[entry.slotIndex] ~= entry.coinId then
       return false, string.format("batch resolutionEntries[%d] slotIndex does not match equipped slots", index)
     end
 
@@ -474,6 +504,10 @@ local function validateBatchSnapshot(batch)
     end
 
     resolvedByCoinId[coinState.coinId] = coinState
+
+    if coinState.instanceId ~= nil then
+      resolvedByInstanceId[coinState.instanceId] = coinState
+    end
 
     if #resolutionEntries > 0 then
       local expectedEntry = resolutionEntries[index]
@@ -501,7 +535,7 @@ local function validateBatchSnapshot(batch)
       return false, string.format("batch forcedResults[%d] has invalid result %s", index, tostring(forcedEntry.result))
     end
 
-    local resolvedCoin = resolvedByCoinId[forcedEntry.coinId]
+    local resolvedCoin = getResolvedCoin(forcedEntry)
 
     if not resolvedCoin then
       return false, string.format("batch forcedResults[%d] references unknown coin %s", index, tostring(forcedEntry.coinId))
@@ -537,6 +571,10 @@ local function validateBatchSnapshot(batch)
           return false, string.format("batch trace coinRolls[%d].coinId mismatch", index)
         end
 
+        if coinRoll.instanceId ~= nil and coinRoll.instanceId ~= resolvedCoin.instanceId then
+          return false, string.format("batch trace coinRolls[%d].instanceId mismatch", index)
+        end
+
         if coinRoll.slotIndex ~= resolvedCoin.slotIndex then
           return false, string.format("batch trace coinRolls[%d].slotIndex mismatch", index)
         end
@@ -549,7 +587,7 @@ local function validateBatchSnapshot(batch)
 
     for index, source in ipairs(batch.trace.triggeredSources or {}) do
       if source.coinId ~= nil then
-        local resolvedCoin = resolvedByCoinId[source.coinId]
+        local resolvedCoin = getResolvedCoin(source)
 
         if not resolvedCoin then
           return false, string.format("batch trace triggeredSources[%d] references unknown resolved coin %s", index, tostring(source.coinId))
@@ -575,7 +613,7 @@ local function validateBatchSnapshot(batch)
 
     for index, action in ipairs(batch.trace.actions or {}) do
       if action.coinId ~= nil and (action.slotIndex ~= nil or action.resolutionIndex ~= nil) then
-        local resolvedCoin = resolvedByCoinId[action.coinId]
+        local resolvedCoin = getResolvedCoin(action)
 
         if not resolvedCoin then
           return false, string.format("batch trace actions[%d] references unknown coin %s", index, tostring(action.coinId))
@@ -599,7 +637,7 @@ local function validateBatchSnapshot(batch)
       end
 
       if type(action._trace) == "table" and action._trace.coinId ~= nil then
-        local resolvedCoin = resolvedByCoinId[action._trace.coinId]
+        local resolvedCoin = getResolvedCoin(action._trace)
 
         if not resolvedCoin then
           return false, string.format("batch trace actions[%d]._trace references unknown coin %s", index, tostring(action._trace.coinId))
@@ -1741,6 +1779,11 @@ function Validator.validateReplayTranscriptPayload(transcript)
     return false, errorMessage
   end
 
+  ok, errorMessage = validateIdArray(transcript.bootstrap.starterPurse or {}, "replay transcript bootstrap starterPurse", Coins.getById)
+  if not ok then
+    return false, errorMessage
+  end
+
   ok, errorMessage = validateIdList(transcript.bootstrap.ownedUpgradeIds or {}, "replay transcript bootstrap ownedUpgradeIds", Upgrades.getById)
   if not ok then
     return false, errorMessage
@@ -2076,10 +2119,19 @@ function Validator.validateReplayTranscriptPayload(transcript)
         end
 
         local seenCoinIds = {}
+        local seenInstanceIds = {}
         local seenSlotIndices = {}
         local expectedSlotCount = nil
 
-        if stageEntry.loadout then
+        local usesInstanceEntries = false
+        for _, entry in ipairs(batchEntry.resolutionEntries) do
+          if type(entry) == "table" and entry.instanceId ~= nil then
+            usesInstanceEntries = true
+            break
+          end
+        end
+
+        if stageEntry.loadout and not usesInstanceEntries then
           local inferredMaxSlots = math.max(1, getMaxNumericIndex(stageEntry.loadout.slots))
           local okLoadout, normalizedLoadout = validateSlotState(stageEntry.loadout.slots, inferredMaxSlots, nil, string.format("replay transcript stage %d loadout slots", index), false)
 
@@ -2113,7 +2165,19 @@ function Validator.validateReplayTranscriptPayload(transcript)
             return false, string.format("replay transcript stage %d batch %d resolution entry %d references unknown coin %s", index, batchIndex, resolutionIndex, tostring(entry.coinId))
           end
 
-          if seenCoinIds[entry.coinId] then
+          if entry.instanceId ~= nil then
+            if type(entry.instanceId) ~= "string" or entry.instanceId == "" then
+              return false, string.format("replay transcript stage %d batch %d resolution entry %d has invalid instanceId", index, batchIndex, resolutionIndex)
+            end
+
+            if seenInstanceIds[entry.instanceId] then
+              return false, string.format("replay transcript stage %d batch %d resolution entry %d duplicates instance %s", index, batchIndex, resolutionIndex, tostring(entry.instanceId))
+            end
+
+            seenInstanceIds[entry.instanceId] = true
+          end
+
+          if stageEntry.loadout and not usesInstanceEntries and seenCoinIds[entry.coinId] then
             return false, string.format("replay transcript stage %d batch %d resolution entry %d duplicates coin %s", index, batchIndex, resolutionIndex, tostring(entry.coinId))
           end
 
@@ -2137,7 +2201,7 @@ function Validator.validateReplayTranscriptPayload(transcript)
             return false, string.format("replay transcript stage %d batch %d resolution entry %d resolutionIndex mismatch", index, batchIndex, resolutionIndex)
           end
 
-          if stageEntry.loadout and stageEntry.loadout.slots[entry.slotIndex] ~= entry.coinId then
+          if stageEntry.loadout and not usesInstanceEntries and stageEntry.loadout.slots[entry.slotIndex] ~= entry.coinId then
             return false, string.format("replay transcript stage %d batch %d resolution entry %d does not match loadout slots", index, batchIndex, resolutionIndex)
           end
         end
@@ -2169,6 +2233,10 @@ function Validator.validateReplayTranscriptPayload(transcript)
             return false, string.format("replay transcript stage %d batch %d forced result %d references unknown coin %s", index, batchIndex, forcedIndex, tostring(entry.coinId))
           end
 
+          if entry.instanceId ~= nil and (type(entry.instanceId) ~= "string" or entry.instanceId == "") then
+            return false, string.format("replay transcript stage %d batch %d forced result %d has invalid instanceId", index, batchIndex, forcedIndex)
+          end
+
           if not isPositiveInteger(entry.slotIndex) then
             return false, string.format("replay transcript stage %d batch %d forced result %d slotIndex must be positive integer", index, batchIndex, forcedIndex)
           end
@@ -2183,7 +2251,7 @@ function Validator.validateReplayTranscriptPayload(transcript)
 
           seenForcedResolutions[entry.resolutionIndex] = true
 
-          if stageEntry.loadout and stageEntry.loadout.slots[entry.slotIndex] ~= entry.coinId then
+          if stageEntry.loadout and entry.instanceId == nil and stageEntry.loadout.slots[entry.slotIndex] ~= entry.coinId then
             return false, string.format("replay transcript stage %d batch %d forced result %d does not match loadout slots", index, batchIndex, forcedIndex)
           end
         end
@@ -2340,6 +2408,12 @@ function Validator.validateRunState(runState)
     return false, collectionIndex
   end
 
+  local purseOk, purseError = PurseSystem.validateZones(runState, nil)
+
+  if not purseOk then
+    return false, purseError
+  end
+
   local upgradeOk, upgradeError = validateIdList(runState.ownedUpgradeIds, "runState.ownedUpgradeIds", Upgrades.getById)
 
   if not upgradeOk then
@@ -2407,6 +2481,12 @@ function Validator.validateStageState(runState, stageState)
 
   if type(stageState) ~= "table" then
     return false, "stageState must be a table"
+  end
+
+  local purseOk, purseError = PurseSystem.validateZones(runState, stageState)
+
+  if not purseOk then
+    return false, purseError
   end
 
   if type(stageState.stageId) ~= "string" or stageState.stageId == "" then
@@ -2661,7 +2741,7 @@ function Validator.validateShopOffers(runState, offers)
       return false, string.format("shop offer %s purchased flag must be boolean", offer.id)
     end
 
-    if not offer.purchased and ownedIndex[contentKey] then
+    if offer.type ~= "coin" and not offer.purchased and ownedIndex[contentKey] then
       return false, string.format("shop offer %s exposes already-owned content %s", offer.id, contentKey)
     end
   end
@@ -2706,6 +2786,7 @@ function Validator.validateRunHistory(runState)
     "run.startingCollectionSize",
     "run.maxActiveCoinSlots",
     "stage.flipsPerStage",
+    "purse.handSize",
     "run.startingShopPoints",
     "run.startingShopRerolls",
   }
@@ -2720,6 +2801,8 @@ function Validator.validateRunHistory(runState)
         value = bootstrapResolvedValues.maxActiveCoinSlots
       elseif key == "stage.flipsPerStage" then
         value = bootstrapResolvedValues.baseFlipsPerStage
+      elseif key == "purse.handSize" then
+        value = bootstrapResolvedValues.handSize
       elseif key == "run.startingShopPoints" then
         value = bootstrapResolvedValues.startingShopPoints
       elseif key == "run.startingShopRerolls" then
@@ -2729,7 +2812,7 @@ function Validator.validateRunHistory(runState)
 
     local isValid = isNonNegativeInteger(value)
 
-    if key == "run.maxActiveCoinSlots" or key == "stage.flipsPerStage" then
+    if key == "run.maxActiveCoinSlots" or key == "stage.flipsPerStage" or key == "purse.handSize" then
       isValid = isPositiveInteger(value)
     end
 
@@ -2774,7 +2857,7 @@ function Validator.validateRunHistory(runState)
     local rewardEligible = (
       stageRecord.stageType == "normal"
       and stageRecord.status == "cleared"
-      and stageRecord.runStatus == "active"
+      and (stageRecord.runStatus == "active" or stageRecord.runStatus == "won")
     ) or (
       stageRecord.stageType == "boss"
       and stageRecord.status == "cleared"
@@ -3196,7 +3279,13 @@ function Validator.validateBatchInput(runState, stageState, call)
     return false, "no flips remain"
   end
 
-  return Validator.validateLoadoutSelection(runState, runState.equippedCoinSlots)
+  local resolutionOrder = PurseSystem.getResolutionOrder(runState, stageState)
+
+  if #resolutionOrder == 0 then
+    return false, "hand is empty"
+  end
+
+  return true, resolutionOrder
 end
 
 function Validator.validateContentDefinition(definition)

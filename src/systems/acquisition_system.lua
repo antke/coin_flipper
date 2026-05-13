@@ -12,10 +12,6 @@ function AcquisitionSystem.canGrantCoin(runState, coinId)
     return false, "unknown_coin"
   end
 
-  if Utils.contains(runState.collectionCoinIds, coinId) then
-    return false, "coin_already_owned"
-  end
-
   return true, definition
 end
 

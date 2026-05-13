@@ -10,6 +10,24 @@ local Validator = require("src.core.validator")
 
 local RunInitializer = {}
 
+local function buildStarterPurse(unlockedCoinIds, seed)
+  local baseline = Coins.getStarterCoinIds(5, unlockedCoinIds, seed)
+  local specials = Coins.getStarterCoinIds(8, unlockedCoinIds, seed)
+  local starterPurse = {}
+
+  for _ = 1, 3 do
+    for _, coinId in ipairs(baseline) do
+      table.insert(starterPurse, coinId)
+    end
+  end
+
+  for index = 6, math.min(8, #specials) do
+    table.insert(starterPurse, specials[index])
+  end
+
+  return starterPurse
+end
+
 function RunInitializer.createMetaProjection(metaState)
   local effectiveValues = Utils.clone(metaState.effectiveValues or {})
 
@@ -30,12 +48,14 @@ function RunInitializer.createNewRun(metaState, options)
   local metaProjection = RunInitializer.createMetaProjection(metaState)
   local resolvedValues = EffectiveValueSystem.resolveRunBootstrapValues(metaProjection, options)
   local starterCollection = Utils.copyArray(options.starterCollection or Coins.getStarterCoinIds(resolvedValues.startingCollectionSize, metaState.unlockedCoinIds, options.seed))
+  local starterPurse = Utils.copyArray(options.starterPurse or buildStarterPurse(metaState.unlockedCoinIds, options.seed))
 
   local runState = RunState.new({
     seed = options.seed,
     metaProjection = metaProjection,
     resolvedValues = resolvedValues,
     starterCollection = starterCollection,
+    starterPurse = starterPurse,
     unlockedCoinIds = Utils.copyArray(metaState.unlockedCoinIds or {}),
     unlockedUpgradeIds = Utils.copyArray(metaState.unlockedUpgradeIds or {}),
     equippedCoinSlots = Utils.copyArray(options.equippedCoinSlots or {}),
@@ -51,6 +71,7 @@ function RunInitializer.createNewRun(metaState, options)
   runState.history.bootstrap = {
     seed = runState.seed,
     starterCollection = Utils.copyArray(starterCollection),
+    starterPurse = Utils.copyArray(starterPurse),
     equippedCoinSlots = Loadout.cloneSlots(runState.equippedCoinSlots, runState.maxActiveCoinSlots),
     persistedLoadoutSlots = Loadout.cloneSlots(runState.persistedLoadoutSlots, runState.maxActiveCoinSlots),
     ownedUpgradeIds = Utils.copyArray(runState.ownedUpgradeIds),
@@ -60,6 +81,7 @@ function RunInitializer.createNewRun(metaState, options)
       ["run.startingCollectionSize"] = resolvedValues.startingCollectionSize,
       ["run.maxActiveCoinSlots"] = resolvedValues.maxActiveCoinSlots,
       ["stage.flipsPerStage"] = resolvedValues.baseFlipsPerStage,
+      ["purse.handSize"] = resolvedValues.handSize,
       ["run.startingShopPoints"] = resolvedValues.startingShopPoints,
       ["run.startingShopRerolls"] = resolvedValues.startingShopRerolls,
     },

@@ -36,6 +36,7 @@ local function buildTriggeredSourceSignature(source)
     sourceId = source and source.sourceId or nil,
     sourceType = source and source.sourceType or nil,
     coinId = source and source.coinId or nil,
+    instanceId = source and source.instanceId or nil,
     slotIndex = source and source.slotIndex or nil,
     resolutionIndex = source and source.resolutionIndex or nil,
   }
@@ -49,6 +50,7 @@ local function buildActionSignature(action)
     side = action.side,
     flag = action.flag,
     coinId = action.coinId,
+    instanceId = action.instanceId,
     upgradeId = action.upgradeId,
     contentId = action.contentId,
     offerType = action.offerType,
@@ -597,7 +599,7 @@ local function replayRewardChoice(runState, stageRecord, rng, rewardTranscript, 
   local rewardEligible = (
     stageRecord.stageType == "normal"
     and stageRecord.status == "cleared"
-    and runState.runStatus == "active"
+    and (runState.runStatus == "active" or runState.runStatus == "won")
   ) or (
     stageRecord.stageType == "boss"
     and stageRecord.status == "cleared"
@@ -613,7 +615,7 @@ local function replayRewardChoice(runState, stageRecord, rng, rewardTranscript, 
   end
 
   if not rewardTranscript then
-    return false, "missing_reward_choice"
+    return true
   end
 
   local session = RewardSystem.buildPreviewForStage(runState, stageRecord)
@@ -792,6 +794,7 @@ function ReplaySystem.replayTranscript(transcript)
     seed = normalizedTranscript.bootstrap.seed,
     startingCollectionSize = startingCollectionSize,
     starterCollection = normalizedTranscript.bootstrap.starterCollection,
+    starterPurse = normalizedTranscript.bootstrap.starterPurse,
     equippedCoinSlots = normalizedTranscript.bootstrap.equippedCoinSlots,
     persistedLoadoutSlots = normalizedTranscript.bootstrap.persistedLoadoutSlots,
     ownedUpgradeIds = normalizedTranscript.bootstrap.ownedUpgradeIds,

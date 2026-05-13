@@ -23,6 +23,12 @@ EffectiveValueSystem.KNOWN_KEYS = {
     integer = true,
     min = 1,
   },
+  ["purse.handSize"] = {
+    defaultMode = "override",
+    basePath = "purse.handSize",
+    integer = true,
+    min = 1,
+  },
   ["run.startingShopPoints"] = {
     defaultMode = "add",
     basePath = "economy.startingShopPoints",
@@ -118,6 +124,7 @@ EffectiveValueSystem.BOOTSTRAP_RESOLVED_VALUE_ALIASES = {
   ["run.startingCollectionSize"] = { "startingCollectionSize" },
   ["run.maxActiveCoinSlots"] = { "maxActiveCoinSlots" },
   ["stage.flipsPerStage"] = { "baseFlipsPerStage" },
+  ["purse.handSize"] = { "handSize" },
   ["run.startingShopPoints"] = { "startingShopPoints" },
   ["run.startingShopRerolls"] = { "startingShopRerolls" },
 }
@@ -554,12 +561,24 @@ function EffectiveValueSystem.resolveRunBootstrapValues(metaProjection, options)
     })
   end
 
+  local handSize = options.handSize
+  if handSize == nil then
+    handSize = getResolvedBootstrapOverride(options, "purse.handSize")
+  end
+
+  if handSize == nil then
+    handSize = EffectiveValueSystem.getEffectiveValue("purse.handSize", bootstrapRunState, nil, {
+      metaProjection = metaProjection,
+    })
+  end
+
   return {
     startingCollectionSize = startingCollectionSize,
     maxActiveCoinSlots = maxActiveCoinSlots,
     baseFlipsPerStage = baseFlipsPerStage,
     startingShopPoints = startingShopPoints,
     startingShopRerolls = startingShopRerolls,
+    handSize = handSize,
   }
 end
 

@@ -1,5 +1,6 @@
 local Bosses = require("src.content.bosses")
 local Coins = require("src.content.coins")
+local PurseSystem = require("src.systems.purse_system")
 local StageModifiers = require("src.content.stage_modifiers")
 local Upgrades = require("src.content.upgrades")
 local Utils = require("src.core.utils")
@@ -273,6 +274,10 @@ local function prepareResolvedAction(phaseName, source, context, effect)
       action.coinId = context.currentCoin.coinId
     end
 
+    if action.instanceId == nil then
+      action.instanceId = context.currentCoin.instanceId
+    end
+
     if action.slotIndex == nil then
       action.slotIndex = context.currentCoin.slotIndex
     end
@@ -296,6 +301,7 @@ local function prepareResolvedAction(phaseName, source, context, effect)
     sourceId = source.sourceId,
     sourceType = source.sourceType,
     coinId = context.currentCoin and context.currentCoin.coinId or nil,
+    instanceId = context.currentCoin and context.currentCoin.instanceId or nil,
     slotIndex = context.currentCoin and context.currentCoin.slotIndex or nil,
     resolutionIndex = context.currentCoin and context.currentCoin.resolutionIndex or nil,
   }
@@ -306,8 +312,14 @@ end
 local function runSourceForPhase(phaseName, source, context, targetActionList)
   local definition = source.definition or {}
 
-  if context.currentCoin and source.sourceType == "equipped coin" and context.currentCoin.coinId ~= source.sourceId then
-    return
+  if context.currentCoin and source.sourceType == "equipped coin" then
+    if source.instanceId then
+      if context.currentCoin.instanceId ~= source.instanceId then
+        return
+      end
+    elseif context.currentCoin.coinId ~= source.sourceId then
+      return
+    end
   end
 
   for _, trigger in ipairs(definition.triggers or {}) do
@@ -319,6 +331,7 @@ local function runSourceForPhase(phaseName, source, context, targetActionList)
         sourceType = source.sourceType,
         sourceName = definition.name,
         coinId = context.currentCoin and context.currentCoin.coinId or nil,
+        instanceId = context.currentCoin and context.currentCoin.instanceId or nil,
         slotIndex = context.currentCoin and context.currentCoin.slotIndex or nil,
         resolutionIndex = context.currentCoin and context.currentCoin.resolutionIndex or nil,
       })
@@ -440,16 +453,31 @@ function HookRegistry.collectSources(runState, stageState, metaProjection)
   collectFromIds(sources, runState and runState.ownedUpgradeIds, "run upgrade", Upgrades.getById)
 
   if runState then
-    for slotIndex = 1, runState.maxActiveCoinSlots do
-      local coinId = runState.equippedCoinSlots[slotIndex]
-
-      if coinId then
-        local definition = Coins.getById(coinId)
+    if stageState and stageState.purse and #(stageState.purse.handSlots or {}) > 0 then
+      for slotIndex, slot in ipairs(stageState.purse.handSlots) do
+        local coinId = slot.definitionId or PurseSystem.getDefinitionId(runState, slot.instanceId)
+        local definition = coinId and Coins.getById(coinId) or nil
 
         if definition then
-          table.insert(sources, HookRegistry.buildSource("equipped coin", coinId, definition, {
+          table.insert(sources, HookRegistry.buildSource("equipped coin", slot.instanceId, definition, {
+            instanceId = slot.instanceId,
+            coinId = coinId,
             slotIndex = slotIndex,
           }))
+        end
+      end
+    else
+      for slotIndex = 1, runState.maxActiveCoinSlots do
+        local coinId = runState.equippedCoinSlots[slotIndex]
+
+        if coinId then
+          local definition = Coins.getById(coinId)
+
+          if definition then
+            table.insert(sources, HookRegistry.buildSource("equipped coin", coinId, definition, {
+              slotIndex = slotIndex,
+            }))
+          end
         end
       end
     end

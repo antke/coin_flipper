@@ -10,6 +10,8 @@ local Utils = require("src.core.utils")
 
 local ActionQueue = {}
 
+local PurseSystem = require("src.systems.purse_system")
+
 ActionQueue.ACQUISITION_SAFE_OPS = {
   add_shop_points = true,
   add_shop_rerolls = true,
@@ -338,9 +340,7 @@ local function grantCoinFromAction(runState, action)
     error("unknown_coin")
   end
 
-  if not Utils.contains(runState.collectionCoinIds, action.coinId) then
-    table.insert(runState.collectionCoinIds, action.coinId)
-  end
+  PurseSystem.createInstance(runState, action.coinId)
 
   return definition
 end

@@ -17,7 +17,7 @@ local function buildUnownedPool(runState, definitions, offerType)
   local isUnlocked = offerType == "coin" and Coins.isUnlocked or Upgrades.isUnlocked
   local unlockedIds = offerType == "coin" and runState.unlockedCoinIds or runState.unlockedUpgradeIds
 
-  local ownedList = offerType == "coin" and runState.collectionCoinIds or runState.ownedUpgradeIds
+  local ownedList = offerType == "coin" and {} or runState.ownedUpgradeIds
 
   for _, ownedId in ipairs(ownedList or {}) do
     ownedIndex[ownedId] = true

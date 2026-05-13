@@ -1,4 +1,5 @@
 local Loadout = require("src.domain.loadout")
+local PurseSystem = require("src.systems.purse_system")
 local Utils = require("src.core.utils")
 
 local RunState = {}
@@ -7,13 +8,14 @@ function RunState.new(options)
   options = options or {}
   local maxActiveCoinSlots = math.max(1, tonumber(options.maxActiveCoinSlots) or 1)
 
-  return {
+  local runState = {
     seed = options.seed or 1,
     roundIndex = 1,
     currentStageId = nil,
     runStatus = "active",
 
     collectionCoinIds = Utils.copyArray(options.starterCollection or {}),
+    coinInstances = {},
     equippedCoinSlots = Loadout.normalizeSlots(options.equippedCoinSlots, maxActiveCoinSlots),
     persistedLoadoutSlots = Loadout.normalizeSlots(options.persistedLoadoutSlots, maxActiveCoinSlots),
     ownedUpgradeIds = Utils.copyArray(options.ownedUpgradeIds or {}),
@@ -49,12 +51,18 @@ function RunState.new(options)
       headsCalls = 0,
       tailsCalls = 0,
       temporaryEffectInstances = 0,
+      coinInstancesCreated = 0,
+      totalSleights = 0,
     },
 
     flags = {},
     temporaryRunEffects = {},
     pendingForcedCoinResults = {},
   }
+
+  PurseSystem.createInstancesFromDefinitionIds(runState, options.starterPurse or options.starterCollection or {})
+
+  return runState
 end
 
 return RunState

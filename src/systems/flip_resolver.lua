@@ -3,7 +3,7 @@ local BetSystem = require("src.systems.bet_system")
 local EffectiveValueSystem = require("src.systems.effective_value_system")
 local FlipBatch = require("src.domain.flip_batch")
 local HookRegistry = require("src.core.hook_registry")
-local LoadoutSystem = require("src.systems.loadout_system")
+local PurseSystem = require("src.systems.purse_system")
 local ScoreBreakdown = require("src.domain.score_breakdown")
 local ScoringSystem = require("src.systems.scoring_system")
 local Validator = require("src.core.validator")
@@ -52,7 +52,7 @@ function FlipResolver.buildResolutionContext(runState, stageState, metaProjectio
 end
 
 function FlipResolver.prepareCoinRollState(runState, stageState, metaProjection, context)
-  local resolutionEntries = LoadoutSystem.getResolutionOrder(runState)
+  local resolutionEntries = PurseSystem.getResolutionOrder(runState, stageState)
   local perCoin = {}
   local headsWeight, tailsWeight = EffectiveValueSystem.getBaseCoinWeights(runState, stageState, {
     metaProjection = metaProjection or runState.metaProjection,
@@ -62,7 +62,9 @@ function FlipResolver.prepareCoinRollState(runState, stageState, metaProjection,
   for _, resolutionEntry in ipairs(resolutionEntries) do
     table.insert(perCoin, {
       coinId = resolutionEntry.coinId,
+      instanceId = resolutionEntry.instanceId,
       slotIndex = resolutionEntry.slotIndex,
+      originalDrawIndex = resolutionEntry.originalDrawIndex,
       resolutionIndex = resolutionEntry.resolutionIndex,
       headsWeight = headsWeight,
       tailsWeight = tailsWeight,
@@ -91,6 +93,7 @@ function FlipResolver.resolveCoinOutcome(coinRollState, context)
 
   table.insert(context.trace.coinRolls, {
     coinId = coinRollState.coinId,
+    instanceId = coinRollState.instanceId,
     slotIndex = coinRollState.slotIndex,
     resolutionIndex = coinRollState.resolutionIndex,
     headsWeight = coinRollState.headsWeight,
@@ -104,6 +107,7 @@ function FlipResolver.resolveCoinOutcome(coinRollState, context)
     table.insert(context.trace.forcedResults, {
       result = forcedResult,
       coinId = coinRollState.coinId,
+      instanceId = coinRollState.instanceId,
       slotIndex = coinRollState.slotIndex,
       resolutionIndex = coinRollState.resolutionIndex,
       rngRoll = roll,
@@ -185,7 +189,7 @@ end
 function FlipResolver.buildBatchResult(runState, stageState, context, resolutionEntries)
   context.trace.scoreBreakdown = context.scoreBreakdown
 
-  local batch = FlipBatch.new(context.batchId, context.call, runState.equippedCoinSlots, resolutionEntries, runState.maxActiveCoinSlots)
+  local batch = FlipBatch.new(context.batchId, context.call, {}, resolutionEntries, PurseSystem.getHandSize(runState))
   batch.roundIndex = runState.roundIndex
   batch.stageId = stageState.stageId
   batch.stageLabel = stageState.stageLabel
@@ -267,6 +271,16 @@ end
 function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, rng)
   local context
 
+  local handSlots, drawWarning = PurseSystem.drawHand(runState, stageState, rng)
+
+  if stageState.stageStatus ~= "active" then
+    return nil, drawWarning or "stage_not_active"
+  end
+
+  if not handSlots or #handSlots == 0 then
+    return nil, drawWarning or "hand_empty"
+  end
+
   local preValidationRunState = Utils.clone(runState)
   local preValidationStageState = Utils.clone(stageState)
   local preValidationContext = FlipResolver.buildResolutionContext(
@@ -294,6 +308,13 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
   end
 
   context = FlipResolver.projectBatchBeforeRoll(runState, stageState, metaProjection, call, rng)
+  context.trace.drawnInstanceIds = PurseSystem.getHandInstanceIds(stageState)
+  context.trace.sleightHistory = Utils.clone(stageState.purse and stageState.purse.sleightHistory or {})
+  context.trace.reorderHistory = Utils.clone(stageState.purse and stageState.purse.reorderHistory or {})
+
+  if drawWarning then
+    table.insert(context.trace.warnings, drawWarning)
+  end
 
   for _, coinRollState in ipairs(context.perCoin) do
     FlipResolver.resolveCoinOutcome(coinRollState, context)
@@ -322,6 +343,7 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
   end
 
   FlipResolver.updateTraceTerminalState(stageState, context)
+  context.trace.exhaustedInstanceIds = PurseSystem.exhaustHand(stageState)
 
   local undrainedPendingPhases = {}
 

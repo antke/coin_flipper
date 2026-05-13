@@ -36,8 +36,12 @@ local GameConfig = {
     normalRoundCount = 3,
     bossRoundCount = 1,
     startingCoinSlots = 3,
-    startingFlipsPerStage = 5,
+    startingFlipsPerStage = 3,
     startingCollectionSize = 5,
+  },
+
+  purse = {
+    handSize = 5,
   },
 
   shop = {

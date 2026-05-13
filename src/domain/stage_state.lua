@@ -1,4 +1,5 @@
 local Utils = require("src.core.utils")
+local PurseSystem = require("src.systems.purse_system")
 
 local StageState = {}
 
@@ -14,7 +15,7 @@ function StageState.new(stageDefinition, runState, options)
     activeBossModifierIds = { stageDefinition.bossModifierId }
   end
 
-  return {
+  local stageState = {
     stageId = stageDefinition.id,
     stageLabel = stageDefinition.label,
     stageType = stageDefinition.stageType or "normal",
@@ -42,6 +43,10 @@ function StageState.new(stageDefinition, runState, options)
     lastBatchResults = nil,
     flags = {},
   }
+
+  PurseSystem.initializeStagePurse(runState, stageState)
+
+  return stageState
 end
 
 return StageState

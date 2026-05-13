@@ -251,16 +251,9 @@ end
 
 function LoadoutState:tryStartStage(app)
   app:ensureCurrentStage()
-
-  local committedSlots, errorMessage = app:commitLoadout(self.selectionSlots)
-
-  if committedSlots then
-    self.statusMessage = string.format("Locked build %s", Loadout.toCanonicalKey(committedSlots, app.runState.maxActiveCoinSlots))
-    return app.stateGraph:request("stage_ready")
-  end
-
-  self.statusMessage = errorMessage
-  return false, errorMessage
+  app:recordRunStartIfNeeded()
+  self.statusMessage = "Purse ready. Drawing your first hand."
+  return app.stateGraph:request("stage_ready")
 end
 
 function LoadoutState:buildCollectionButtons(app, area)
@@ -435,7 +428,7 @@ function LoadoutState:buildActionButtons(app, layout)
   local actionY = layout.footerMetrics.buttonY
   local buttons = {}
 
-  local actionWidth = math.floor((rowWidth - (gap * 2)) / 3)
+  local actionWidth = math.floor((rowWidth - gap) / 2)
 
   table.insert(buttons, {
     x = padding,
@@ -454,19 +447,7 @@ function LoadoutState:buildActionButtons(app, layout)
     y = actionY,
     width = actionWidth,
     height = buttonHeight,
-    label = "RESET",
-    variant = "default",
-    onClick = function()
-      return self:resetSelection(app)
-    end,
-  })
-
-  table.insert(buttons, {
-    x = padding + ((actionWidth + gap) * 2),
-    y = actionY,
-    width = actionWidth,
-    height = buttonHeight,
-    label = "START",
+    label = "START STAGE",
     variant = "success",
     onClick = function()
       return self:tryStartStage(app)
@@ -478,10 +459,10 @@ function LoadoutState:buildActionButtons(app, layout)
 end
 
 function LoadoutState:enter(app, payload)
-  self.selectionSlots, self.reconciliation = LoadoutSystem.createSelection(app.runState)
+  self.selectionSlots = {}
+  self.reconciliation = nil
   self.collectionScrollOffset = 1
-  self:selectCollectionIndex(app, self.selectedCollectionIndex)
-  self.statusMessage = self:getSelectionStatusMessage(app, self.reconciliation)
+  self.statusMessage = "Review your purse. The stage will draw 5 coins per flip."
 
   local resumeState = payload and payload.resumeLoadoutState or nil
 
@@ -510,8 +491,7 @@ function LoadoutState:enter(app, payload)
       self.collectionScrollOffset = math.max(1, math.floor(resumeState.collectionScrollOffset))
     end
 
-    self:selectCollectionIndex(app, self.selectedCollectionIndex)
-    self.statusMessage = "Resumed saved run in loadout."
+    self.statusMessage = "Resumed saved run in purse review."
   end
 end
 
@@ -521,56 +501,16 @@ function LoadoutState:keypressed(app, key)
     return
   end
 
-  if key == "left" or key == "up" then
-    self:selectCollectionIndex(app, self.selectedCollectionIndex - 1)
-    return
-  end
-
-  if key == "right" or key == "down" then
-    self:selectCollectionIndex(app, self.selectedCollectionIndex + 1)
-    return
-  end
-
-  local slotIndex = tonumber(key)
-
-  if slotIndex and slotIndex >= 1 and slotIndex <= app.runState.maxActiveCoinSlots then
-    self:assignSelectedCoinToSlot(app, slotIndex)
-    return
-  end
-
-  local clearSlotMap = {
-    z = 1,
-    x = 2,
-    c = 3,
-    v = 4,
-    b = 5,
-  }
-
-  local clearSlotIndex = clearSlotMap[key]
-
-  if clearSlotIndex and clearSlotIndex <= app.runState.maxActiveCoinSlots then
-    self:clearSelectedSlot(app, clearSlotIndex)
-    return
-  end
-
-  if key == "r" then
-    self:resetSelection(app)
-    return
-  end
-
   if key == "return" or key == "kpenter" then
     self:tryStartStage(app)
   end
 end
 
 function LoadoutState:draw(app)
-  local currentCoinId = app.runState.collectionCoinIds[self.selectedCollectionIndex]
   local layout = self:getLayout(app)
   local stagePreview = app:getPlannedStagePreviewData()
   local stageDefinition = stagePreview.stageDefinition
-  local selectedBuildKey = self:formatBuildSummary(self.selectionSlots, app.runState.maxActiveCoinSlots)
-  local reconciledBuildKey = self.reconciliation and self:formatBuildSummary(self.reconciliation.selectionSlots, app.runState.maxActiveCoinSlots) or nil
-  local stageTitle = stageDefinition and (stageDefinition.label or stageDefinition.name or stageDefinition.id) or "Loadout"
+  local stageTitle = stageDefinition and (stageDefinition.label or stageDefinition.name or stageDefinition.id) or "Purse Review"
 
   love.graphics.setFont(app.fonts.heading)
   Theme.applyColor(Theme.colors.text)
@@ -589,92 +529,25 @@ function LoadoutState:draw(app)
     "right"
   )
 
-  Panel.draw(layout.padding, layout.panelY, layout.contentWidth, layout.topHeight, "Choose Coin")
-  Panel.draw(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Slots")
+  Panel.draw(layout.padding, layout.panelY, layout.contentWidth, layout.topHeight, "Stage Briefing")
+  Panel.draw(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Purse")
 
-  local collectionArea = Panel.getContentArea(layout.padding, layout.panelY, layout.contentWidth, layout.topHeight, "Choose Coin")
-  local buildArea = Panel.getContentArea(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Slots")
+  local briefingArea = Panel.getContentArea(layout.padding, layout.panelY, layout.contentWidth, layout.topHeight, "Stage Briefing")
+  local purseArea = Panel.getContentArea(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Purse")
 
   love.graphics.setFont(app.fonts.body)
   local mouseX, mouseY = love.mouse.getPosition()
-  local collectionButtons = self:buildCollectionButtons(app, collectionArea)
-  self:drawCollectionCards(app, collectionButtons, mouseX, mouseY)
-  local hoveredCoinButton = self:getCoinButtonAtPoint(mouseX, mouseY)
+  Layout.drawWrappedLines(stagePreview.lines or {}, briefingArea.x, briefingArea.y, briefingArea.width, Theme.colors.text, Theme.spacing.lineHeight, briefingArea.height)
 
-  local slotLines = {
-    string.format("%d/%d slots", Loadout.countEquipped(self.selectionSlots, app.runState.maxActiveCoinSlots), app.runState.maxActiveCoinSlots),
-    "Click or drag to equip.",
-  }
-
-  if reconciledBuildKey and reconciledBuildKey ~= selectedBuildKey then
-    table.insert(slotLines, string.format("Reconciled: %s", reconciledBuildKey ~= "" and reconciledBuildKey or "(empty)"))
-  end
-
-  local slotCardHeight = math.min(150, buildArea.height - 42)
-  local slotGap = Theme.spacing.itemGap
-  local slotCardWidth = math.floor((buildArea.width - (slotGap * math.max(0, app.runState.maxActiveCoinSlots - 1))) / app.runState.maxActiveCoinSlots)
-  self.slotRects = {}
-  local slotsY = buildArea.y + 34
-
-  for slotIndex = 1, app.runState.maxActiveCoinSlots do
-    local coinId = self.selectionSlots[slotIndex]
-    local cardX = buildArea.x + ((slotIndex - 1) * (slotCardWidth + slotGap))
-    local cardY = slotsY
-    local selected = coinId ~= nil and coinId == currentCoinId
-
-    self.slotRects[slotIndex] = { x = cardX, y = cardY, width = slotCardWidth, height = slotCardHeight }
-
-    love.graphics.setColor(0.04, 0.05, 0.08, 0.94)
-    love.graphics.rectangle("fill", cardX, cardY, slotCardWidth, slotCardHeight)
-    Theme.applyColor(selected and Theme.colors.accent or Theme.colors.panelBorder)
-    love.graphics.setLineWidth(selected and 3 or 2)
-    love.graphics.rectangle("line", cardX, cardY, slotCardWidth, slotCardHeight)
-    love.graphics.setLineWidth(1)
-
-    if coinId then
-      local coin = Coins.getById(coinId)
-      local iconSize = math.min(82, slotCardHeight - 42)
-      local iconX = cardX + 26
-      local iconY = cardY + math.floor((slotCardHeight - iconSize) / 2)
-
-      CoinArt.draw(coinId, iconX, iconY, iconSize, {
-        selected = selected,
-        tilt = selected and -0.04 or 0.025,
-      })
-
-      love.graphics.setFont(app.fonts.body)
-      Theme.applyColor(Theme.colors.text)
-      love.graphics.printf(coin and coin.name or coinId, cardX + 126, cardY + 48, slotCardWidth - 146, "left")
-    else
-      Theme.applyColor(Theme.colors.panelBorder)
-      love.graphics.rectangle("line", cardX + math.floor((slotCardWidth - 44) / 2), cardY + 10, 44, 44)
-      Theme.applyColor(Theme.colors.mutedText)
-      love.graphics.printf("DROP", cardX, cardY + 22, slotCardWidth, "center")
-    end
-
-    drawNumberBadge(app, slotIndex, cardX + 10, cardY + 10, 24)
-  end
-
-  Layout.drawWrappedLines(slotLines, buildArea.x, buildArea.y, buildArea.width, Theme.colors.text, Theme.spacing.lineHeight, 34)
+  local purseLines = app:getPurseInspectionLines(nil)
+  table.insert(purseLines, 3, "Each flip draws a 5-coin hand. Flipped coins exhaust until the next stage.")
+  Layout.drawWrappedLines(purseLines, purseArea.x, purseArea.y, purseArea.width, Theme.colors.text, Theme.spacing.lineHeight, purseArea.height)
 
   Theme.applyColor(Theme.colors.warning)
   love.graphics.printf(self.statusMessage, layout.padding, layout.height - layout.footerMetrics.statusHeight + Theme.spacing.statusPadding, layout.width - (layout.padding * 2), "left")
 
   Button.drawButtons(self:buildActionButtons(app, layout), mouseX, mouseY)
 
-  local detailCoinId = hoveredCoinButton and hoveredCoinButton.coinId or self.detailCoinId
-
-  if detailCoinId then
-    self:drawCoinDetailOverlay(app, detailCoinId, mouseX, mouseY)
-  end
-
-  if self.dragCoinId then
-    local movedFarEnough = getDistanceSquared(self.dragStartX, self.dragStartY, mouseX, mouseY) > 64
-
-    if movedFarEnough then
-      CoinArt.draw(self.dragCoinId, mouseX - 28, mouseY - 28, 56, { selected = true, tilt = -0.06 })
-    end
-  end
 end
 
 function LoadoutState:getSlotAtPoint(x, y)
@@ -688,39 +561,11 @@ function LoadoutState:getSlotAtPoint(x, y)
 end
 
 function LoadoutState:mousepressed(app, x, y, button)
-  local layout = self:getLayout(app)
-  local collectionArea = Panel.getContentArea(layout.padding, layout.panelY, layout.contentWidth, layout.topHeight, "Choose Coin")
-  local collectionButtons = self:buildCollectionButtons(app, collectionArea)
-
-  if button == 2 then
-    local coinButton = self:getCoinButtonAtPoint(x, y)
-    self.detailCoinId = coinButton and coinButton.coinId or nil
-    return
-  end
-
   if button ~= 1 then
     return
   end
 
-  local slotIndex = self:getSlotAtPoint(x, y)
-
-  if slotIndex then
-    self:clearSelectedSlot(app, slotIndex)
-    return
-  end
-
-  local handled, _, clickedButton = Button.handleMousePressed(collectionButtons, x, y)
-
-  if handled then
-    if clickedButton and clickedButton.coinId then
-      self.dragCoinId = clickedButton.coinId
-      self.dragStartX = x
-      self.dragStartY = y
-    end
-
-    return
-  end
-
+  local layout = self:getLayout(app)
   Button.handleMousePressed(self:buildActionButtons(app, layout), x, y)
 end
 
