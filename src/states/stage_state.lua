@@ -1,5 +1,6 @@
 local Button = require("src.ui.button")
 local CoinArt = require("src.ui.coin_art")
+local Coins = require("src.content.coins")
 local Layout = require("src.ui.layout")
 local Panel = require("src.ui.panel")
 local Theme = require("src.ui.theme")
@@ -27,8 +28,12 @@ function StageState.new()
     handActionButtons = {},
     helpDialogOpen = false,
     purseDialogOpen = false,
+    logDialogOpen = false,
     coinRowReveal = nil,
     reveal = nil,
+    handCardRects = {},
+    draggingHandSlotIndex = nil,
+    draggingHandCoinId = nil,
   }, StageState)
 end
 
@@ -78,6 +83,7 @@ function StageState:startCoinRowReveal(app, batchResult)
     batchId = batchResult.batchId,
     elapsed = 0,
     revealDuration = app.config.get("ui.batchRevealDuration", 0.75),
+    displayDuration = 2.5,
     coinCount = coinCount,
   }
 end
@@ -111,11 +117,6 @@ function StageState:selectCall(app, call)
   if not self:isStageActive(app) then
     self.statusMessage = "This stage is no longer active."
     return false, "stage_not_active"
-  end
-
-  if app.stageState and app.stageState.purse and app.stageState.purse.callLocked and app.selectedCall and app.selectedCall ~= call then
-    self.statusMessage = "Call is locked after Sleight. Flip or keep the current call."
-    return false, "call_locked"
   end
 
   app.selectedCall = call
@@ -166,12 +167,30 @@ function StageState:tryResolveBatch(app)
   self:startCoinRowReveal(app, batchResult)
 
   app.selectedCall = nil
-  if app.stageState and app.stageState.purse then
-    app.stageState.purse.callLocked = false
-  end
 
   if batchResult.status == "active" then
-    app:ensureHandDrawn()
+    local _, drawWarning = app:ensureHandDrawn()
+
+    if app.stageState and app.stageState.stageStatus ~= "active" then
+      batchResult.status = app.stageState.stageStatus
+      batchResult.flipsRemaining = app.stageState.flipsRemaining
+
+      if batchResult.trace then
+        batchResult.trace.stageStatusAfter = app.stageState.stageStatus
+        batchResult.trace.flipsRemainingAfter = app.stageState.flipsRemaining
+      end
+
+      local lastHistoryBatch = app.runState and app.runState.history and app.runState.history.flipBatches[#app.runState.history.flipBatches] or nil
+
+      if lastHistoryBatch and lastHistoryBatch.batchId == batchResult.batchId and lastHistoryBatch.trace then
+        lastHistoryBatch.trace.stageStatusAfter = app.stageState.stageStatus
+        lastHistoryBatch.trace.flipsRemainingAfter = app.stageState.flipsRemaining
+      end
+
+      if drawWarning == "purse_empty" then
+        self.statusMessage = string.format("Purse empty. Stage %s.", batchResult.status)
+      end
+    end
   end
 
   if batchResult.status ~= "active" then
@@ -190,7 +209,7 @@ function StageState:trySleightSlot(app, slotIndex)
   end
 
   local ok, result = app:sleightHandSlot(slotIndex)
-  self.statusMessage = ok and string.format("Sleighted slot %d. Call locked.", slotIndex) or tostring(result)
+  self.statusMessage = ok and string.format("Sleighted slot %d.", slotIndex) or tostring(result)
   return ok, result
 end
 
@@ -203,6 +222,34 @@ function StageState:tryMoveSlot(app, slotIndex, direction)
   local ok, result = app:moveHandSlot(slotIndex, direction)
   self.statusMessage = ok and "Reordered hand." or tostring(result)
   return ok, result
+end
+
+function StageState:tryMoveSlotTo(app, fromSlotIndex, toSlotIndex)
+  if self:isRevealActive() then
+    self.statusMessage = "Reveal in progress."
+    return false, "reveal_active"
+  end
+
+  if fromSlotIndex == toSlotIndex then
+    return true
+  end
+
+  local direction = toSlotIndex > fromSlotIndex and 1 or -1
+  local currentSlotIndex = fromSlotIndex
+
+  while currentSlotIndex ~= toSlotIndex do
+    local ok, result = app:moveHandSlot(currentSlotIndex, direction)
+
+    if not ok then
+      self.statusMessage = tostring(result)
+      return false, result
+    end
+
+    currentSlotIndex = currentSlotIndex + direction
+  end
+
+  self.statusMessage = "Reordered hand."
+  return true
 end
 
 function StageState:buildButtons(app, x, y, width)
@@ -361,6 +408,25 @@ function StageState:getPurseButtonLayout()
   }
 end
 
+function StageState:getLogButtonLayout()
+  local padding = Theme.spacing.screenPadding
+  local size = 40
+  local width = love.graphics.getWidth()
+
+  return {
+    x = width - padding - (size * 3) - (Theme.spacing.itemGap * 2),
+    y = padding,
+    width = size,
+    height = size,
+    label = "L",
+    variant = self.logDialogOpen and "primary" or "default",
+    onClick = function()
+      self.logDialogOpen = not self.logDialogOpen
+      return true
+    end,
+  }
+end
+
 function StageState:getHelpDialogLines(app)
   local lines = {
     "You are trying to hit the target score before flips run out.",
@@ -379,9 +445,10 @@ function StageState:getHelpDialogLines(app)
   table.insert(lines, "Controls:")
   table.insert(lines, "- Click HEADS or TAILS: choose the call")
   table.insert(lines, "- Flip Hand / Enter: resolve the current hand")
-  table.insert(lines, "- Sleight: replace a hand slot once, then the call locks")
-  table.insert(lines, "- < / > on cards: reorder the hand")
+  table.insert(lines, "- Sleight: replace a hand slot once before flipping")
+  table.insert(lines, "- Drag coins in the hand: reorder the hand")
   table.insert(lines, "- P: inspect purse")
+  table.insert(lines, "- L: inspect flip log")
   table.insert(lines, "- Space / Enter: skip reveal")
   table.insert(lines, "- Esc: close this dialog")
 
@@ -464,6 +531,68 @@ function StageState:drawPurseDialog(app)
   Button.drawButtons({ closeButton }, mouseX, mouseY)
   love.graphics.setFont(app.fonts.body)
   Layout.drawWrappedLines(app:getPurseInspectionLines(app.stageState), contentArea.x, contentArea.y, contentArea.width, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height)
+end
+
+function StageState:drawLogDialog(app)
+  if not self.logDialogOpen then
+    return
+  end
+
+  local width = love.graphics.getWidth()
+  local height = love.graphics.getHeight()
+  local dialog = self:getHelpDialogLayout()
+  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Flip Log")
+  local closeButton = self:getHelpDialogCloseButton(dialog.x, dialog.y, dialog.width)
+  local mouseX, mouseY = love.mouse.getPosition()
+
+  closeButton.onClick = function()
+    self.logDialogOpen = false
+    return true
+  end
+
+  love.graphics.setColor(0, 0, 0, 0.50)
+  love.graphics.rectangle("fill", 0, 0, width, height)
+  Panel.draw(dialog.x, dialog.y, dialog.width, dialog.height, "Flip Log")
+  Button.drawButtons({ closeButton }, mouseX, mouseY)
+  love.graphics.setFont(app.fonts.body)
+  Layout.drawWrappedLines(app:getFlipLogLines(), contentArea.x, contentArea.y, contentArea.width, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height)
+end
+
+function StageState:drawCoinDetailOverlay(app, coinId, x, y)
+  local coin = coinId and Coins.getById(coinId) or nil
+
+  if not coin then
+    return
+  end
+
+  local width = 330
+  local height = 150
+  local screenWidth = love.graphics.getWidth()
+  local screenHeight = love.graphics.getHeight()
+  local overlayX = math.min(x + 18, screenWidth - width - Theme.spacing.screenPadding)
+  local overlayY = math.min(y + 18, screenHeight - height - Theme.spacing.screenPadding)
+
+  overlayX = math.max(Theme.spacing.screenPadding, overlayX)
+  overlayY = math.max(Theme.spacing.screenPadding, overlayY)
+
+  love.graphics.setColor(0.03, 0.04, 0.07, 0.96)
+  love.graphics.rectangle("fill", overlayX + 4, overlayY + 4, width, height)
+  love.graphics.setColor(0.08, 0.10, 0.15, 0.98)
+  love.graphics.rectangle("fill", overlayX, overlayY, width, height)
+  Theme.applyColor(Theme.colors.accent)
+  love.graphics.setLineWidth(2)
+  love.graphics.rectangle("line", overlayX, overlayY, width, height)
+  love.graphics.setLineWidth(1)
+
+  CoinArt.draw(coin, overlayX + 14, overlayY + 18, 62, { selected = true, tilt = -0.04 })
+  love.graphics.setFont(app.fonts.body)
+  Theme.applyColor(Theme.colors.text)
+  love.graphics.print(string.format("%s (%s)", coin.name, coin.rarity), overlayX + 90, overlayY + 16)
+  love.graphics.setFont(app.fonts.small)
+  Theme.applyColor(Theme.colors.mutedText)
+  love.graphics.printf(coin.description or "", overlayX + 90, overlayY + 42, width - 106, "left")
+  Theme.applyColor(Theme.colors.warning)
+  love.graphics.printf(string.format("Tags: %s", table.concat(coin.tags or {}, ", ")), overlayX + 14, overlayY + 118, width - 28, "left")
 end
 
 function StageState:getHelpDialogCloseButton(dialogX, dialogY, dialogWidth)
@@ -576,6 +705,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
     love.graphics.setFont(app.fonts.body)
     Theme.applyColor(Theme.colors.mutedText)
     love.graphics.printf("No hand drawn.", x, y + math.floor(height / 2) - 10, width, "center")
+    self.handCardRects = {}
     return
   end
 
@@ -605,6 +735,11 @@ function StageState:drawCoinRow(app, x, y, width, height)
   end
 
   self.handActionButtons = {}
+  self.handCardRects = {}
+
+  local mouseX, mouseY = love.mouse.getPosition()
+  local hoveredCoinId = nil
+  local isDraggingHandCoin = self.draggingHandSlotIndex ~= nil
 
   for index, coin in ipairs(coins) do
     local cardX = startX + ((index - 1) * (cardWidth + cardGap))
@@ -614,6 +749,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
     local artSide = nil
     local artSelected = false
     local revealAge = reveal and reveal.batchId == batchId and reveal.elapsed - ((index - 1) * (reveal.revealDuration / math.max(1, #coins))) or nil
+    local hovered = not isDraggingHandCoin and mouseX and mouseY and mouseX >= cardX and mouseX <= (cardX + cardWidth) and mouseY >= cardY and mouseY <= (cardY + cardHeight)
 
     if hasResult then
       borderColor = coin.didMatch and Theme.colors.success or Theme.colors.danger
@@ -625,14 +761,33 @@ function StageState:drawCoinRow(app, x, y, width, height)
       setColorWithAlpha(fillColor, 0.82)
     end
 
+    if hovered then
+      hoveredCoinId = coin.coinId
+    end
+
+    table.insert(self.handCardRects, {
+      x = cardX,
+      y = cardY,
+      width = cardWidth,
+      height = cardHeight,
+      slotIndex = coin.slotIndex or index,
+      coinId = coin.coinId,
+      movable = not hasResult and self:isStageActive(app) and not self:isRevealActive(),
+    })
+
     love.graphics.rectangle("fill", cardX, cardY, cardWidth, cardHeight, 12, 12)
     Theme.applyColor(borderColor)
-    love.graphics.setLineWidth(hasResult and 2 or 1)
+    love.graphics.setLineWidth((hasResult or hovered) and 2 or 1)
     love.graphics.rectangle("line", cardX, cardY, cardWidth, cardHeight, 12, 12)
     love.graphics.setLineWidth(1)
 
     local coinSize = math.min(84, math.max(58, math.floor(cardWidth * 0.46)))
-    CoinArt.draw(coin.coinId, cardX + math.floor((cardWidth - coinSize) / 2), cardY + 34, coinSize, {
+
+    love.graphics.setFont(app.fonts.small)
+    Theme.applyColor(Theme.colors.text)
+    love.graphics.printf(app:getCoinName(coin.coinId), cardX + 8, cardY + 12, cardWidth - 16, "center")
+
+    CoinArt.draw(coin.coinId, cardX + math.floor((cardWidth - coinSize) / 2), cardY + 38, coinSize, {
       side = artSide,
       selected = artSelected,
       alpha = hasResult and 1.0 or 0.72,
@@ -642,10 +797,6 @@ function StageState:drawCoinRow(app, x, y, width, height)
     if hasResult and coin.didMatch and revealAge and revealAge >= 0 and revealAge <= 0.42 then
       self:drawMatchParticles(cardX, cardY, cardWidth, cardHeight, revealAge)
     end
-
-    love.graphics.setFont(app.fonts.small)
-    Theme.applyColor(Theme.colors.text)
-    love.graphics.printf(app:getCoinName(coin.coinId), cardX + 8, cardY + cardHeight - 60, cardWidth - 16, "center")
 
     if hasResult then
       Theme.applyColor(coin.didMatch and Theme.colors.success or Theme.colors.mutedText)
@@ -657,25 +808,11 @@ function StageState:drawCoinRow(app, x, y, width, height)
       end
     else
       Theme.applyColor(Theme.colors.mutedText)
-      love.graphics.printf(coin.sleightUsed and "sleight used" or "ready", cardX + 8, cardY + cardHeight - 58, cardWidth - 16, "center")
-
-      local smallGap = 4
-      local smallButtonWidth = math.floor((cardWidth - 16 - (smallGap * 2)) / 3)
+      local smallButtonWidth = math.min(56, cardWidth - 16)
       local smallButtonY = cardY + cardHeight - 34
       local buttons = {
         {
-          x = cardX + 8,
-          y = smallButtonY,
-          width = smallButtonWidth,
-          height = 24,
-          label = "<",
-          disabled = index == 1,
-          onClick = function()
-            return self:tryMoveSlot(app, index, -1)
-          end,
-        },
-        {
-          x = cardX + 8 + smallButtonWidth + smallGap,
+          x = cardX + math.floor((cardWidth - smallButtonWidth) / 2),
           y = smallButtonY,
           width = smallButtonWidth,
           height = 24,
@@ -683,18 +820,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
           variant = "warning",
           disabled = coin.sleightUsed,
           onClick = function()
-            return self:trySleightSlot(app, index)
-          end,
-        },
-        {
-          x = cardX + 8 + ((smallButtonWidth + smallGap) * 2),
-          y = smallButtonY,
-          width = smallButtonWidth,
-          height = 24,
-          label = ">",
-          disabled = index == #coins,
-          onClick = function()
-            return self:tryMoveSlot(app, index, 1)
+            return self:trySleightSlot(app, coin.slotIndex or index)
           end,
         },
       }
@@ -705,6 +831,12 @@ function StageState:drawCoinRow(app, x, y, width, height)
 
       Button.drawButtons(buttons, love.mouse.getPosition())
     end
+  end
+
+  if self.draggingHandCoinId then
+    CoinArt.draw(self.draggingHandCoinId, mouseX - 32, mouseY - 32, 64, { selected = true, alpha = 0.86, tilt = -0.08 })
+  elseif hoveredCoinId then
+    self:drawCoinDetailOverlay(app, hoveredCoinId, mouseX, mouseY)
   end
 end
 
@@ -733,13 +865,27 @@ function StageState:drawMatchParticles(cardX, cardY, cardWidth, cardHeight, age)
   end
 end
 
+function StageState:getHandCardAtPoint(x, y)
+  for _, rect in ipairs(self.handCardRects or {}) do
+    if x >= rect.x and x <= (rect.x + rect.width) and y >= rect.y and y <= (rect.y + rect.height) then
+      return rect
+    end
+  end
+
+  return nil
+end
+
 function StageState:enter(app)
   app:ensureCurrentStage()
   app.selectedCall = nil
   app:ensureHandDrawn()
   self.reveal = nil
+  self.coinRowReveal = nil
+  self.draggingHandSlotIndex = nil
+  self.draggingHandCoinId = nil
   self.helpDialogOpen = false
   self.purseDialogOpen = false
+  self.logDialogOpen = false
   self.statusMessage = "Review your hand, then pick HEADS or TAILS."
 end
 
@@ -747,7 +893,7 @@ function StageState:update(app, dt)
   if self.coinRowReveal then
     self.coinRowReveal.elapsed = self.coinRowReveal.elapsed + dt
 
-    if self.coinRowReveal.elapsed >= self.coinRowReveal.revealDuration + 0.45 then
+    if self.coinRowReveal.elapsed >= self.coinRowReveal.displayDuration then
       self.coinRowReveal = nil
     end
   end
@@ -840,20 +986,21 @@ function StageState:drawRevealOverlay(app)
     love.graphics.rectangle("line", cardX, cardY, cardWidth, cardHeight, 10, 10)
     love.graphics.setLineWidth(1)
 
-    CoinArt.draw(coin.coinId, cardX + math.floor((cardWidth - 38) / 2), cardY + 28, 38, {
+    love.graphics.setFont(app.fonts.small)
+    Theme.applyColor(Theme.colors.text)
+    love.graphics.printf(app:getCoinName(coin.coinId), cardX + 8, cardY + 10, cardWidth - 16, "center")
+
+    CoinArt.draw(coin.coinId, cardX + math.floor((cardWidth - 38) / 2), cardY + 34, 38, {
       side = revealed and coin.result or nil,
       selected = revealed and coin.didMatch,
       alpha = revealed and 1.0 or 0.55,
       tilt = revealed and ((index % 2 == 0) and 0.10 or -0.10) or 0,
     })
-    love.graphics.setFont(app.fonts.small)
-    Theme.applyColor(Theme.colors.text)
-    love.graphics.printf(app:getCoinName(coin.coinId), cardX + 8, cardY + 68, cardWidth - 16, "center")
 
     if revealed then
       love.graphics.setFont(app.fonts.small)
       Theme.applyColor(coin.didMatch and Theme.colors.success or Theme.colors.mutedText)
-      love.graphics.printf(coin.didMatch and "MATCH" or "MISS", cardX + 10, cardY + 86, cardWidth - 20, "center")
+      love.graphics.printf(coin.didMatch and "MATCH" or "MISS", cardX + 10, cardY + 78, cardWidth - 20, "center")
 
       if coin.forcedResult then
         Theme.applyColor(Theme.colors.warning)
@@ -869,6 +1016,14 @@ function StageState:drawRevealOverlay(app)
 end
 
 function StageState:keypressed(app, key)
+  if self.logDialogOpen then
+    if key == "escape" or key == "return" or key == "kpenter" or key == "l" then
+      self.logDialogOpen = false
+    end
+
+    return
+  end
+
   if self.purseDialogOpen then
     if key == "escape" or key == "return" or key == "kpenter" or key == "p" then
       self.purseDialogOpen = false
@@ -892,6 +1047,11 @@ function StageState:keypressed(app, key)
 
   if key == "p" then
     self.purseDialogOpen = true
+    return
+  end
+
+  if key == "l" then
+    self.logDialogOpen = true
     return
   end
 
@@ -1039,9 +1199,10 @@ function StageState:draw(app)
   Button.drawButtons(self:buildBetButtons(app, buttonLayout.x, betButtonY, buttonLayout.width), mouseX, mouseY)
   Button.drawButtons(self:buildButtons(app, buttonLayout.x, buttonLayout.y, buttonLayout.width), mouseX, mouseY)
 
-  Button.drawButtons({ self:getPurseButtonLayout(), self:getHelpButtonLayout() }, mouseX, mouseY)
+  Button.drawButtons({ self:getLogButtonLayout(), self:getPurseButtonLayout(), self:getHelpButtonLayout() }, mouseX, mouseY)
   self:drawHelpDialog(app)
   self:drawPurseDialog(app)
+  self:drawLogDialog(app)
 end
 
 function StageState:mousepressed(app, x, y, button)
@@ -1050,6 +1211,23 @@ function StageState:mousepressed(app, x, y, button)
   end
 
   local handled = false
+
+  if self.logDialogOpen then
+    local dialog = self:getHelpDialogLayout()
+    local closeButton = self:getHelpDialogCloseButton(dialog.x, dialog.y, dialog.width)
+    closeButton.onClick = function()
+      self.logDialogOpen = false
+      return true
+    end
+
+    handled = Button.handleMousePressed({ closeButton }, x, y)
+
+    if not handled and (x < dialog.x or x > dialog.x + dialog.width or y < dialog.y or y > dialog.y + dialog.height) then
+      self.logDialogOpen = false
+    end
+
+    return
+  end
 
   if self.purseDialogOpen then
     local dialog = self:getHelpDialogLayout()
@@ -1080,7 +1258,7 @@ function StageState:mousepressed(app, x, y, button)
     return
   end
 
-  handled = Button.handleMousePressed({ self:getPurseButtonLayout(), self:getHelpButtonLayout() }, x, y)
+  handled = Button.handleMousePressed({ self:getLogButtonLayout(), self:getPurseButtonLayout(), self:getHelpButtonLayout() }, x, y)
 
   if handled then
     return
@@ -1088,6 +1266,14 @@ function StageState:mousepressed(app, x, y, button)
 
   local buttonLayout = self:getButtonLayout(app)
   if Button.handleMousePressed(self.handActionButtons, x, y) then
+    return
+  end
+
+  local handCard = self:getHandCardAtPoint(x, y)
+
+  if handCard and handCard.movable then
+    self.draggingHandSlotIndex = handCard.slotIndex
+    self.draggingHandCoinId = handCard.coinId
     return
   end
 
@@ -1099,6 +1285,22 @@ function StageState:mousepressed(app, x, y, button)
   end
 
   Button.handleMousePressed(self:buildButtons(app, buttonLayout.x, buttonLayout.y, buttonLayout.width), x, y)
+end
+
+function StageState:mousereleased(app, x, y, button)
+  if button ~= 1 or not self.draggingHandSlotIndex then
+    return
+  end
+
+  local fromSlotIndex = self.draggingHandSlotIndex
+  self.draggingHandSlotIndex = nil
+  self.draggingHandCoinId = nil
+
+  local targetCard = self:getHandCardAtPoint(x, y)
+
+  if targetCard and targetCard.movable and targetCard.slotIndex ~= fromSlotIndex then
+    self:tryMoveSlotTo(app, fromSlotIndex, targetCard.slotIndex)
+  end
 end
 
 return StageState

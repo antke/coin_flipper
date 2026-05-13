@@ -1419,17 +1419,12 @@ function Game:sleightHandSlot(slotIndex)
     return false, "run or stage has not been initialized"
   end
 
-  if not self.selectedCall then
-    return false, "choose_call_before_sleight"
-  end
-
-  local ok, result = PurseSystem.sleightSlot(self.runState, self.stageState, slotIndex, self.runRng, self.selectedCall)
+  local ok, result = PurseSystem.sleightSlot(self.runState, self.stageState, slotIndex, self.runRng)
 
   if not ok then
     return false, result
   end
 
-  self.stageState.purse.callLocked = true
   self.runState.counters.totalSleights = (self.runState.counters.totalSleights or 0) + 1
   self:assertRuntimeInvariants("game.sleightHandSlot", { history = true })
   self:saveActiveRun("sleight_hand_slot", "stage")
@@ -1817,6 +1812,25 @@ function Game:finalizeCurrentStage()
   return stageRecord, finalizeMeta
 end
 
+function Game:ensureDirectShopHistoryData()
+  if not self.lastStageResult then
+    return
+  end
+
+  if self.lastStageResult.rewardOptions == nil then
+    RunHistorySystem.recordStageRewardPreview(self.lastStageResult, { options = {} })
+  end
+
+  if self.lastStageResult.encounter == nil then
+    RunHistorySystem.recordStageEncounterPreview(self.lastStageResult, {
+      encounterId = "direct_shop",
+      name = "Direct Shop",
+      description = "No encounter is active for this stop.",
+      choices = {},
+    })
+  end
+end
+
 function Game:prepareShopOffers()
   if not self.runState then
     return false, "run_not_initialized"
@@ -1829,6 +1843,8 @@ function Game:prepareShopOffers()
   if self.lastStageResult.stageType == "boss" then
     return false, "boss_stage_has_no_shop"
   end
+
+  self:ensureDirectShopHistoryData()
 
   local shopFlow = self:createShopFlow()
   self:applyShopFlow(shopFlow)
@@ -3625,6 +3641,89 @@ function Game:getLastBatchSummaryLines(limit)
 
   for _, warning in ipairs(batchResult.trace and batchResult.trace.warnings or {}) do
     table.insert(lines, "Warning: " .. tostring(warning))
+  end
+
+  if limit and #lines > limit then
+    local trimmed = {}
+    for index = 1, limit do
+      trimmed[index] = lines[index]
+    end
+    return trimmed
+  end
+
+  return lines
+end
+
+local function formatWeightPair(headsWeight, tailsWeight)
+  return string.format("H%.2f / T%.2f", headsWeight or 0, tailsWeight or 0)
+end
+
+local function formatScoreValue(value)
+  local numericValue = tonumber(value) or 0
+
+  if math.abs(numericValue - math.floor(numericValue + 0.00001)) < 0.00001 then
+    return string.format("%d", math.floor(numericValue + 0.00001))
+  end
+
+  return string.format("%.2f", numericValue)
+end
+
+function Game:getFlipLogLines(limit)
+  local batchResult = self.lastBatchResult
+
+  if not batchResult then
+    return { "No flip logged yet." }
+  end
+
+  local lines = {}
+  local coinNames = {}
+  local perCoinScore = {}
+
+  for _, scoreEntry in ipairs(batchResult.scoreBreakdown and batchResult.scoreBreakdown.perCoin or {}) do
+    perCoinScore[scoreEntry.resolutionIndex or #perCoinScore + 1] = scoreEntry
+  end
+
+  for _, coinState in ipairs(batchResult.perCoin or {}) do
+    table.insert(coinNames, self:getCoinName(coinState.coinId))
+  end
+
+  table.insert(lines, string.format("Batch %d | call %s", batchResult.batchId or 0, string.upper(batchResult.call or "?")))
+  table.insert(lines, "Coins used: " .. (#coinNames > 0 and table.concat(coinNames, ", ") or "none"))
+  table.insert(lines, "")
+
+  for index, coinState in ipairs(batchResult.perCoin or {}) do
+    local scoreEntry = perCoinScore[coinState.resolutionIndex or index] or {}
+    local headsWeight = coinState.headsWeight or 0
+    local tailsWeight = coinState.tailsWeight or 0
+    local totalWeight = math.max(headsWeight + tailsWeight, 0.00001)
+    local outcome = string.upper(coinState.result or "?")
+    local matchLabel = coinState.result == batchResult.call and "MATCH" or "MISS"
+
+    table.insert(lines, string.format(
+      "%d. %s @ slot %s / order %s",
+      index,
+      self:getCoinName(coinState.coinId),
+      tostring(coinState.slotIndex or "?"),
+      tostring(coinState.resolutionIndex or "?")
+    ))
+    table.insert(lines, string.format(
+      "   basic weight: %s | final weight: %s",
+      formatWeightPair(coinState.baseHeadsWeight or scoreEntry.baseHeadsWeight or headsWeight, coinState.baseTailsWeight or scoreEntry.baseTailsWeight or tailsWeight),
+      formatWeightPair(headsWeight, tailsWeight)
+    ))
+
+    if math.abs(totalWeight - 1.0) > 0.00001 then
+      table.insert(lines, string.format("   probability: HEADS %.1f%% / TAILS %.1f%%", (headsWeight / totalWeight) * 100, (tailsWeight / totalWeight) * 100))
+    end
+
+    table.insert(lines, string.format(
+      "   base score: %s | final score: %s | outcome: %s %s%s",
+      formatScoreValue(scoreEntry.baseScoreContribution),
+      formatScoreValue(scoreEntry.finalScoreContribution),
+      outcome,
+      matchLabel,
+      coinState.forcedResult and " [FORCED]" or ""
+    ))
   end
 
   if limit and #lines > limit then

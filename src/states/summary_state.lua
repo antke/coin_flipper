@@ -22,7 +22,7 @@ function SummaryState:enter(app, payload, previousName)
 
   app:showFeedback(
     won and "success" or "danger",
-    won and "Run Won" or "Run Ended",
+    won and "Run Won" or "Game Over",
     won and "The table is yours. Review the run summary below." or "The run is over. Review the run summary below.",
     {
       duration = 1.5,
@@ -97,7 +97,8 @@ end
 
 function SummaryState:draw(app)
   local summary = app:buildSummary()
-  local color = summary.runStatus == "won" and Theme.colors.success or Theme.colors.text
+  local won = summary.runStatus == "won"
+  local color = won and Theme.colors.success or Theme.colors.danger
   local padding = Theme.spacing.screenPadding
   local gap = Theme.spacing.blockGap
   local width = love.graphics.getWidth()
@@ -112,7 +113,7 @@ function SummaryState:draw(app)
   local historyPanelHeight = math.max(140, footerMetrics.contentBottomY - historyPanelY)
 
   love.graphics.setFont(app.fonts.title)
-  Layout.centeredText("Run Summary", 76, app.fonts.title, color)
+  Layout.centeredText(won and "Run Won" or "Game Over", 76, app.fonts.title, color)
 
   Panel.draw(statsPanelX, statsPanelY, statsPanelWidth, statsPanelHeight, "Summary")
   Panel.draw(statsPanelX, historyPanelY, statsPanelWidth, historyPanelHeight, "Stage History")

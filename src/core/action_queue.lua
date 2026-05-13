@@ -187,6 +187,56 @@ local function cloneQueuedActions(actionList)
   return cloned
 end
 
+local function getCoinWeightTargets(context, action)
+  if action.target == "left_neighbor"
+    or action.target == "right_neighbor"
+    or action.target == "neighbors"
+    or action.target == "self_and_left_neighbor"
+    or action.target == "self_and_right_neighbor"
+    or action.target == "self_and_neighbors" then
+    local targets = {}
+    local sourceIndex = action.resolutionIndex or action.slotIndex or (context.currentCoin and (context.currentCoin.resolutionIndex or context.currentCoin.slotIndex))
+
+    if not sourceIndex then
+      return targets
+    end
+
+    for _, coinState in ipairs(context.perCoin or {}) do
+      local coinIndex = coinState.resolutionIndex or coinState.slotIndex
+      local targetsSelf = action.target == "self_and_left_neighbor" or action.target == "self_and_right_neighbor" or action.target == "self_and_neighbors"
+      local targetsLeft = action.target == "left_neighbor" or action.target == "neighbors" or action.target == "self_and_left_neighbor" or action.target == "self_and_neighbors"
+      local targetsRight = action.target == "right_neighbor" or action.target == "neighbors" or action.target == "self_and_right_neighbor" or action.target == "self_and_neighbors"
+      local isSelf = targetsSelf and coinIndex == sourceIndex
+      local isLeftNeighbor = targetsLeft and coinIndex == sourceIndex - 1
+      local isRightNeighbor = targetsRight and coinIndex == sourceIndex + 1
+
+      if isSelf or isLeftNeighbor or isRightNeighbor then
+        table.insert(targets, coinState)
+      end
+    end
+
+    return targets
+  end
+
+  if context.currentCoin then
+    return { context.currentCoin }
+  end
+
+  if action.coinId then
+    local targets = {}
+
+    for _, coinState in ipairs(context.perCoin or {}) do
+      if coinState.coinId == action.coinId then
+        table.insert(targets, coinState)
+      end
+    end
+
+    return targets
+  end
+
+  return context.perCoin or {}
+end
+
 local function validateQueuedActions(actionList)
   if type(actionList) ~= "table" then
     return false, "queue_actions requires actions table"
@@ -386,6 +436,16 @@ function ActionQueue.validateAction(action)
 
     if type(action.amount) ~= "number" then
       return false, "modify_coin_weight requires numeric amount"
+    end
+
+    if action.target ~= nil
+      and action.target ~= "left_neighbor"
+      and action.target ~= "right_neighbor"
+      and action.target ~= "neighbors"
+      and action.target ~= "self_and_left_neighbor"
+      and action.target ~= "self_and_right_neighbor"
+      and action.target ~= "self_and_neighbors" then
+      return false, "modify_coin_weight target must be left_neighbor|right_neighbor|neighbors|self_and_left_neighbor|self_and_right_neighbor|self_and_neighbors"
     end
   end
 
@@ -625,19 +685,7 @@ function ActionQueue.apply(runState, stageState, context, action)
     appliedAction.appliedAmount = scaledAmount
     table.insert(context.scoreBreakdown.shopPointChanges, appliedAction)
   elseif action.op == "modify_coin_weight" then
-    local targets = {}
-
-    if context.currentCoin then
-      targets = { context.currentCoin }
-    elseif action.coinId then
-      for _, coinState in ipairs(context.perCoin or {}) do
-        if coinState.coinId == action.coinId then
-          table.insert(targets, coinState)
-        end
-      end
-    else
-      targets = context.perCoin or {}
-    end
+    local targets = getCoinWeightTargets(context, action)
 
     for _, coinState in ipairs(targets) do
       local fieldName = action.side .. "Weight"

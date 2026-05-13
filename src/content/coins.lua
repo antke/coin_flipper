@@ -383,6 +383,36 @@ local definitions = {
     },
   },
   {
+    id = "left_lift",
+    name = "Left Lift",
+    rarity = "uncommon",
+    description = "Before rolling, this coin and the coin to the left gain +0.20 Heads weight.",
+    tags = { "neighbor", "heads", "weight" },
+    triggers = {
+      {
+        hook = "before_coin_roll",
+        effects = {
+          { op = "modify_coin_weight", side = "heads", amount = 0.20, target = "self_and_left_neighbor" },
+        },
+      },
+    },
+  },
+  {
+    id = "right_drift",
+    name = "Right Drift",
+    rarity = "uncommon",
+    description = "Before rolling, this coin and the coin to the right gain +0.20 Tails weight.",
+    tags = { "neighbor", "tails", "weight" },
+    triggers = {
+      {
+        hook = "before_coin_roll",
+        effects = {
+          { op = "modify_coin_weight", side = "tails", amount = 0.20, target = "self_and_right_neighbor" },
+        },
+      },
+    },
+  },
+  {
     id = "glass_nickel",
     name = "Glass Nickel",
     rarity = "rare",

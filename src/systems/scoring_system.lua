@@ -3,20 +3,28 @@ local ScoringSystem = {}
 function ScoringSystem.buildScoreActions(context)
   local actions = {}
   local matchCount = 0
+  local coinBreakdownEntries = {}
 
   for _, coinState in ipairs(context.perCoin or {}) do
     local didMatch = coinState.result == context.call
 
-    table.insert(context.scoreBreakdown.perCoin, {
+    local entry = {
       coinId = coinState.coinId,
+      slotIndex = coinState.slotIndex,
+      resolutionIndex = coinState.resolutionIndex,
       result = coinState.result,
       call = context.call,
       matched = didMatch,
       baseScoreContribution = didMatch and 1 or 0,
+      baseHeadsWeight = coinState.baseHeadsWeight,
+      baseTailsWeight = coinState.baseTailsWeight,
       headsWeight = coinState.headsWeight,
       tailsWeight = coinState.tailsWeight,
       rngRoll = coinState.rngRoll,
-    })
+    }
+
+    table.insert(coinBreakdownEntries, entry)
+    table.insert(context.scoreBreakdown.perCoin, entry)
 
     if coinState.result == context.call then
       matchCount = matchCount + 1
@@ -35,6 +43,10 @@ function ScoringSystem.buildScoreActions(context)
   context.scoreBreakdown.baseScore = baseScore
   context.scoreBreakdown.preMultiplierScore = baseScore
   context.scoreBreakdown.finalBaseScore = finalScore
+
+  for _, entry in ipairs(coinBreakdownEntries) do
+    entry.finalScoreContribution = entry.matched and (matchCount > 0 and finalScore / matchCount or 0) or 0
+  end
 
   if finalScore > 0 then
     table.insert(actions, {
