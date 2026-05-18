@@ -1,13 +1,14 @@
 local Button = require("src.ui.button")
 local Layout = require("src.ui.layout")
 local Panel = require("src.ui.panel")
+local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
 
 local SECTIONS = {
   {
     title = "Run Objective",
     lines = {
-      "Call Heads or Tails, then flip your equipped coins.",
+      "Call Heads or Tails, then flip your " .. Terminology.getTermPlural("active_coin") .. ".",
       "Clear stages, improve the run, and beat the final boss.",
     },
   },

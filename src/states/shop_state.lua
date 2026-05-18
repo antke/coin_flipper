@@ -3,7 +3,9 @@ local CoinArt = require("src.ui.coin_art")
 local Coins = require("src.content.coins")
 local Layout = require("src.ui.layout")
 local Panel = require("src.ui.panel")
+local PurseView = require("src.ui.purse_view")
 local ShopSystem = require("src.systems.shop_system")
+local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
 
 local ShopState = {}
@@ -15,6 +17,8 @@ function ShopState.new()
     offerButtons = {},
     footerButtons = {},
     purseDialogOpen = false,
+    purseScrollButtons = {},
+    purseScrollOffset = 0,
   }, ShopState)
 end
 
@@ -181,6 +185,7 @@ function ShopState:buildFooterButtons(app, layout)
       label = "Inspect Purse",
       variant = "default",
       onClick = function()
+        self.purseScrollOffset = 0
         self.purseDialogOpen = true
         return true
       end,
@@ -203,6 +208,7 @@ end
 
 function ShopState:enter(app)
   self.purseDialogOpen = false
+  self.purseScrollOffset = 0
   self.statusMessage = "Choose an offer, reroll, or continue."
 end
 
@@ -237,6 +243,15 @@ function ShopState:getPurseCloseButton(dialog)
   }
 end
 
+function ShopState:scrollPurse(app, direction)
+  local dialog = self:getPurseDialogLayout()
+  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
+  local maxScrollOffset = PurseView.getMaxScrollOffset(app, contentArea, nil)
+
+  self.purseScrollOffset = math.max(0, math.min((self.purseScrollOffset or 0) + direction, maxScrollOffset))
+  return true
+end
+
 function ShopState:drawPurseDialog(app)
   if not self.purseDialogOpen then
     return
@@ -252,14 +267,34 @@ function ShopState:drawPurseDialog(app)
   love.graphics.rectangle("fill", 0, 0, width, height)
   Panel.draw(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
   Button.drawButtons({ self:getPurseCloseButton(dialog) }, mouseX, mouseY)
-  love.graphics.setFont(app.fonts.body)
-  Layout.drawWrappedLines(app:getPurseInspectionLines(nil), contentArea.x, contentArea.y, contentArea.width, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height)
+  local maxPurseScrollOffset = PurseView.getMaxScrollOffset(app, contentArea, nil)
+  self.purseScrollOffset = math.max(0, math.min(self.purseScrollOffset or 0, maxPurseScrollOffset))
+
+  PurseView.draw(app, contentArea, nil, {
+    scrollOffset = self.purseScrollOffset,
+  })
+  self.purseScrollButtons = PurseView.getScrollButtons(
+    contentArea,
+    self.purseScrollOffset,
+    maxPurseScrollOffset,
+    function()
+      return self:scrollPurse(app, -1)
+    end,
+    function()
+      return self:scrollPurse(app, 1)
+    end
+  )
+  Button.drawButtons(self.purseScrollButtons, mouseX, mouseY)
 end
 
 function ShopState:keypressed(app, key)
   if self.purseDialogOpen then
     if key == "escape" or key == "p" or key == "return" or key == "kpenter" then
       self.purseDialogOpen = false
+    elseif key == "up" then
+      self:scrollPurse(app, -1)
+    elseif key == "down" then
+      self:scrollPurse(app, 1)
     end
 
     return
@@ -280,6 +315,7 @@ function ShopState:keypressed(app, key)
   end
 
   if key == "p" then
+    self.purseScrollOffset = 0
     self.purseDialogOpen = true
     return
   end
@@ -351,7 +387,7 @@ function ShopState:draw(app)
       string.format("Rarity: %s", offer.rarity),
       string.format("Price: %d chips", offer.price),
       "",
-      app:getOfferDescription(offer),
+      Terminology.getMechanicRichText(app:getOfferDescription(offer)),
     }
 
     if offer.type == "coin" then
@@ -370,6 +406,20 @@ function ShopState:draw(app)
   self:drawPurseDialog(app)
 end
 
+function ShopState:wheelmoved(app, _, y)
+  if not self.purseDialogOpen or y == 0 then
+    return
+  end
+
+  local mouseX, mouseY = love.mouse.getPosition()
+  local dialog = self:getPurseDialogLayout()
+  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
+
+  if Button.containsPoint(contentArea, mouseX, mouseY) then
+    self:scrollPurse(app, y > 0 and -1 or 1)
+  end
+end
+
 function ShopState:mousepressed(app, x, y, button)
   if button ~= 1 then
     return
@@ -381,6 +431,10 @@ function ShopState:mousepressed(app, x, y, button)
     local dialog = self:getPurseDialogLayout()
 
     if Button.handleMousePressed({ self:getPurseCloseButton(dialog) }, x, y) then
+      return
+    end
+
+    if Button.handleMousePressed(self.purseScrollButtons, x, y) then
       return
     end
 

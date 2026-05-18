@@ -230,7 +230,7 @@ runCheck("transcript_trailing_stage_rejected", function()
 end)
 
 runCheck("active_run_encounter_roundtrip", function()
-  local result = SimulationSystem.simulateRun({ seed = 2 })
+  local result = SimulationSystem.simulateRun({ seed = 5 })
   local stageRecord = nil
   local stageHistoryIndex = nil
 
@@ -383,7 +383,7 @@ runCheck("active_run_encounter_roundtrip", function()
 end)
 
 runCheck("active_run_shop_snapshot", function()
-  local result = SimulationSystem.simulateRun({ seed = 92 })
+  local result = SimulationSystem.simulateRun({ seed = 5 })
   local stageRecord = nil
   local stageHistoryIndex = nil
   local shopVisit = nil

@@ -3,6 +3,8 @@ local CoinArt = require("src.ui.coin_art")
 local Coins = require("src.content.coins")
 local Layout = require("src.ui.layout")
 local Panel = require("src.ui.panel")
+local PurseView = require("src.ui.purse_view")
+local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
 
 local StageState = {}
@@ -28,7 +30,11 @@ function StageState.new()
     handActionButtons = {},
     helpDialogOpen = false,
     purseDialogOpen = false,
+    purseDialogScrollOffset = 0,
+    purseScrollButtons = {},
     logDialogOpen = false,
+    logDialogScrollOffset = 0,
+    logScrollButtons = {},
     coinRowReveal = nil,
     reveal = nil,
     handCardRects = {},
@@ -71,7 +77,6 @@ function StageState:startReveal(app, batchResult)
     shopPoints = batchResult.shopPoints,
     flipsRemaining = batchResult.flipsRemaining,
     stageDelta = batchResult.scoreBreakdown and batchResult.scoreBreakdown.totalStageScoreDelta or 0,
-    betResult = batchResult.betResult,
     coins = coins,
   }
 end
@@ -157,8 +162,10 @@ function StageState:tryResolveBatch(app)
   end
 
   self.statusMessage = string.format(
-    "Resolved batch %d. Stage score %d/%d. Flips remaining: %d.",
+    "Resolved %s %d. %s %d/%d. Flips remaining: %d.",
+    Terminology.getTermLower("flip"),
     batchResult.batchId,
+    Terminology.getTermLabel("stage_score"),
     app.stageState.stageScore,
     app.stageState.targetScore,
     app.stageState.flipsRemaining
@@ -319,45 +326,6 @@ function StageState:buildButtons(app, x, y, width)
   return self.buttons
 end
 
-function StageState:buildBetButtons(app, x, y, width)
-  local bets = app:getBetOptions()
-  local gap = Theme.spacing.itemGap
-  local buttonCount = math.max(1, #bets)
-  local buttonWidth = math.floor((width - (gap * (buttonCount - 1))) / buttonCount)
-  local buttonHeight = 34
-  local stageActive = self:isStageActive(app)
-  local revealActive = self:isRevealActive()
-  local selectedBet = app:getSelectedBet()
-  local buttons = {}
-
-  for index, bet in ipairs(bets) do
-    local canSelect = app:canSelectBet(bet.id)
-    local label = bet.shortLabel or string.upper(bet.name or bet.id)
-
-    if bet.stake and bet.stake > 0 then
-      label = string.format("%s (-%d/+%d)", label, bet.stake, bet.winAmount or 0)
-    end
-
-    table.insert(buttons, {
-      x = x + ((index - 1) * (buttonWidth + gap)),
-      y = y,
-      width = buttonWidth,
-      height = buttonHeight,
-      label = label,
-      variant = selectedBet and selectedBet.id == bet.id and "accent" or "default",
-      focused = selectedBet and selectedBet.id == bet.id,
-      disabled = not stageActive or revealActive or not canSelect,
-      onClick = function()
-        local ok, result = app:selectBet(bet.id)
-        self.statusMessage = ok and string.format("Selected bet: %s.", result.name or bet.name or bet.id) or tostring(result)
-        return ok, result
-      end,
-    })
-  end
-
-  return buttons
-end
-
 function StageState:getButtonLayout(app)
   local padding = Theme.spacing.screenPadding
   local width = love.graphics.getWidth()
@@ -402,10 +370,23 @@ function StageState:getPurseButtonLayout()
     label = "P",
     variant = self.purseDialogOpen and "primary" or "default",
     onClick = function()
+      if not self.purseDialogOpen then
+        self.purseDialogScrollOffset = 0
+      end
+
       self.purseDialogOpen = not self.purseDialogOpen
       return true
     end,
   }
+end
+
+function StageState:scrollPurseDialog(app, direction)
+  local dialog = self:getHelpDialogLayout()
+  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
+  local maxScrollOffset = PurseView.getMaxScrollOffset(app, contentArea, app.stageState)
+
+  self.purseDialogScrollOffset = math.max(0, math.min((self.purseDialogScrollOffset or 0) + direction, maxScrollOffset))
+  return true
 end
 
 function StageState:getLogButtonLayout()
@@ -421,18 +402,91 @@ function StageState:getLogButtonLayout()
     label = "L",
     variant = self.logDialogOpen and "primary" or "default",
     onClick = function()
+      if not self.logDialogOpen then
+        self.logDialogScrollOffset = 0
+      end
+
       self.logDialogOpen = not self.logDialogOpen
       return true
     end,
   }
 end
 
+function StageState:getWrappedLogLineCount(lines, width)
+  local font = love.graphics.getFont()
+  local totalLineCount = 0
+
+  for _, line in ipairs(lines or {}) do
+    local content = tostring(line or "")
+
+    if content == "" then
+      totalLineCount = totalLineCount + 1
+    else
+      local _, wrapped = font:getWrap(content, width)
+      totalLineCount = totalLineCount + math.max(1, #wrapped)
+    end
+  end
+
+  return totalLineCount
+end
+
+function StageState:getLogMaxScrollOffset(lines, contentArea)
+  local visibleLineCount = math.max(1, math.floor(contentArea.height / Theme.spacing.lineHeight))
+  local totalLineCount = self:getWrappedLogLineCount(lines, contentArea.width)
+
+  return math.max(0, totalLineCount - visibleLineCount)
+end
+
+function StageState:scrollLogDialog(app, direction)
+  love.graphics.setFont(app.fonts.body)
+
+  local dialog = self:getHelpDialogLayout()
+  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Flip Log")
+  local maxScrollOffset = self:getLogMaxScrollOffset(app:getFlipLogLines(), contentArea)
+
+  self.logDialogScrollOffset = math.max(0, math.min((self.logDialogScrollOffset or 0) + direction, maxScrollOffset))
+  return true
+end
+
+function StageState:drawLogLines(lines, contentArea, scrollOffset)
+  local font = love.graphics.getFont()
+  local lineHeight = Theme.spacing.lineHeight
+  local currentY = contentArea.y
+  local visualLineIndex = 0
+
+  Theme.applyColor(Theme.colors.text)
+
+  for _, line in ipairs(lines or {}) do
+    local content = tostring(line or "")
+    local wrapped = nil
+
+    if content == "" then
+      wrapped = { "" }
+    else
+      local _, wrappedLines = font:getWrap(content, contentArea.width)
+      wrapped = wrappedLines
+    end
+
+    for _, wrappedLine in ipairs(wrapped) do
+      visualLineIndex = visualLineIndex + 1
+
+      if visualLineIndex > scrollOffset then
+        if currentY + lineHeight > contentArea.y + contentArea.height then
+          return
+        end
+
+        love.graphics.printf(wrappedLine, contentArea.x, currentY, contentArea.width, "left")
+        currentY = currentY + lineHeight
+      end
+    end
+  end
+end
+
 function StageState:getHelpDialogLines(app)
   local lines = {
     "You are trying to hit the target score before flips run out.",
     "Review the drawn hand, pick HEADS or TAILS, then flip the hand in order.",
-    "Stage score also becomes chips for the shop.",
-    "Optional bets can add or lose chips after scoring.",
+    string.format("%s also becomes %s for the shop.", Terminology.getTermLabel("stage_score"), Terminology.getTermPlural("chip")),
     "",
     "Current Breakdown:",
   }
@@ -529,8 +583,24 @@ function StageState:drawPurseDialog(app)
   love.graphics.rectangle("fill", 0, 0, width, height)
   Panel.draw(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
   Button.drawButtons({ closeButton }, mouseX, mouseY)
-  love.graphics.setFont(app.fonts.body)
-  Layout.drawWrappedLines(app:getPurseInspectionLines(app.stageState), contentArea.x, contentArea.y, contentArea.width, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height)
+  local maxPurseScrollOffset = PurseView.getMaxScrollOffset(app, contentArea, app.stageState)
+  self.purseDialogScrollOffset = math.max(0, math.min(self.purseDialogScrollOffset or 0, maxPurseScrollOffset))
+
+  PurseView.draw(app, contentArea, app.stageState, {
+    scrollOffset = self.purseDialogScrollOffset,
+  })
+  self.purseScrollButtons = PurseView.getScrollButtons(
+    contentArea,
+    self.purseDialogScrollOffset,
+    maxPurseScrollOffset,
+    function()
+      return self:scrollPurseDialog(app, -1)
+    end,
+    function()
+      return self:scrollPurseDialog(app, 1)
+    end
+  )
+  Button.drawButtons(self.purseScrollButtons, mouseX, mouseY)
 end
 
 function StageState:drawLogDialog(app)
@@ -555,7 +625,23 @@ function StageState:drawLogDialog(app)
   Panel.draw(dialog.x, dialog.y, dialog.width, dialog.height, "Flip Log")
   Button.drawButtons({ closeButton }, mouseX, mouseY)
   love.graphics.setFont(app.fonts.body)
-  Layout.drawWrappedLines(app:getFlipLogLines(), contentArea.x, contentArea.y, contentArea.width, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height)
+  local lines = app:getFlipLogLines()
+  local maxLogScrollOffset = self:getLogMaxScrollOffset(lines, contentArea)
+  self.logDialogScrollOffset = math.max(0, math.min(self.logDialogScrollOffset or 0, maxLogScrollOffset))
+
+  self:drawLogLines(lines, contentArea, self.logDialogScrollOffset)
+  self.logScrollButtons = PurseView.getScrollButtons(
+    contentArea,
+    self.logDialogScrollOffset,
+    maxLogScrollOffset,
+    function()
+      return self:scrollLogDialog(app, -1)
+    end,
+    function()
+      return self:scrollLogDialog(app, 1)
+    end
+  )
+  Button.drawButtons(self.logScrollButtons, mouseX, mouseY)
 end
 
 function StageState:drawCoinDetailOverlay(app, coinId, x, y)
@@ -590,9 +676,9 @@ function StageState:drawCoinDetailOverlay(app, coinId, x, y)
   love.graphics.print(string.format("%s (%s)", coin.name, coin.rarity), overlayX + 90, overlayY + 16)
   love.graphics.setFont(app.fonts.small)
   Theme.applyColor(Theme.colors.mutedText)
-  love.graphics.printf(coin.description or "", overlayX + 90, overlayY + 42, width - 106, "left")
+  Layout.drawRichWrappedText(Terminology.getMechanicRichText(coin.description or ""), overlayX + 90, overlayY + 42, width - 106, Theme.colors.mutedText, app.fonts.small:getHeight() + 2, 68)
   Theme.applyColor(Theme.colors.warning)
-  love.graphics.printf(string.format("Tags: %s", table.concat(coin.tags or {}, ", ")), overlayX + 14, overlayY + 118, width - 28, "left")
+  love.graphics.printf(string.format("Tags: %s", Terminology.formatTagList(coin.tags)), overlayX + 14, overlayY + 118, width - 28, "left")
 end
 
 function StageState:getHelpDialogCloseButton(dialogX, dialogY, dialogWidth)
@@ -740,6 +826,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
   local mouseX, mouseY = love.mouse.getPosition()
   local hoveredCoinId = nil
   local isDraggingHandCoin = self.draggingHandSlotIndex ~= nil
+  local handHoverEnabled = not self.purseDialogOpen
 
   for index, coin in ipairs(coins) do
     local cardX = startX + ((index - 1) * (cardWidth + cardGap))
@@ -749,7 +836,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
     local artSide = nil
     local artSelected = false
     local revealAge = reveal and reveal.batchId == batchId and reveal.elapsed - ((index - 1) * (reveal.revealDuration / math.max(1, #coins))) or nil
-    local hovered = not isDraggingHandCoin and mouseX and mouseY and mouseX >= cardX and mouseX <= (cardX + cardWidth) and mouseY >= cardY and mouseY <= (cardY + cardHeight)
+    local hovered = handHoverEnabled and not isDraggingHandCoin and mouseX and mouseY and mouseX >= cardX and mouseX <= (cardX + cardWidth) and mouseY >= cardY and mouseY <= (cardY + cardHeight)
 
     if hasResult then
       borderColor = coin.didMatch and Theme.colors.success or Theme.colors.danger
@@ -800,7 +887,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
 
     if hasResult then
       Theme.applyColor(coin.didMatch and Theme.colors.success or Theme.colors.mutedText)
-      love.graphics.printf(coin.didMatch and "MATCH" or "MISS", cardX + 8, cardY + cardHeight - 36, cardWidth - 16, "center")
+      love.graphics.printf(coin.didMatch and string.upper(Terminology.getOutcomeLabel("match")) or string.upper(Terminology.getOutcomeLabel("miss")), cardX + 8, cardY + cardHeight - 36, cardWidth - 16, "center")
 
       if coin.forcedResult then
         Theme.applyColor(Theme.colors.warning)
@@ -829,7 +916,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
         table.insert(self.handActionButtons, button)
       end
 
-      Button.drawButtons(buttons, love.mouse.getPosition())
+      Button.drawButtons(buttons, handHoverEnabled and mouseX or nil, handHoverEnabled and mouseY or nil)
     end
   end
 
@@ -885,7 +972,9 @@ function StageState:enter(app)
   self.draggingHandCoinId = nil
   self.helpDialogOpen = false
   self.purseDialogOpen = false
+  self.purseDialogScrollOffset = 0
   self.logDialogOpen = false
+  self.logDialogScrollOffset = 0
   self.statusMessage = "Review your hand, then pick HEADS or TAILS."
 end
 
@@ -922,7 +1011,7 @@ function StageState:drawRevealOverlay(app)
   local overlayHeight = math.min(340, height - (padding * 6))
   local overlayX = math.floor((width - overlayWidth) / 2)
   local overlayY = math.floor((height - overlayHeight) / 2)
-  local contentArea = Panel.getContentArea(overlayX, overlayY, overlayWidth, overlayHeight, "Batch Reveal")
+  local contentArea = Panel.getContentArea(overlayX, overlayY, overlayWidth, overlayHeight, "Flip Reveal")
   local pulse = app:getUiPulse(5.2, 0.10, 0.22)
   local coinCount = math.max(1, #reveal.coins)
   local revealRatio = math.min(1, reveal.elapsed / math.max(reveal.revealDuration, 0.001))
@@ -931,7 +1020,7 @@ function StageState:drawRevealOverlay(app)
   love.graphics.setColor(0, 0, 0, 0.45)
   love.graphics.rectangle("fill", 0, 0, width, height)
 
-  Panel.draw(overlayX, overlayY, overlayWidth, overlayHeight, "Batch Reveal")
+  Panel.draw(overlayX, overlayY, overlayWidth, overlayHeight, "Flip Reveal")
 
   setColorWithAlpha(Theme.colors.accent, 0.14 + pulse)
   love.graphics.rectangle("fill", contentArea.x, contentArea.y, contentArea.width, 44, 10, 10)
@@ -944,19 +1033,15 @@ function StageState:drawRevealOverlay(app)
   Theme.applyColor(Theme.colors.text)
   love.graphics.print(string.format("Call: %s", string.upper(reveal.call)), contentArea.x + 14, contentArea.y + 8)
   Theme.applyColor(Theme.colors.mutedText)
-  love.graphics.printf(string.format("Batch %d", reveal.batchId), contentArea.x + 14, contentArea.y + 10, contentArea.width - 28, "right")
+  love.graphics.printf(string.format("%s %d", Terminology.getTermLabel("flip"), reveal.batchId), contentArea.x + 14, contentArea.y + 10, contentArea.width - 28, "right")
 
   local statsY = contentArea.y + 56
   local statsLines = {
-    string.format("Stage delta: %+d", reveal.stageDelta),
-    string.format("Stage score: %d/%d", reveal.stageScore, reveal.targetScore),
-    string.format("Chips: %d", reveal.shopPoints or 0),
+    string.format("%s delta: %+d", Terminology.getTermLabel("stage"), reveal.stageDelta),
+    string.format("%s: %d/%d", Terminology.getTermLabel("stage_score"), reveal.stageScore, reveal.targetScore),
+    string.format("%s: %d", Terminology.getTermPlural("chip"), reveal.shopPoints or 0),
     string.format("Flips remaining: %d", reveal.flipsRemaining),
   }
-
-  if reveal.betResult and reveal.betResult.id ~= "none" then
-    table.insert(statsLines, string.format("Bet: %s (%s %+d)", reveal.betResult.name or reveal.betResult.id, reveal.betResult.outcome or "none", reveal.betResult.amount or 0))
-  end
 
   if reveal.stageStatus ~= "active" then
     table.insert(statsLines, string.format("Outcome: %s", string.upper(reveal.stageStatus)))
@@ -1000,7 +1085,7 @@ function StageState:drawRevealOverlay(app)
     if revealed then
       love.graphics.setFont(app.fonts.small)
       Theme.applyColor(coin.didMatch and Theme.colors.success or Theme.colors.mutedText)
-      love.graphics.printf(coin.didMatch and "MATCH" or "MISS", cardX + 10, cardY + 78, cardWidth - 20, "center")
+      love.graphics.printf(coin.didMatch and string.upper(Terminology.getOutcomeLabel("match")) or string.upper(Terminology.getOutcomeLabel("miss")), cardX + 10, cardY + 78, cardWidth - 20, "center")
 
       if coin.forcedResult then
         Theme.applyColor(Theme.colors.warning)
@@ -1019,6 +1104,10 @@ function StageState:keypressed(app, key)
   if self.logDialogOpen then
     if key == "escape" or key == "return" or key == "kpenter" or key == "l" then
       self.logDialogOpen = false
+    elseif key == "up" then
+      self:scrollLogDialog(app, -1)
+    elseif key == "down" then
+      self:scrollLogDialog(app, 1)
     end
 
     return
@@ -1027,6 +1116,10 @@ function StageState:keypressed(app, key)
   if self.purseDialogOpen then
     if key == "escape" or key == "return" or key == "kpenter" or key == "p" then
       self.purseDialogOpen = false
+    elseif key == "up" then
+      self:scrollPurseDialog(app, -1)
+    elseif key == "down" then
+      self:scrollPurseDialog(app, 1)
     end
 
     return
@@ -1046,11 +1139,13 @@ function StageState:keypressed(app, key)
   end
 
   if key == "p" then
+    self.purseDialogScrollOffset = 0
     self.purseDialogOpen = true
     return
   end
 
   if key == "l" then
+    self.logDialogScrollOffset = 0
     self.logDialogOpen = true
     return
   end
@@ -1079,7 +1174,7 @@ function StageState:keypressed(app, key)
 
     if key == "f5" then
       local ok, result = app:debugGrantShopPoints()
-      self.statusMessage = ok and string.format("Dev: granted +%d shop points.", result) or tostring(result)
+      self.statusMessage = ok and string.format("Dev: granted +%d %s.", result, Terminology.getTermPlural("chip")) or tostring(result)
       return
     end
 
@@ -1115,14 +1210,14 @@ function StageState:keypressed(app, key)
         return
       end
 
-      self.statusMessage = string.format("Dev: simulated %d batch(es).", result.resolvedCount or 0)
+      self.statusMessage = string.format("Dev: simulated %d %s.", result.resolvedCount or 0, Terminology.getTermPlural("flip"))
       routeIfStageComplete(app)
       return
     end
 
     if key == "f9" then
       local ok, result = app:debugPrintFullBatchTrace()
-      self.statusMessage = ok and string.format("Dev: dumped batch %s trace to logs.", tostring(result)) or tostring(result)
+      self.statusMessage = ok and string.format("Dev: dumped %s %s trace to logs.", Terminology.getTermLower("flip"), tostring(result)) or tostring(result)
       return
     end
 
@@ -1164,6 +1259,36 @@ function StageState:keypressed(app, key)
   end
 end
 
+function StageState:wheelmoved(app, _, y)
+  if self.logDialogOpen then
+    if y == 0 then
+      return
+    end
+
+    local mouseX, mouseY = love.mouse.getPosition()
+    local dialog = self:getHelpDialogLayout()
+    local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Flip Log")
+
+    if Button.containsPoint(contentArea, mouseX, mouseY) then
+      self:scrollLogDialog(app, y > 0 and -1 or 1)
+    end
+
+    return
+  end
+
+  if not self.purseDialogOpen or y == 0 then
+    return
+  end
+
+  local mouseX, mouseY = love.mouse.getPosition()
+  local dialog = self:getHelpDialogLayout()
+  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
+
+  if Button.containsPoint(contentArea, mouseX, mouseY) then
+    self:scrollPurseDialog(app, y > 0 and -1 or 1)
+  end
+end
+
 function StageState:draw(app)
   local padding = Theme.spacing.screenPadding
   local gap = Theme.spacing.blockGap
@@ -1176,8 +1301,8 @@ function StageState:draw(app)
   local panelWidth = width - (padding * 2)
   local buttonLayout = self:getButtonLayout(app)
   local coinRowY = topY + topHeight + gap
-  local betButtonY = buttonLayout.y - 44
-  local coinRowBottom = betButtonY - 42
+  local statusY = buttonLayout.y - 28
+  local coinRowBottom = statusY - 16
   local coinRowHeight = math.max(120, coinRowBottom - coinRowY)
   local mouseX, mouseY = love.mouse.getPosition()
 
@@ -1194,9 +1319,8 @@ function StageState:draw(app)
 
   love.graphics.setFont(app.fonts.small)
   Theme.applyColor(Theme.colors.mutedText)
-  love.graphics.printf(self.statusMessage, padding, betButtonY - 26, panelWidth, "center")
+  love.graphics.printf(self.statusMessage, padding, statusY, panelWidth, "center")
 
-  Button.drawButtons(self:buildBetButtons(app, buttonLayout.x, betButtonY, buttonLayout.width), mouseX, mouseY)
   Button.drawButtons(self:buildButtons(app, buttonLayout.x, buttonLayout.y, buttonLayout.width), mouseX, mouseY)
 
   Button.drawButtons({ self:getLogButtonLayout(), self:getPurseButtonLayout(), self:getHelpButtonLayout() }, mouseX, mouseY)
@@ -1222,6 +1346,10 @@ function StageState:mousepressed(app, x, y, button)
 
     handled = Button.handleMousePressed({ closeButton }, x, y)
 
+    if not handled then
+      handled = Button.handleMousePressed(self.logScrollButtons, x, y)
+    end
+
     if not handled and (x < dialog.x or x > dialog.x + dialog.width or y < dialog.y or y > dialog.y + dialog.height) then
       self.logDialogOpen = false
     end
@@ -1238,6 +1366,10 @@ function StageState:mousepressed(app, x, y, button)
     end
 
     handled = Button.handleMousePressed({ closeButton }, x, y)
+
+    if not handled then
+      handled = Button.handleMousePressed(self.purseScrollButtons, x, y)
+    end
 
     if not handled and (x < dialog.x or x > dialog.x + dialog.width or y < dialog.y or y > dialog.y + dialog.height) then
       self.purseDialogOpen = false
@@ -1264,7 +1396,6 @@ function StageState:mousepressed(app, x, y, button)
     return
   end
 
-  local buttonLayout = self:getButtonLayout(app)
   if Button.handleMousePressed(self.handActionButtons, x, y) then
     return
   end
@@ -1277,13 +1408,7 @@ function StageState:mousepressed(app, x, y, button)
     return
   end
 
-  local betButtonY = buttonLayout.y - 44
-  local handledBet = Button.handleMousePressed(self:buildBetButtons(app, buttonLayout.x, betButtonY, buttonLayout.width), x, y)
-
-  if handledBet then
-    return
-  end
-
+  local buttonLayout = self:getButtonLayout(app)
   Button.handleMousePressed(self:buildButtons(app, buttonLayout.x, buttonLayout.y, buttonLayout.width), x, y)
 end
 

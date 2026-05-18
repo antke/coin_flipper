@@ -130,6 +130,7 @@ local VALID_ACTIVE_RUN_ARTIFACT_KEYS = {
   encounterSession = true,
   shopOffers = true,
   shopSession = true,
+  draftSession = true,
   lastShopGenerationTrace = true,
   lastShopPurchaseTrace = true,
   currentStageDefinitionId = true,
@@ -146,6 +147,7 @@ local VALID_ACTIVE_RUN_STATES = {
   boss_reward = true,
   encounter = true,
   shop = true,
+  coin_draft = true,
 }
 
 local VALID_POST_RESULT_NEXT_STATES = {

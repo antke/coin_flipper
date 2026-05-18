@@ -102,6 +102,7 @@ function PurseSystem.initializeStagePurse(runState, stageState)
     drawHistory = {},
     reorderHistory = {},
     exhaustionEvents = {},
+    hookHistory = {},
   }
 
   return stageState.purse
@@ -214,7 +215,9 @@ function PurseSystem.sleightSlot(runState, stageState, slotIndex, rng, call)
     batchIndex = stageState.batchIndex + 1,
     slotIndex = slotIndex,
     returnedInstanceId = returnedInstanceId,
+    returnedDefinitionId = PurseSystem.getDefinitionId(runState, returnedInstanceId),
     replacementInstanceId = replacementInstanceId,
+    replacementDefinitionId = replacementInstanceId and PurseSystem.getDefinitionId(runState, replacementInstanceId) or nil,
     call = call,
   }
   table.insert(purse.sleightHistory, entry)
@@ -231,16 +234,22 @@ function PurseSystem.moveHandSlot(stageState, slotIndex, direction)
     return false, "cannot_reorder"
   end
 
+  local movedInstanceId = handSlots[slotIndex].instanceId
+  local movedDefinitionId = handSlots[slotIndex].definitionId
+
   handSlots[slotIndex], handSlots[targetIndex] = handSlots[targetIndex], handSlots[slotIndex]
 
-  table.insert(purse.reorderHistory, {
+  local entry = {
     batchIndex = stageState.batchIndex + 1,
     fromIndex = slotIndex,
     toIndex = targetIndex,
+    movedInstanceId = movedInstanceId,
+    movedDefinitionId = movedDefinitionId,
     finalOrder = PurseSystem.getHandInstanceIds(stageState),
-  })
+  }
+  table.insert(purse.reorderHistory, entry)
 
-  return true
+  return true, entry
 end
 
 function PurseSystem.getHandInstanceIds(stageState)

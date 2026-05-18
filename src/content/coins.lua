@@ -1,5 +1,14 @@
 local definitions = {
   {
+    id = "regular_dollar",
+    name = "$ Coin",
+    rarity = "common",
+    description = "A plain 50/50 coin with no special effect.",
+    tags = { "regular", "filler" },
+    isStarter = true,
+    triggers = {},
+  },
+  {
     id = "match_spark",
     name = "Match Spark",
     rarity = "common",
@@ -121,8 +130,8 @@ local definitions = {
     },
   },
   {
-    id = "cross_bet",
-    name = "Cross Bet",
+    id = "cross_catch",
+    name = "Cross Catch",
     rarity = "common",
     description = "On a Heads call, if this coin lands Tails, gain +2 shop points.",
     tags = { "economy", "heads", "counter" },
@@ -378,6 +387,81 @@ local definitions = {
         hook = "after_scoring",
         effects = {
           { op = "add_shop_points", amount = 1 },
+        },
+      },
+    },
+  },
+  {
+    id = "pocket_refund",
+    name = "Pocket Refund",
+    rarity = "common",
+    description = "When this coin is returned to the purse by Sleight, gain +1 shop point.",
+    tags = { "sleight", "economy" },
+    triggers = {
+      {
+        hook = "after_sleight_return",
+        effects = {
+          { op = "add_shop_points", amount = 1 },
+        },
+      },
+    },
+  },
+  {
+    id = "fresh_mint",
+    name = "Fresh Mint",
+    rarity = "common",
+    description = "When this coin enters your hand as a Sleight replacement, gain +1 stage score.",
+    tags = { "sleight", "score" },
+    triggers = {
+      {
+        hook = "after_replacement_draw",
+        effects = {
+          { op = "add_stage_score", amount = 1 },
+        },
+      },
+    },
+  },
+  {
+    id = "opening_penny",
+    name = "Opening Penny",
+    rarity = "common",
+    description = "When this coin is drawn into a new hand, gain +1 shop point.",
+    tags = { "draw", "economy" },
+    triggers = {
+      {
+        hook = "after_hand_draw",
+        effects = {
+          { op = "add_shop_points", amount = 1 },
+        },
+      },
+    },
+  },
+  {
+    id = "slider_cent",
+    name = "Slider Cent",
+    rarity = "uncommon",
+    description = "When this coin is moved by hand reordering, gain +1 shop point.",
+    tags = { "reorder", "economy" },
+    triggers = {
+      {
+        hook = "after_hand_reorder",
+        effects = {
+          { op = "add_shop_points", amount = 1 },
+        },
+      },
+    },
+  },
+  {
+    id = "commitment_chip",
+    name = "Commitment Chip",
+    rarity = "uncommon",
+    description = "Before flipping the hand, apply a 1.10x score multiplier.",
+    tags = { "flip", "multiplier" },
+    triggers = {
+      {
+        hook = "before_hand_flip",
+        effects = {
+          { op = "apply_score_multiplier", value = 1.10 },
         },
       },
     },

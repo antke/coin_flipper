@@ -10,19 +10,27 @@ local Validator = require("src.core.validator")
 
 local RunInitializer = {}
 
-local function buildStarterPurse(unlockedCoinIds, seed)
-  local baseline = Coins.getStarterCoinIds(5, unlockedCoinIds, seed)
-  local specials = Coins.getStarterCoinIds(8, unlockedCoinIds, seed)
+local function buildStarterPurse()
   local starterPurse = {}
 
-  for _ = 1, 3 do
-    for _, coinId in ipairs(baseline) do
-      table.insert(starterPurse, coinId)
-    end
+  for _ = 1, 10 do
+    table.insert(starterPurse, "regular_dollar")
   end
 
-  for index = 6, math.min(8, #specials) do
-    table.insert(starterPurse, specials[index])
+  return starterPurse
+end
+
+local function buildStarterPurseFromCollection(starterCollection, resolvedValues)
+  local starterPurse = {}
+
+  if #(starterCollection or {}) == 0 then
+    return starterPurse
+  end
+
+  local purseSize = math.max(1, (resolvedValues.handSize or 5) * (resolvedValues.baseFlipsPerStage or 1))
+
+  for index = 1, purseSize do
+    table.insert(starterPurse, starterCollection[((index - 1) % #starterCollection) + 1])
   end
 
   return starterPurse
@@ -47,8 +55,16 @@ function RunInitializer.createNewRun(metaState, options)
 
   local metaProjection = RunInitializer.createMetaProjection(metaState)
   local resolvedValues = EffectiveValueSystem.resolveRunBootstrapValues(metaProjection, options)
-  local starterCollection = Utils.copyArray(options.starterCollection or Coins.getStarterCoinIds(resolvedValues.startingCollectionSize, metaState.unlockedCoinIds, options.seed))
-  local starterPurse = Utils.copyArray(options.starterPurse or buildStarterPurse(metaState.unlockedCoinIds, options.seed))
+  local starterCollection = Utils.copyArray(options.starterCollection or { "regular_dollar" })
+  local starterPurse = nil
+
+  if options.starterPurse then
+    starterPurse = Utils.copyArray(options.starterPurse)
+  elseif options.starterCollection then
+    starterPurse = buildStarterPurseFromCollection(starterCollection, resolvedValues)
+  else
+    starterPurse = buildStarterPurse()
+  end
 
   local runState = RunState.new({
     seed = options.seed,
@@ -65,7 +81,6 @@ function RunInitializer.createNewRun(metaState, options)
     baseFlipsPerStage = resolvedValues.baseFlipsPerStage,
     startingShopPoints = resolvedValues.startingShopPoints,
     startingShopRerolls = resolvedValues.startingShopRerolls,
-    selectedBetId = options.selectedBetId,
   })
 
   runState.history.bootstrap = {

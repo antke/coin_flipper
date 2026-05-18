@@ -1,5 +1,6 @@
 local Layout = require("src.ui.layout")
 local Panel = require("src.ui.panel")
+local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
 
 local DebugOverlay = {}
@@ -18,7 +19,7 @@ function DebugOverlay:draw()
   local stageLabel = currentStateName == "stage" and "Stage" or "Tracked Stage"
   local stageStatusLabel = currentStateName == "stage" and "Stage Status" or "Tracked Stage Status"
   local flipsLabel = currentStateName == "stage" and "Flips Remaining" or "Tracked Flips Remaining"
-  local batchLabel = currentStateName == "stage" and "Batch" or "Last Batch"
+  local batchLabel = currentStateName == "stage" and Terminology.getTermLabel("flip") or "Last " .. Terminology.getTermLabel("flip")
 
   local x = love.graphics.getWidth() - 360
   local y = 16
@@ -53,7 +54,7 @@ function DebugOverlay:draw()
   end
 
   table.insert(lines, "")
-  table.insert(lines, "Last Batch:")
+  table.insert(lines, "Last " .. Terminology.getTermLabel("flip") .. ":")
 
   local drawY = contentArea.y
   Theme.applyColor(Theme.colors.text)

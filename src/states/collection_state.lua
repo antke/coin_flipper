@@ -5,6 +5,7 @@ local EffectiveValueSystem = require("src.systems.effective_value_system")
 local Layout = require("src.ui.layout")
 local MetaUpgrades = require("src.content.meta_upgrades")
 local Panel = require("src.ui.panel")
+local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
 local Upgrades = require("src.content.upgrades")
 local Utils = require("src.core.utils")
@@ -87,7 +88,7 @@ function CollectionState:getEntries(app)
         name = definition.name,
         status = unlocked and "Unlocked" or "Locked",
         detailLines = {
-          definition.description,
+          Terminology.getMechanicRichText(definition.description),
           "",
           string.format("Rarity: %s", definition.rarity or "unknown"),
           unlocked and "Unlocked" or unlockSource,
@@ -112,7 +113,7 @@ function CollectionState:getEntries(app)
         name = definition.name,
         status = unlocked and "Unlocked" or "Locked",
         detailLines = {
-          definition.description,
+          Terminology.getMechanicRichText(definition.description),
           "",
           string.format("Rarity: %s", definition.rarity or "unknown"),
           unlocked and "Unlocked" or unlockSource,
@@ -127,7 +128,7 @@ function CollectionState:getEntries(app)
   for _, definition in ipairs(MetaUpgrades.getAll()) do
     local purchased = Utils.contains(app.metaState.purchasedMetaUpgradeIds, definition.id)
     local detailLines = {
-      definition.description,
+      Terminology.getMechanicRichText(definition.description),
       "",
       string.format("Cost: %d meta point(s)", definition.cost or 0),
       string.format("Status: %s", purchased and "Purchased" or "Available"),

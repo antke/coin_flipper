@@ -2,6 +2,10 @@ local Theme = require("src.ui.theme")
 
 local Layout = {}
 
+local function isRichText(value)
+  return type(value) == "table" and value.richText == true and type(value.segments) == "table"
+end
+
 local function getWrappedLineCount(text, width)
   local font = love.graphics.getFont()
   local content = tostring(text or "")
@@ -16,6 +20,19 @@ local function getWrappedLineCount(text, width)
 
   local _, wrapped = font:getWrap(content, width)
   return math.max(1, #wrapped)
+end
+
+local function drawTextToken(text, x, y, color, bold)
+  Theme.applyColor(color or Theme.colors.text)
+  love.graphics.print(text, x, y)
+
+  if bold then
+    love.graphics.print(text, x, y + 1)
+  end
+end
+
+local function drawEllipsis(startX, currentY, color, bold)
+  drawTextToken("…", startX, currentY, color, bold)
 end
 
 function Layout.centeredText(text, y, font, color)
@@ -66,6 +83,95 @@ function Layout.drawWrappedText(text, startX, startY, width, color, lineHeight, 
   return currentY + (getWrappedLineCount(content, width) * heightPerLine)
 end
 
+function Layout.drawRichWrappedText(richText, startX, startY, width, color, lineHeight, maxHeight)
+  local currentX = startX
+  local currentY = startY
+  local heightPerLine = lineHeight or Theme.spacing.lineHeight
+  local maximumY = maxHeight and (startY + maxHeight) or nil
+  local segments = isRichText(richText) and richText.segments or { { text = tostring(richText or ""), bold = false } }
+  local drewText = false
+
+  local function canDrawNextLine()
+    return not maximumY or currentY + heightPerLine <= maximumY
+  end
+
+  local function newLine()
+    currentY = currentY + heightPerLine
+    currentX = startX
+    return canDrawNextLine()
+  end
+
+  if not canDrawNextLine() then
+    return currentY, true
+  end
+
+  for _, segment in ipairs(segments) do
+    local text = tostring(segment.text or "")
+    local bold = segment.bold == true
+    local position = 1
+
+    while position <= #text do
+      local newlineStart, newlineEnd = string.find(text, "\n", position, true)
+      local chunk = newlineStart and text:sub(position, newlineStart - 1) or text:sub(position)
+
+      local chunkIndex = 1
+
+      while chunkIndex <= #chunk do
+        local isWhitespace = string.match(chunk:sub(chunkIndex, chunkIndex), "%s") ~= nil
+        local tokenEnd = chunkIndex
+
+        while tokenEnd <= #chunk and (string.match(chunk:sub(tokenEnd, tokenEnd), "%s") ~= nil) == isWhitespace do
+          tokenEnd = tokenEnd + 1
+        end
+
+        local token = chunk:sub(chunkIndex, tokenEnd - 1)
+        local tokenWidth = love.graphics.getFont():getWidth(token)
+
+        if isWhitespace then
+          if currentX > startX then
+            if currentX + tokenWidth > startX + width then
+              if not newLine() then
+                return currentY + heightPerLine, true
+              end
+            else
+              currentX = currentX + tokenWidth
+            end
+          end
+        else
+          if currentX > startX and currentX + tokenWidth > startX + width then
+            if not newLine() then
+              drawEllipsis(startX, currentY, color, bold)
+              return currentY + heightPerLine, true
+            end
+          end
+
+          drawTextToken(token, currentX, currentY, color, bold)
+          drewText = true
+          currentX = currentX + tokenWidth
+        end
+
+        chunkIndex = tokenEnd
+      end
+
+      if newlineStart then
+        if not newLine() then
+          return currentY + heightPerLine, true
+        end
+
+        position = newlineEnd + 1
+      else
+        break
+      end
+    end
+  end
+
+  if not drewText then
+    return currentY + heightPerLine, false
+  end
+
+  return currentY + heightPerLine, false
+end
+
 function Layout.drawWrappedLines(lines, startX, startY, width, color, lineHeight, maxHeight)
   local currentY = startY
   local heightPerLine = lineHeight or Theme.spacing.lineHeight
@@ -74,6 +180,14 @@ function Layout.drawWrappedLines(lines, startX, startY, width, color, lineHeight
   Theme.applyColor(color or Theme.colors.text)
 
   for _, line in ipairs(lines or {}) do
+    if isRichText(line) then
+      local didClip = false
+      currentY, didClip = Layout.drawRichWrappedText(line, startX, currentY, width, color, heightPerLine, maximumY and (maximumY - currentY) or nil)
+
+      if didClip then
+        return currentY, true
+      end
+    else
     local lineCount = getWrappedLineCount(line, width)
     local nextY = currentY + (lineCount * heightPerLine)
 
@@ -87,6 +201,7 @@ function Layout.drawWrappedLines(lines, startX, startY, width, color, lineHeight
     end
 
     currentY = Layout.drawWrappedText(line, startX, currentY, width, color, heightPerLine)
+    end
   end
 
   return currentY, false

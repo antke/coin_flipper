@@ -1,8 +1,8 @@
 local ActionQueue = require("src.core.action_queue")
-local BetSystem = require("src.systems.bet_system")
 local EffectiveValueSystem = require("src.systems.effective_value_system")
 local FlipBatch = require("src.domain.flip_batch")
 local HookRegistry = require("src.core.hook_registry")
+local PurseHookSystem = require("src.systems.purse_hook_system")
 local PurseSystem = require("src.systems.purse_system")
 local ScoreBreakdown = require("src.domain.score_breakdown")
 local ScoringSystem = require("src.systems.scoring_system")
@@ -45,7 +45,6 @@ function FlipResolver.buildResolutionContext(runState, stageState, metaProjectio
       temporaryEffectsConsumed = {},
     },
     rng = rng,
-    betResult = nil,
   })
 
   return context
@@ -203,7 +202,6 @@ function FlipResolver.buildBatchResult(runState, stageState, context, resolution
   batch.actions = context.trace.actions
   batch.trace = context.trace
   batch.scoreBreakdown = context.scoreBreakdown
-  batch.betResult = Utils.clone(context.betResult)
 
   return {
     batch = batch,
@@ -218,7 +216,6 @@ function FlipResolver.buildBatchResult(runState, stageState, context, resolution
     runTotalScore = runState.runTotalScore,
     shopPoints = runState.shopPoints,
     flipsRemaining = stageState.flipsRemaining,
-    betResult = Utils.clone(context.betResult),
   }
 end
 
@@ -267,6 +264,9 @@ function FlipResolver.projectBatchBeforeRoll(runState, stageState, metaProjectio
   FlipResolver.runPhase(runState, stageState, context, "before_batch_validation")
 
   context.perCoin, context.resolutionOrder = FlipResolver.prepareCoinRollState(runState, stageState, metaProjection, context)
+  context.purseEventCoins = context.perCoin
+  FlipResolver.runPhase(runState, stageState, context, "before_hand_flip")
+  context.purseEventCoins = nil
   FlipResolver.runPhase(runState, stageState, context, "before_coin_roll")
 
   return context
@@ -276,6 +276,8 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
   local context
 
   local handSlots, drawWarning = PurseSystem.drawHand(runState, stageState, rng)
+
+  PurseHookSystem.runAfterHandDraw(runState, stageState, metaProjection, { call = call })
 
   if stageState.stageStatus ~= "active" then
     return nil, drawWarning or "stage_not_active"
@@ -305,12 +307,6 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
     return nil, validationResult
   end
 
-  ok, validationResult = BetSystem.validateSelectedBet(runState)
-
-  if not ok then
-    return nil, validationResult
-  end
-
   context = FlipResolver.projectBatchBeforeRoll(runState, stageState, metaProjection, call, rng)
   context.trace.drawnInstanceIds = PurseSystem.getHandInstanceIds(stageState)
   context.trace.sleightHistory = Utils.clone(stageState.purse and stageState.purse.sleightHistory or {})
@@ -331,12 +327,6 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
   FlipResolver.applyPhaseActions(runState, stageState, context, "score_assembly", scoringActions, 0)
 
   FlipResolver.runPhase(runState, stageState, context, "after_scoring")
-  local betResult, betError = BetSystem.resolveSelectedBet(runState, stageState, context)
-
-  if not betResult then
-    return nil, betError
-  end
-
   FlipResolver.updateCounters(runState, stageState, context)
   FlipResolver.runPhase(runState, stageState, context, "before_stage_end_check")
   FlipResolver.evaluateStageEnd(stageState, context)

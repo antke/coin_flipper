@@ -6,6 +6,8 @@ local Layout = require("src.ui.layout")
 local Loadout = require("src.domain.loadout")
 local LoadoutSystem = require("src.systems.loadout_system")
 local Panel = require("src.ui.panel")
+local PurseView = require("src.ui.purse_view")
+local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
 local Utils = require("src.core.utils")
 local Validator = require("src.core.validator")
@@ -27,6 +29,8 @@ function LoadoutState.new()
     statusMessage = "",
     collectionButtons = {},
     actionButtons = {},
+    purseScrollButtons = {},
+    purseScrollOffset = 0,
     slotRects = {},
     dragCoinId = nil,
     dragStartX = nil,
@@ -87,7 +91,7 @@ function LoadoutState:getLayout(app)
   })
   local availableHeight = math.max(220, footerMetrics.contentBottomY - panelY)
   local contentWidth = width - (padding * 2)
-  local topHeight = math.min(170, math.floor(availableHeight * 0.34))
+  local topHeight = math.min(160, math.floor(availableHeight * 0.30))
   local slotY = panelY + topHeight + gap
   local slotHeight = availableHeight - topHeight - gap
 
@@ -256,6 +260,15 @@ function LoadoutState:tryStartStage(app)
   return app.stateGraph:request("stage_ready")
 end
 
+function LoadoutState:scrollPurse(app, direction)
+  local layout = self:getLayout(app)
+  local purseArea = Panel.getContentArea(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Purse")
+  local maxScrollOffset = PurseView.getMaxScrollOffset(app, purseArea, nil)
+
+  self.purseScrollOffset = math.max(0, math.min((self.purseScrollOffset or 0) + direction, maxScrollOffset))
+  return true
+end
+
 function LoadoutState:buildCollectionButtons(app, area)
   local buttons = {}
   local gap = COLLECTION_CARD_GAP
@@ -415,9 +428,9 @@ function LoadoutState:drawCoinDetailOverlay(app, coinId, x, y)
   love.graphics.print(string.format("%s (%s)", coin.name, coin.rarity), overlayX + 90, overlayY + 16)
   love.graphics.setFont(app.fonts.small)
   Theme.applyColor(Theme.colors.mutedText)
-  love.graphics.printf(coin.description, overlayX + 90, overlayY + 42, width - 106, "left")
+  Layout.drawRichWrappedText(Terminology.getMechanicRichText(coin.description), overlayX + 90, overlayY + 42, width - 106, Theme.colors.mutedText, app.fonts.small:getHeight() + 2, 68)
   Theme.applyColor(Theme.colors.warning)
-  love.graphics.printf(string.format("Tags: %s", table.concat(coin.tags or {}, ", ")), overlayX + 14, overlayY + 118, width - 28, "left")
+  love.graphics.printf(string.format("Tags: %s", Terminology.formatTagList(coin.tags)), overlayX + 14, overlayY + 118, width - 28, "left")
 end
 
 function LoadoutState:buildActionButtons(app, layout)
@@ -462,6 +475,7 @@ function LoadoutState:enter(app, payload)
   self.selectionSlots = {}
   self.reconciliation = nil
   self.collectionScrollOffset = 1
+  self.purseScrollOffset = 0
   self.statusMessage = "Review your purse. The stage will draw 5 coins per flip."
 
   local resumeState = payload and payload.resumeLoadoutState or nil
@@ -535,13 +549,29 @@ function LoadoutState:draw(app)
   local briefingArea = Panel.getContentArea(layout.padding, layout.panelY, layout.contentWidth, layout.topHeight, "Stage Briefing")
   local purseArea = Panel.getContentArea(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Purse")
 
-  love.graphics.setFont(app.fonts.body)
   local mouseX, mouseY = love.mouse.getPosition()
+  love.graphics.setFont(app.fonts.body)
   Layout.drawWrappedLines(stagePreview.lines or {}, briefingArea.x, briefingArea.y, briefingArea.width, Theme.colors.text, Theme.spacing.lineHeight, briefingArea.height)
 
-  local purseLines = app:getPurseInspectionLines(nil)
-  table.insert(purseLines, 3, "Each flip draws a 5-coin hand. Flipped coins exhaust until the next stage.")
-  Layout.drawWrappedLines(purseLines, purseArea.x, purseArea.y, purseArea.width, Theme.colors.text, Theme.spacing.lineHeight, purseArea.height)
+  local maxPurseScrollOffset = PurseView.getMaxScrollOffset(app, purseArea, nil)
+  self.purseScrollOffset = math.max(0, math.min(self.purseScrollOffset or 0, maxPurseScrollOffset))
+
+  PurseView.draw(app, purseArea, nil, {
+    note = "Each flip draws a 5-coin hand. Flipped coins exhaust until the next stage.",
+    scrollOffset = self.purseScrollOffset,
+  })
+  self.purseScrollButtons = PurseView.getScrollButtons(
+    purseArea,
+    self.purseScrollOffset,
+    maxPurseScrollOffset,
+    function()
+      return self:scrollPurse(app, -1)
+    end,
+    function()
+      return self:scrollPurse(app, 1)
+    end
+  )
+  Button.drawButtons(self.purseScrollButtons, mouseX, mouseY)
 
   Theme.applyColor(Theme.colors.warning)
   love.graphics.printf(self.statusMessage, layout.padding, layout.height - layout.footerMetrics.statusHeight + Theme.spacing.statusPadding, layout.width - (layout.padding * 2), "left")
@@ -566,7 +596,25 @@ function LoadoutState:mousepressed(app, x, y, button)
   end
 
   local layout = self:getLayout(app)
+  if Button.handleMousePressed(self.purseScrollButtons, x, y) then
+    return
+  end
+
   Button.handleMousePressed(self:buildActionButtons(app, layout), x, y)
+end
+
+function LoadoutState:wheelmoved(app, _, y)
+  if y == 0 then
+    return
+  end
+
+  local mouseX, mouseY = love.mouse.getPosition()
+  local layout = self:getLayout(app)
+  local purseArea = Panel.getContentArea(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Purse")
+
+  if Button.containsPoint(purseArea, mouseX, mouseY) then
+    self:scrollPurse(app, y > 0 and -1 or 1)
+  end
 end
 
 function LoadoutState:mousereleased(app, x, y, button)

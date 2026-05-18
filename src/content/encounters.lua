@@ -30,11 +30,11 @@ local EncounterDefinitions = {
     description = "A hidden cache offers one tactical pickup before the market opens.",
     choices = {
       {
-        id = "stash_cross_bet",
+        id = "stash_cross_catch",
         type = "coin",
-        contentId = "cross_bet",
-        label = "Pocket Cross Bet",
-        description = "Add Cross Bet to your run collection.",
+        contentId = "cross_catch",
+        label = "Pocket Cross Catch",
+        description = "Add Cross Catch to your run collection.",
       },
       {
         id = "stash_tails_contract",

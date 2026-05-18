@@ -121,7 +121,26 @@ local RULES = {
     build = function(context)
       return {
         { type = "action", action = "start_new_run", payload = context.payload or {} },
+        { type = "state", state = "coin_draft" },
+      }
+    end,
+  },
+  {
+    from = "coin_draft",
+    event = "draft_complete",
+    build = function()
+      return {
         { type = "state", state = "loadout" },
+      }
+    end,
+  },
+  {
+    from = "coin_draft",
+    event = "open_pause",
+    build = function()
+      return {
+        { type = "action", action = "prepare_pause", payload = { returnState = "coin_draft" } },
+        { type = "state", state = "pause" },
       }
     end,
   },

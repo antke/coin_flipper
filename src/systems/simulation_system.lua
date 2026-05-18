@@ -2,6 +2,7 @@ local Coins = require("src.content.coins")
 local FlipResolver = require("src.systems.flip_resolver")
 local GameConfig = require("src.app.config")
 local LoadoutSystem = require("src.systems.loadout_system")
+local PurseSystem = require("src.systems.purse_system")
 local RunHistorySystem = require("src.systems.run_history_system")
 local MetaState = require("src.domain.meta_state")
 local ProgressionSystem = require("src.systems.progression_system")
@@ -125,6 +126,61 @@ local function chooseLoadoutSelection(runState, stageDefinition)
   end
 
   return selection
+end
+
+local function buildDraftCandidates(runState)
+  local candidates = {}
+
+  for _, definition in ipairs(Coins.getAll()) do
+    if definition.id ~= "regular_dollar" and Coins.isUnlocked(definition, runState.unlockedCoinIds) then
+      table.insert(candidates, definition.id)
+    end
+  end
+
+  return candidates
+end
+
+local function generateDraftOffers(candidates, rng)
+  local pool = Utils.clone(candidates)
+  local offers = {}
+  local offerCount = math.min(3, #pool)
+
+  for _ = 1, offerCount do
+    local index = rng:nextInt(1, #pool)
+    table.insert(offers, table.remove(pool, index))
+  end
+
+  return offers
+end
+
+local function chooseDraftOffer(offers)
+  local bestCoinId = nil
+  local bestScore = nil
+
+  for _, coinId in ipairs(offers or {}) do
+    local score = scoreCoinForStage(coinId, nil)
+
+    if bestScore == nil or score > bestScore or (score == bestScore and coinId < bestCoinId) then
+      bestCoinId = coinId
+      bestScore = score
+    end
+  end
+
+  return bestCoinId
+end
+
+local function simulateInitialDraft(runState, rng)
+  local candidates = buildDraftCandidates(runState)
+
+  for _ = 1, PurseSystem.getHandSize(runState) do
+    local offers = generateDraftOffers(candidates, rng)
+    local chosenCoinId = chooseDraftOffer(offers)
+
+    if chosenCoinId then
+      PurseSystem.createInstance(runState, chosenCoinId)
+      runState.history.bootstrap.starterCollection = Utils.copyArray(runState.collectionCoinIds)
+    end
+  end
 end
 
 local function buildProjectionRng(shadowRunState, shadowStageState, call)
@@ -356,6 +412,7 @@ function SimulationSystem.simulateRun(options)
     ownedUpgradeIds = options.ownedUpgradeIds,
   })
   local rng = RNG.new(runState.seed)
+  simulateInitialDraft(runState, rng)
   local stageCount = 0
 
   while runState.runStatus == "active" do

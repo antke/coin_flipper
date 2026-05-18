@@ -1,8 +1,6 @@
 local Bosses = require("src.content.bosses")
 local AnalyticsSystem = require("src.systems.analytics_system")
 local AudioSystem = require("src.systems.audio_system")
-local Bets = require("src.content.bets")
-local BetSystem = require("src.systems.bet_system")
 local Coins = require("src.content.coins")
 local EncounterSystem = require("src.systems.encounter_system")
 local DebugOverlay = require("src.ui.debug_overlay")
@@ -16,6 +14,7 @@ local MetaProgressionSystem = require("src.systems.meta_progression_system")
 local MetaState = require("src.domain.meta_state")
 local MetaUpgrades = require("src.content.meta_upgrades")
 local ProgressionSystem = require("src.systems.progression_system")
+local PurseHookSystem = require("src.systems.purse_hook_system")
 local PurseSystem = require("src.systems.purse_system")
 local RNG = require("src.core.rng")
 local RewardSystem = require("src.systems.reward_system")
@@ -31,6 +30,7 @@ local StateGraph = require("src.app.state_graph")
 local StepBuilder = require("src.app.step_builder")
 local SummarySystem = require("src.systems.summary_system")
 local Theme = require("src.ui.theme")
+local Terminology = require("src.content.terminology")
 local Upgrades = require("src.content.upgrades")
 local Utils = require("src.core.utils")
 local Validator = require("src.core.validator")
@@ -98,6 +98,7 @@ function Game.new()
     encounterSession = nil,
     shopOffers = {},
     shopSession = nil,
+    draftSession = nil,
     lastShopGenerationTrace = nil,
     lastShopPurchaseTrace = nil,
     metaFlowContext = createMenuMetaFlowContext(),
@@ -131,6 +132,7 @@ function Game:registerStates()
   self.stateGraph:register("collection", require("src.states.collection_state").new())
   self.stateGraph:register("records", require("src.states.records_state").new())
   self.stateGraph:register("pause", require("src.states.pause_state").new())
+  self.stateGraph:register("coin_draft", require("src.states.coin_draft_state").new())
   self.stateGraph:register("loadout", require("src.states.loadout_state").new())
   self.stateGraph:register("boss_warning", require("src.states.boss_warning_state").new())
   self.stateGraph:register("stage", require("src.states.stage_state").new())
@@ -282,6 +284,7 @@ function Game:buildActiveRunSnapshot(currentStateName, screenStateOverride)
 
   local resumableState = currentStateName or (self.stateGraph and self.stateGraph:getCurrentName()) or nil
   local resumableStates = {
+    coin_draft = true,
     loadout = true,
     boss_warning = true,
     stage = true,
@@ -312,6 +315,7 @@ function Game:buildActiveRunSnapshot(currentStateName, screenStateOverride)
     encounterSession = Utils.clone(self.encounterSession),
     shopOffers = Utils.clone(self.shopOffers or {}),
     shopSession = Utils.clone(self.shopSession),
+    draftSession = Utils.clone(self.draftSession),
     lastShopGenerationTrace = Utils.clone(self.lastShopGenerationTrace),
     lastShopPurchaseTrace = Utils.clone(self.lastShopPurchaseTrace),
     currentStageDefinitionId = self.currentStageDefinition and self.currentStageDefinition.id or nil,
@@ -381,9 +385,6 @@ function Game:resumeSavedRun()
   end
 
   self.runState = Utils.clone(artifact.runState)
-  if self.runState and not Bets.getById(self.runState.selectedBetId) then
-    self.runState.selectedBetId = Bets.getDefaultId()
-  end
   self.metaProjection = self.runState and self.runState.metaProjection or nil
   self.runRng = RNG.new(artifact.runRngSeed)
   self.stageState = Utils.clone(artifact.stageState)
@@ -397,7 +398,7 @@ function Game:resumeSavedRun()
     self.currentStageDefinition = Stages.getById(self.stageState.stageId)
   end
 
-  self.selectedCall = artifact.selectedCall or "heads"
+  self.selectedCall = artifact.selectedCall
   self.lastBatchResult = Utils.clone(artifact.lastBatchResult)
   self.lastStageResult = Utils.clone(artifact.lastStageResult)
   self.postResultNextState = artifact.postResultNextState or self:computePostResultNextState()
@@ -405,6 +406,7 @@ function Game:resumeSavedRun()
   self.encounterSession = Utils.clone(artifact.encounterSession)
   self.shopOffers = Utils.clone(artifact.shopOffers or {})
   self.shopSession = Utils.clone(artifact.shopSession)
+  self.draftSession = Utils.clone(artifact.draftSession)
   self.lastShopGenerationTrace = Utils.clone(artifact.lastShopGenerationTrace)
   self.lastShopPurchaseTrace = Utils.clone(artifact.lastShopPurchaseTrace)
   self:setMetaFlowContext(self:createMenuMetaFlowContext())
@@ -742,7 +744,7 @@ function Game:triggerBatchFeedback(batchResult)
 
   if batchResult.status == "cleared" then
     local title = isBossStage and "Boss Defeated!" or "Stage Cleared!"
-    local message = string.format("+%d score | %d/%d reached", stageGain, batchResult.stageScore or 0, batchResult.targetScore or 0)
+    local message = string.format("+%d %s | %d/%d reached", stageGain, Terminology.getTermLabel("score"), batchResult.stageScore or 0, batchResult.targetScore or 0)
     self:showFeedback(isBossStage and "boss" or "success", title, message, {
       duration = isBossStage and 1.9 or 1.5,
       flashAlpha = isBossStage and 0.12 or 0.08,
@@ -761,8 +763,8 @@ function Game:triggerBatchFeedback(batchResult)
   end
 
   if matchCount > 0 then
-    local title = matchCount == #(batchResult.perCoin or {}) and "Perfect Call!" or string.format("Matched %d coin(s)", matchCount)
-    local message = string.format("+%d stage score | %d flips left", stageGain, batchResult.flipsRemaining or 0)
+    local title = matchCount == #(batchResult.perCoin or {}) and Terminology.getOutcomeLabel("all_matched") .. "!" or string.format("Matched %d coin(s)", matchCount)
+    local message = string.format("+%d %s | %d flips left", stageGain, Terminology.getTermLabel("stage_score"), batchResult.flipsRemaining or 0)
     self:showFeedback(matchCount == #(batchResult.perCoin or {}) and "success" or "accent", title, message, {
       duration = 1.15,
       flashAlpha = 0.05,
@@ -772,10 +774,10 @@ function Game:triggerBatchFeedback(batchResult)
   end
 
   if shopDelta > 0 then
-    local message = string.format("Banked %+d shop point(s) for the next stop.", shopDelta)
+    local message = string.format("Banked %+d %s(s) for the next stop.", shopDelta, Terminology.getTermLabel("chip"))
 
     if runGain > 0 then
-      message = string.format("Banked %+d shop point(s) and %+d run score.", shopDelta, runGain)
+      message = string.format("Banked %+d %s(s) and %+d %s.", shopDelta, Terminology.getTermLabel("chip"), runGain, Terminology.getTermLabel("run_score"))
     end
 
     self:showFeedback("warning", "Miss — but not empty-handed", message, {
@@ -786,7 +788,7 @@ function Game:triggerBatchFeedback(batchResult)
     return
   end
 
-  self:showFeedback("warning", "Missed the Call", string.format("No score this batch. %d flips remain.", batchResult.flipsRemaining or 0), {
+  self:showFeedback("warning", "Missed the Call", string.format("No score this flip. %d flips remain.", batchResult.flipsRemaining or 0), {
     duration = 0.95,
     flashAlpha = 0.03,
     soundCue = "batch_miss",
@@ -1060,6 +1062,110 @@ function Game:getRunSetupWarningLines()
   return lines
 end
 
+function Game:buildDraftCandidates()
+  local candidates = {}
+
+  for _, definition in ipairs(Coins.getAll()) do
+    if definition.id ~= "regular_dollar" and Coins.isUnlocked(definition, self.runState and self.runState.unlockedCoinIds or {}) then
+      table.insert(candidates, definition.id)
+    end
+  end
+
+  return candidates
+end
+
+function Game:generateDraftOffers()
+  if not self.draftSession then
+    return {}
+  end
+
+  local candidates = self:buildDraftCandidates()
+  local offers = {}
+  local offerCount = math.min(3, #candidates)
+
+  for _ = 1, offerCount do
+    local candidateIndex = self.runRng:nextInt(1, #candidates)
+    table.insert(offers, table.remove(candidates, candidateIndex))
+  end
+
+  self.draftSession.offers = offers
+  return offers
+end
+
+function Game:beginDraftSession()
+  local pickCount = self.runState and PurseSystem.getHandSize(self.runState) or 0
+
+  self.draftSession = {
+    totalPicks = pickCount,
+    picksRemaining = pickCount,
+    pickedCoinIds = {},
+    offers = {},
+  }
+
+  self:generateDraftOffers()
+  return self.draftSession
+end
+
+function Game:getDraftSession()
+  return self.draftSession
+end
+
+function Game:getDraftOfferCards()
+  local cards = {}
+  local session = self:getDraftSession()
+
+  for _, coinId in ipairs(session and session.offers or {}) do
+    local definition = Coins.getById(coinId)
+
+    if definition then
+      table.insert(cards, {
+        coinId = coinId,
+        name = definition.name,
+        rarity = definition.rarity,
+        description = Terminology.formatText(definition.description or ""),
+        tags = Terminology.formatTags(definition.tags or {}),
+      })
+    end
+  end
+
+  return cards
+end
+
+function Game:chooseDraftCoin(coinId)
+  local session = self.draftSession
+
+  if not self.runState or not session or (session.picksRemaining or 0) <= 0 then
+    return false, "draft_not_active"
+  end
+
+  if not Utils.contains(session.offers or {}, coinId) then
+    return false, "draft_offer_not_available"
+  end
+
+  local instance, errorMessage = PurseSystem.createInstance(self.runState, coinId)
+
+  if not instance then
+    return false, errorMessage
+  end
+
+  if self.runState.history and self.runState.history.bootstrap then
+    self.runState.history.bootstrap.starterCollection = Utils.copyArray(self.runState.collectionCoinIds)
+  end
+
+  table.insert(session.pickedCoinIds, coinId)
+  session.picksRemaining = math.max(0, (session.picksRemaining or 0) - 1)
+
+  if session.picksRemaining > 0 then
+    self:generateDraftOffers()
+  else
+    session.offers = {}
+  end
+
+  self:assertRuntimeInvariants("game.chooseDraftCoin", { history = true })
+  self:saveActiveRun("choose_draft_coin", session.picksRemaining > 0 and "coin_draft" or "loadout")
+  return true, session.picksRemaining == 0
+end
+
 function Game:startNewRun(options)
   options = options or {}
   self:setMetaFlowContext(self:createMenuMetaFlowContext())
@@ -1075,7 +1181,6 @@ function Game:startNewRun(options)
     seed = seed,
   })
   self.runRng = RNG.new(seed)
-  self.runState.selectedBetId = Bets.getDefaultId()
   self.stageState = nil
   self.currentStageDefinition = nil
   self.selectedCall = nil
@@ -1086,8 +1191,10 @@ function Game:startNewRun(options)
   self.encounterSession = nil
   self.shopOffers = {}
   self.shopSession = nil
+  self.draftSession = nil
   self.lastShopGenerationTrace = nil
   self.lastShopPurchaseTrace = nil
+  self:beginDraftSession()
   self:assertRuntimeInvariants("game.startNewRun", { history = true })
   self.logger:info("Started new run", { seed = seed })
   return true
@@ -1106,6 +1213,7 @@ function Game:clearRunState()
   self.encounterSession = nil
   self.shopOffers = {}
   self.shopSession = nil
+  self.draftSession = nil
   self.lastShopGenerationTrace = nil
   self.lastShopPurchaseTrace = nil
   self.selectedCall = nil
@@ -1317,12 +1425,15 @@ function Game:buildStagePreviewData(stageDefinition, options)
   local cards = isBoss
     and self:getBossModifierCards(stageDefinition.bossModifierIds or {})
     or self:getStageModifierCards(stageDefinition.activeStageModifierIds or {})
-  local lines = {
-    string.format("Stage: %s", stageDefinition.label or stageDefinition.name or stageDefinition.id),
-    string.format("Type: %s", isBoss and "Boss" or "Standard"),
-    string.format("Target Score: %d", stageDefinition.targetScore or 0),
-    string.format("Flips Available: %d", flipsPerStage or 0),
-  }
+  local lines = {}
+
+  if not options.hideStageIdentity then
+    table.insert(lines, string.format("Stage: %s", stageDefinition.label or stageDefinition.name or stageDefinition.id))
+    table.insert(lines, string.format("Type: %s", isBoss and "Boss" or "Standard"))
+  end
+
+  table.insert(lines, string.format("Target Score: %d", stageDefinition.targetScore or 0))
+  table.insert(lines, string.format("Flips Available: %d", flipsPerStage or 0))
 
   if #cards > 0 then
     table.insert(lines, string.format("Active rules: %d", #cards))
@@ -1355,6 +1466,7 @@ function Game:getPlannedStagePreviewData()
     title = "Upcoming Stage",
     emptyTitle = "Upcoming Stage",
     emptyMessage = "No stage is currently planned.",
+    hideStageIdentity = true,
   })
 end
 
@@ -1405,6 +1517,7 @@ function Game:ensureHandDrawn()
   end
 
   local handSlots, warning = PurseSystem.drawHand(self.runState, self.stageState, self.runRng)
+  PurseHookSystem.runAfterHandDraw(self.runState, self.stageState, self.metaProjection, { call = self.selectedCall })
 
   if warning == "purse_empty" then
     return nil, warning
@@ -1419,10 +1532,37 @@ function Game:sleightHandSlot(slotIndex)
     return false, "run or stage has not been initialized"
   end
 
-  local ok, result = PurseSystem.sleightSlot(self.runState, self.stageState, slotIndex, self.runRng)
+  local slot = self.stageState.purse and self.stageState.purse.handSlots and self.stageState.purse.handSlots[slotIndex] or nil
+  local sleightCoin = PurseHookSystem.buildCoinState(self.runState, slot, slotIndex)
+
+  if sleightCoin then
+    PurseHookSystem.runImmediatePhase(self.runState, self.stageState, self.metaProjection, "before_sleight", { sleightCoin }, { call = self.selectedCall })
+  end
+
+  local ok, result = PurseSystem.sleightSlot(self.runState, self.stageState, slotIndex, self.runRng, self.selectedCall)
 
   if not ok then
     return false, result
+  end
+
+  local returnedCoin = PurseHookSystem.buildCoinState(self.runState, nil, slotIndex, {
+    instanceId = result.returnedInstanceId,
+    definitionId = result.returnedDefinitionId,
+    slotIndex = slotIndex,
+  })
+
+  if returnedCoin then
+    PurseHookSystem.runImmediatePhase(self.runState, self.stageState, self.metaProjection, "after_sleight_return", { returnedCoin }, { call = self.selectedCall })
+  end
+
+  local replacementCoin = PurseHookSystem.buildCoinState(self.runState, self.stageState.purse.handSlots[slotIndex], slotIndex, {
+    instanceId = result.replacementInstanceId,
+    definitionId = result.replacementDefinitionId,
+    slotIndex = slotIndex,
+  })
+
+  if replacementCoin then
+    PurseHookSystem.runImmediatePhase(self.runState, self.stageState, self.metaProjection, "after_replacement_draw", { replacementCoin }, { call = self.selectedCall })
   end
 
   self.runState.counters.totalSleights = (self.runState.counters.totalSleights or 0) + 1
@@ -1440,6 +1580,16 @@ function Game:moveHandSlot(slotIndex, direction)
 
   if not ok then
     return false, result
+  end
+
+  local movedCoin = PurseHookSystem.buildCoinState(self.runState, nil, result.toIndex, {
+    instanceId = result.movedInstanceId,
+    definitionId = result.movedDefinitionId,
+    slotIndex = result.toIndex,
+  })
+
+  if movedCoin then
+    PurseHookSystem.runImmediatePhase(self.runState, self.stageState, self.metaProjection, "after_hand_reorder", { movedCoin }, { call = self.selectedCall })
   end
 
   self:assertRuntimeInvariants("game.moveHandSlot", { history = true })
@@ -1478,6 +1628,45 @@ function Game:getPurseInspectionLines(stageState)
   return lines
 end
 
+function Game:getPurseCardData(stageState)
+  if not self.runState then
+    return {}, { purseSize = 0, handSize = 0 }
+  end
+
+  local counts = PurseSystem.countZonesByDefinition(self.runState, stageState)
+  local cards = {}
+  local ids = {}
+
+  for definitionId in pairs(counts) do
+    table.insert(ids, definitionId)
+  end
+
+  table.sort(ids, function(left, right)
+    return self:getCoinName(left) < self:getCoinName(right)
+  end)
+
+  for _, definitionId in ipairs(ids) do
+    local count = counts[definitionId]
+    local definition = Coins.getById(definitionId)
+
+    table.insert(cards, {
+      coinId = definitionId,
+      name = definition and definition.name or definitionId,
+      description = Terminology.formatText(definition and definition.description or ""),
+      rarity = definition and definition.rarity or "common",
+      count = count.total,
+      available = count.available,
+      hand = count.hand,
+      exhausted = count.exhausted,
+    })
+  end
+
+  return cards, {
+    purseSize = #(self.runState.coinInstances or {}),
+    handSize = PurseSystem.getHandSize(self.runState),
+  }
+end
+
 function Game:resolveCurrentBatch(call)
   if not self.runState or not self.stageState then
     return nil, "run or stage has not been initialized"
@@ -1506,44 +1695,6 @@ function Game:resolveCurrentBatch(call)
   return batchResult
 end
 
-function Game:getSelectedBet()
-  return BetSystem.getSelectedBet(self.runState)
-end
-
-function Game:getBetOptions()
-  return Bets.getAll()
-end
-
-function Game:canSelectBet(betId)
-  local bet = Bets.getById(betId)
-
-  if not bet then
-    return false, "unknown_bet"
-  end
-
-  if not BetSystem.canAfford(self.runState, bet) then
-    return false, "not_enough_chips_for_bet"
-  end
-
-  return true, bet
-end
-
-function Game:selectBet(betId)
-  if not self.runState then
-    return false, "run_not_initialized"
-  end
-
-  local ok, result = self:canSelectBet(betId)
-
-  if not ok then
-    return false, result
-  end
-
-  self.runState.selectedBetId = betId
-  self:saveActiveRun("select_bet", "stage")
-  return true, result
-end
-
 function Game:isDevControlsEnabled()
   return self.config.get("debug.devControlsEnabled") == true
 end
@@ -1556,11 +1707,11 @@ function Game:getDebugControlLines()
   return {
     "- F1: next coin Heads",
     "- F2: next coin Tails",
-    string.format("- F5: +%d shop points", self.config.get("debug.grantShopPointsAmount", 5)),
+    string.format("- F5: +%d %s", self.config.get("debug.grantShopPointsAmount", 5), Terminology.getTermPlural("chip")),
     "- F6: grant next upgrade",
     "- F7: jump to boss round",
-    string.format("- F8: simulate %d batch(es)", self.config.get("debug.fastSimBatchCount", 3)),
-    "- F9: print full batch trace",
+    string.format("- F8: simulate %d %s", self.config.get("debug.fastSimBatchCount", 3), Terminology.getTermPlural("flip")),
+    "- F9: print full flip trace",
     "- F10: force clear stage",
     "- F11: force fail stage",
   }
@@ -1678,7 +1829,7 @@ function Game:debugPrintFullBatchTrace()
     return false, "no_batch_resolved"
   end
 
-  self.logger:debug("=== Full Batch Trace ===", { batch = self.lastBatchResult.batchId })
+  self.logger:debug("=== Full Flip Trace ===", { batch = self.lastBatchResult.batchId })
 
   for _, line in ipairs(self:getLastBatchSummaryLines()) do
     self.logger:debug(line)
@@ -1749,7 +1900,7 @@ function Game:getStageEndEvaluationLines()
     local lines = {
       string.format("Stage end evaluation: %s", tostring(statusAfter)),
       string.format("Score check: %s/%s", tostring(stageScoreAfter or "n/a"), tostring(targetScore or "n/a")),
-      string.format("Flips after batch: %s", tostring(flipsRemainingAfter or "n/a")),
+      string.format("Flips after %s: %s", Terminology.getTermLower("flip"), tostring(flipsRemainingAfter or "n/a")),
     }
 
     if #(batchResult.trace.forcedResults or {}) > 0 then
@@ -1769,8 +1920,8 @@ function Game:getStageEndEvaluationLines()
     return {
       string.format("Stage end evaluation: %s", tostring(self.stageState.stageStatus)),
       string.format("Score check: %s/%s", tostring(self.stageState.stageScore or "n/a"), tostring(self.stageState.targetScore or "n/a")),
-      string.format("Flips after batch: %s", tostring(self.stageState.flipsRemaining or "n/a")),
-      "Source: dev-forced or no batch trace",
+      string.format("Flips after %s: %s", Terminology.getTermLower("flip"), tostring(self.stageState.flipsRemaining or "n/a")),
+      "Source: dev-forced or no flip trace",
     }
   end
 
@@ -1990,19 +2141,19 @@ end
 
 function Game:formatRunModifier(key, value)
   if key == "shopPointMultiplier" then
-    return string.format("Shop point gain x%.2f", value)
+    return string.format("%s gain x%.2f", Terminology.getTermLabel("chip"), value)
   end
 
   if key == "bonusCoinSlots" then
-    return string.format("+%d active coin slot(s)", value)
+    return string.format("+%d %s(s)", value, Terminology.getTermLabel("active_coin_slot"))
   end
 
   if key == "bonusRerolls" then
-    return string.format("+%d free shop reroll(s)", value)
+    return string.format("+%d %s(s)", value, Terminology.getTermLabel("free_reroll"))
   end
 
   if key == "startingShopPoints" then
-    return string.format("+%d starting shop point(s)", value)
+    return string.format("+%d starting %s(s)", value, Terminology.getTermLabel("chip"))
   end
 
   if key == "bonusStartingCoins" then
@@ -2060,34 +2211,34 @@ function Game:getEffectiveValueLines(effectiveValues)
 
     if path == "economy.shopPointMultiplier" then
       if mode == "add" then
-        return string.format("Shop point gain %s", formatSignedNumber(value))
+        return string.format("%s gain %s", Terminology.getTermLabel("chip"), formatSignedNumber(value))
       end
 
-      return string.format("Shop point gain x%.2f", value)
+      return string.format("%s gain x%.2f", Terminology.getTermLabel("chip"), value)
     end
 
     if path == "run.maxActiveCoinSlots" then
       if mode == "override" then
-        return string.format("Active coin slots = %d", value)
+        return string.format("%s = %d", Terminology.getTermLabel("active_coin_slot"), value)
       end
 
-      return string.format("%s active coin slot(s)", formatSignedNumber(value))
+      return string.format("%s %s(s)", formatSignedNumber(value), Terminology.getTermLabel("active_coin_slot"))
     end
 
     if path == "run.startingShopRerolls" then
       if mode == "override" then
-        return string.format("Free shop rerolls = %d", value)
+        return string.format("%s = %d", Terminology.getTermLabel("free_reroll"), value)
       end
 
-      return string.format("%s free shop reroll(s)", formatSignedNumber(value))
+      return string.format("%s %s(s)", formatSignedNumber(value), Terminology.getTermLabel("free_reroll"))
     end
 
     if path == "run.startingShopPoints" then
       if mode == "override" then
-        return string.format("Starting shop points = %d", value)
+        return string.format("Starting %s = %d", Terminology.getTermLabel("chip"), value)
       end
 
-      return string.format("%s starting shop point(s)", formatSignedNumber(value))
+      return string.format("%s starting %s(s)", formatSignedNumber(value), Terminology.getTermLabel("chip"))
     end
 
     if path == "run.startingCollectionSize" then
@@ -2228,14 +2379,14 @@ function Game:getMetaUpgradeDetailLines(metaUpgradeId)
   end
 
   local lines = {
-    definition.description,
+    Terminology.getMechanicRichText(definition.description),
     "",
     string.format("Cost: %d meta point(s)", definition.cost or 0),
     Utils.contains(self.metaState.purchasedMetaUpgradeIds, metaUpgradeId) and "Status: purchased" or "Status: available",
   }
 
   if #(definition.tags or {}) > 0 then
-    table.insert(lines, string.format("Tags: %s", table.concat(definition.tags, ", ")))
+    table.insert(lines, string.format("Tags: %s", Terminology.formatTagList(definition.tags)))
   end
 
   if #(definition.unlockCoinIds or {}) > 0 or #(definition.unlockUpgradeIds or {}) > 0 then
@@ -2333,7 +2484,7 @@ end
 
 function Game:getUpgradeDescription(upgradeId)
   local definition = Upgrades.getById(upgradeId)
-  return definition and definition.description or tostring(upgradeId)
+  return definition and Terminology.formatText(definition.description) or tostring(upgradeId)
 end
 
 function Game:getStageModifierName(modifierId)
@@ -2343,7 +2494,7 @@ end
 
 function Game:getStageModifierDescription(modifierId)
   local definition = StageModifiers.getById(modifierId)
-  return definition and definition.description or tostring(modifierId)
+  return definition and Terminology.formatText(definition.description) or tostring(modifierId)
 end
 
 function Game:getBossModifierName(modifierId)
@@ -2353,7 +2504,7 @@ end
 
 function Game:getBossModifierDescription(modifierId)
   local definition = Bosses.getById(modifierId)
-  return definition and definition.description or tostring(modifierId)
+  return definition and Terminology.formatText(definition.description) or tostring(modifierId)
 end
 
 function Game:getActiveUpgradeNames()
@@ -2411,7 +2562,7 @@ function Game:getActiveTemporaryEffectLines()
 
   for _, effect in ipairs(self.runState and self.runState.temporaryRunEffects or {}) do
     local label = effect.name or effect.baseEffectId or effect.id or "Temporary Effect"
-    local description = effect.description or ""
+    local description = Terminology.formatText(effect.description or "")
 
     if description ~= "" then
       table.insert(lines, string.format("- %s: %s", label, description))
@@ -2444,7 +2595,7 @@ function Game:getOfferDescription(offer)
     definition = Upgrades.getById(offer.contentId)
   end
 
-  return definition and definition.description or ""
+  return definition and Terminology.formatText(definition.description) or ""
 end
 
 function Game:getShopStatusLines()
@@ -2779,7 +2930,7 @@ function Game:getEncounterOptionCards()
       contentId = option.contentId,
       amount = option.amount,
       name = option.label,
-      description = option.description,
+      description = Terminology.formatText(option.description),
       selected = session.selectedIndex == index,
       claimed = session.claimed == true,
     })
@@ -2807,7 +2958,7 @@ function Game:getEncounterLines()
 
   local lines = {
     session.name or "Encounter",
-    session.description or "",
+    Terminology.formatText(session.description or ""),
     "",
   }
 
@@ -3331,7 +3482,7 @@ function Game:getRewardPreviewOptionCards()
       contentId = option.contentId,
       name = option.name,
       rarity = option.rarity,
-      description = option.description,
+      description = Terminology.formatText(option.description),
       selected = session.selectedIndex == index,
       claimed = session.claimed == true and session.choice and session.choice.contentId == option.contentId,
     })
@@ -3593,10 +3744,10 @@ function Game:getLastBatchSummaryLines(limit)
   local batchResult = self.lastBatchResult
 
   if not batchResult then
-    return { "No batch resolved yet." }
+    return { "No " .. Terminology.getTermLower("flip") .. " resolved yet." }
   end
 
-  table.insert(lines, string.format("Batch %d | call %s", batchResult.batchId, string.upper(batchResult.call)))
+  table.insert(lines, string.format("%s %d | %s %s", Terminology.getTermLabel("flip"), batchResult.batchId, Terminology.getTermLower("call"), string.upper(batchResult.call)))
 
   for _, coinState in ipairs(batchResult.perCoin or {}) do
     table.insert(
@@ -3687,7 +3838,7 @@ function Game:getFlipLogLines(limit)
     table.insert(coinNames, self:getCoinName(coinState.coinId))
   end
 
-  table.insert(lines, string.format("Batch %d | call %s", batchResult.batchId or 0, string.upper(batchResult.call or "?")))
+  table.insert(lines, string.format("%s %d | %s %s", Terminology.getTermLabel("flip"), batchResult.batchId or 0, Terminology.getTermLower("call"), string.upper(batchResult.call or "?")))
   table.insert(lines, "Coins used: " .. (#coinNames > 0 and table.concat(coinNames, ", ") or "none"))
   table.insert(lines, "")
 
@@ -3697,7 +3848,7 @@ function Game:getFlipLogLines(limit)
     local tailsWeight = coinState.tailsWeight or 0
     local totalWeight = math.max(headsWeight + tailsWeight, 0.00001)
     local outcome = string.upper(coinState.result or "?")
-    local matchLabel = coinState.result == batchResult.call and "MATCH" or "MISS"
+    local matchLabel = string.upper(Terminology.getOutcomeLabel(coinState.result == batchResult.call and "match" or "miss"))
 
     table.insert(lines, string.format(
       "%d. %s @ slot %s / order %s",
@@ -3771,7 +3922,7 @@ function Game:getScoreBreakdownLines(limit)
   end
 
   if (breakdown.totalShopPointDelta or 0) ~= 0 then
-    table.insert(lines, string.format("Shop point delta: %+d", breakdown.totalShopPointDelta or 0))
+    table.insert(lines, string.format("%s delta: %+d", Terminology.getTermLabel("chip"), breakdown.totalShopPointDelta or 0))
   end
 
   for _, multiplier in ipairs(breakdown.multipliers or {}) do

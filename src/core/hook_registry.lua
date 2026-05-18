@@ -8,6 +8,12 @@ local Utils = require("src.core.utils")
 local HookRegistry = {}
 
 HookRegistry.PHASES = {
+  "after_hand_draw",
+  "before_sleight",
+  "after_sleight_return",
+  "after_replacement_draw",
+  "after_hand_reorder",
+  "before_hand_flip",
   "on_batch_start",
   "before_batch_validation",
   "before_coin_roll",
@@ -37,18 +43,35 @@ HookRegistry.SYSTEM_CONDITION_FLAG_KEYS = {
   no_matches = true,
 }
 
+HookRegistry.PURSE_COIN_PHASES = {
+  after_hand_draw = true,
+  before_sleight = true,
+  after_sleight_return = true,
+  after_replacement_draw = true,
+  after_hand_reorder = true,
+  before_hand_flip = true,
+}
+
+local CALL_CONDITION_PHASES = {
+  after_hand_draw = true,
+  before_sleight = true,
+  after_sleight_return = true,
+  after_replacement_draw = true,
+  after_hand_reorder = true,
+  before_hand_flip = true,
+  on_batch_start = true,
+  before_batch_validation = true,
+  before_coin_roll = true,
+  after_coin_roll = true,
+  before_scoring = true,
+  after_scoring = true,
+  before_stage_end_check = true,
+  on_batch_end = true,
+}
+
 HookRegistry.CONDITION_SCHEMAS = {
   call = {
-    phases = {
-      on_batch_start = true,
-      before_batch_validation = true,
-      before_coin_roll = true,
-      after_coin_roll = true,
-      before_scoring = true,
-      after_scoring = true,
-      before_stage_end_check = true,
-      on_batch_end = true,
-    },
+    phases = CALL_CONDITION_PHASES,
     validate = function(value)
       return value == "heads" or value == "tails", "must be heads or tails"
     end,
@@ -72,16 +95,7 @@ HookRegistry.CONDITION_SCHEMAS = {
     end,
   },
   repeated_call = {
-    phases = {
-      on_batch_start = true,
-      before_batch_validation = true,
-      before_coin_roll = true,
-      after_coin_roll = true,
-      before_scoring = true,
-      after_scoring = true,
-      before_stage_end_check = true,
-      on_batch_end = true,
-    },
+    phases = CALL_CONDITION_PHASES,
     validate = function(value)
       return type(value) == "boolean", "must be boolean"
     end,
@@ -89,6 +103,21 @@ HookRegistry.CONDITION_SCHEMAS = {
   stage_type = {
     validate = function(value)
       return value == "normal" or value == "boss", "must be normal or boss"
+    end,
+  },
+  slot_index = {
+    phases = {
+      after_hand_draw = true,
+      before_sleight = true,
+      after_sleight_return = true,
+      after_replacement_draw = true,
+      after_hand_reorder = true,
+      before_hand_flip = true,
+      before_coin_roll = true,
+      after_coin_roll = true,
+    },
+    validate = function(value)
+      return type(value) == "number" and math.floor(value) == value and value >= 1, "must be a positive integer"
     end,
   },
   offer_type = {
@@ -214,6 +243,10 @@ local function matchesCondition(condition, context)
       end
     elseif key == "stage_type" then
       if context.stageState.stageType ~= expectedValue then
+        return false
+      end
+    elseif key == "slot_index" then
+      if not context.currentCoin or context.currentCoin.slotIndex ~= expectedValue then
         return false
       end
     elseif key == "offer_type" then
@@ -496,6 +529,21 @@ function HookRegistry.runPhase(phaseName, sourceList, context)
 
   if not HookRegistry.isValidPhase(phaseName) then
     error(string.format("Unknown hook phase: %s", tostring(phaseName)))
+  end
+
+  if HookRegistry.PURSE_COIN_PHASES[phaseName] then
+    local eventCoins = context.purseEventCoins or context.perCoin or {}
+
+    for _, coinState in ipairs(eventCoins) do
+      context.currentCoin = coinState
+
+      for _, source in ipairs(sourceList or {}) do
+        runSourceForPhase(phaseName, source, context, actions)
+      end
+    end
+
+    context.currentCoin = nil
+    return actions
   end
 
   if phaseName == "before_coin_roll" or phaseName == "after_coin_roll" then

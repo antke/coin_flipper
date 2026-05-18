@@ -27,8 +27,6 @@ return {
     { op = "resolve_batch", call = "heads", label = "first_batch" },
     { op = "resolve_until_stage_end", call = "heads", maxBatches = 4, label = "remaining_batches" },
     { op = "finalize_stage" },
-    { op = "build_reward_preview" },
-    { op = "claim_reward_choice" },
     { op = "build_transcript" },
     { op = "replay_transcript" },
   },
@@ -37,19 +35,23 @@ return {
     local firstBatch = A.truthy(A.getResult("first_batch"), "missing first batch")
     local resolutionEntries = firstBatch.batch.resolutionEntries or {}
 
-    A.equal(resolutionEntries[1].coinId, "heads_hunter", "first resolution entry coin")
-    A.equal(resolutionEntries[1].slotIndex, 3, "first resolution entry slot")
+    A.equal(resolutionEntries[1].coinId, "tails_chaser", "first resolution entry coin")
+    A.equal(resolutionEntries[1].slotIndex, 1, "first resolution entry slot")
     A.equal(resolutionEntries[1].resolutionIndex, 1, "first resolution entry index")
-    A.equal(resolutionEntries[2].coinId, "match_spark", "second resolution entry coin")
+    A.equal(resolutionEntries[2].coinId, "tails_chaser", "second resolution entry coin")
     A.equal(resolutionEntries[2].slotIndex, 2, "second resolution entry slot")
-    A.equal(resolutionEntries[3].coinId, "tails_chaser", "third resolution entry coin")
-    A.equal(resolutionEntries[3].slotIndex, 1, "third resolution entry slot")
+    A.equal(resolutionEntries[3].coinId, "match_spark", "third resolution entry coin")
+    A.equal(resolutionEntries[3].slotIndex, 3, "third resolution entry slot")
+    A.equal(resolutionEntries[4].coinId, "heads_hunter", "fourth resolution entry coin")
+    A.equal(resolutionEntries[4].slotIndex, 4, "fourth resolution entry slot")
+    A.equal(resolutionEntries[5].coinId, "match_spark", "fifth resolution entry coin")
+    A.equal(resolutionEntries[5].slotIndex, 5, "fifth resolution entry slot")
     A.equal(env.runState.history.loadoutCommits[1].canonicalKey, "heads_hunter|match_spark|tails_chaser", "canonical key remains sorted")
     A.truthy(#(env.transcript.expected.batchSignatures or {}) > 0, "batch signatures should exist")
     A.replayOk(env.replay, "unordered slot replay should succeed")
 
     local tamperedTranscript = Utils.clone(env.transcript)
-    tamperedTranscript.stages[1].batches[1].resolutionEntries[1].slotIndex = 1
+    tamperedTranscript.stages[1].batches[1].resolutionEntries[1].slotIndex = 2
     local tamperedReplay = ReplaySystem.replayTranscript(tamperedTranscript)
     A.falsy(tamperedReplay.ok, "tampered slot metadata should fail replay")
 
