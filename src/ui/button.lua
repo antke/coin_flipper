@@ -2,6 +2,10 @@ local Theme = require("src.ui.theme")
 
 local Button = {}
 
+local soundPlayer = nil
+local pressEffects = {}
+local PRESS_EFFECT_DURATION = 0.18
+
 local VARIANT_COLORS = {
   default = {
     fill = Theme.colors.panel,
@@ -43,8 +47,40 @@ local function resolveButtonColors(options)
   return Theme.colors.panel, variant.border, Theme.colors.text
 end
 
+local function getTime()
+  return love.timer.getTime()
+end
+
+local function sameRect(effect, button)
+  return effect.x == button.x and effect.y == button.y and effect.width == button.width and effect.height == button.height
+end
+
+local function addPressEffect(button)
+  table.insert(pressEffects, {
+    x = button.x,
+    y = button.y,
+    width = button.width,
+    height = button.height,
+    startedAt = getTime(),
+  })
+end
+
+local function buttonIsPressed(button, now)
+  for _, effect in ipairs(pressEffects) do
+    if sameRect(effect, button) and now - effect.startedAt <= 0.08 then
+      return true
+    end
+  end
+
+  return false
+end
+
 function Button.containsPoint(button, x, y)
   return x >= button.x and x <= (button.x + button.width) and y >= button.y and y <= (button.y + button.height)
+end
+
+function Button.setSoundPlayer(player)
+  soundPlayer = player
 end
 
 function Button.drawTextButton(x, y, width, height, label, options)
@@ -69,8 +105,12 @@ function Button.drawTextButton(x, y, width, height, label, options)
 end
 
 function Button.drawButtons(buttons, mouseX, mouseY)
+  local now = getTime()
+
   for _, button in ipairs(buttons or {}) do
-    Button.drawTextButton(button.x, button.y, button.width, button.height, button.label, {
+    local pressOffset = buttonIsPressed(button, now) and 2 or 0
+
+    Button.drawTextButton(button.x, button.y + pressOffset, button.width, button.height, button.label, {
       focused = button.focused,
       hovered = mouseX and mouseY and not button.disabled and Button.containsPoint(button, mouseX, mouseY),
       disabled = button.disabled,
@@ -78,11 +118,43 @@ function Button.drawButtons(buttons, mouseX, mouseY)
       align = button.align,
     })
   end
+
+  for index = #pressEffects, 1, -1 do
+    local effect = pressEffects[index]
+    local age = now - effect.startedAt
+
+    if age >= PRESS_EFFECT_DURATION then
+      table.remove(pressEffects, index)
+    else
+      local progress = age / PRESS_EFFECT_DURATION
+      local padding = math.floor(4 + (10 * progress))
+      local alpha = 0.32 * (1 - progress)
+
+      Theme.applyColor({ Theme.colors.highlight[1], Theme.colors.highlight[2], Theme.colors.highlight[3], alpha })
+      love.graphics.setLineWidth(2)
+      love.graphics.rectangle(
+        "line",
+        effect.x - padding,
+        effect.y - padding,
+        effect.width + (padding * 2),
+        effect.height + (padding * 2),
+        8,
+        8
+      )
+      love.graphics.setLineWidth(1)
+    end
+  end
 end
 
 function Button.handleMousePressed(buttons, x, y)
   for _, button in ipairs(buttons or {}) do
     if not button.disabled and Button.containsPoint(button, x, y) then
+      addPressEffect(button)
+
+      if soundPlayer then
+        soundPlayer(button.soundCue or "button_click")
+      end
+
       if button.onClick then
         return true, button.onClick(button), button
       end

@@ -1,6 +1,7 @@
 local Bosses = require("src.content.bosses")
 local AnalyticsSystem = require("src.systems.analytics_system")
 local AudioSystem = require("src.systems.audio_system")
+local Button = require("src.ui.button")
 local Coins = require("src.content.coins")
 local EncounterSystem = require("src.systems.encounter_system")
 local DebugOverlay = require("src.ui.debug_overlay")
@@ -483,6 +484,11 @@ end
 function Game:load()
   self.fonts = createFonts()
   love.graphics.setFont(self.fonts.body)
+  Button.setSoundPlayer(function(cueName)
+    if self.audioSystem then
+      self.audioSystem:playCue(cueName)
+    end
+  end)
 
   self:registerStates()
   self:validateContentRegistries()
@@ -1667,7 +1673,7 @@ function Game:getPurseCardData(stageState)
   }
 end
 
-function Game:resolveCurrentBatch(call)
+function Game:resolveCurrentBatch(call, options)
   if not self.runState or not self.stageState then
     return nil, "run or stage has not been initialized"
   end
@@ -1690,7 +1696,10 @@ function Game:resolveCurrentBatch(call)
   self:assertRuntimeInvariants("game.resolveCurrentBatch", { batchResult = batchResult, history = true })
   self.logger:info("Resolved batch", { batch = batchResult.batchId, status = batchResult.status, call = call })
   self.logger:debug(self:formatBatchLogLine(batchResult))
-  self:triggerBatchFeedback(batchResult)
+  if not (options and options.deferFeedback) then
+    self:triggerBatchFeedback(batchResult)
+  end
+
   self:saveActiveRun("resolve_batch", "stage")
   return batchResult
 end

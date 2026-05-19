@@ -23,6 +23,47 @@ local function routeIfStageComplete(app)
   return false
 end
 
+local function getCoinRevealTime(reveal, index)
+  if not reveal or (reveal.coinCount or 0) <= 1 then
+    return 0
+  end
+
+  return (index - 1) * (reveal.revealDuration / math.max(1, reveal.coinCount - 1))
+end
+
+local function playCoinRowFeedback(app, reveal)
+  if not reveal or reveal.feedbackPlayed then
+    return false
+  end
+
+  reveal.feedbackPlayed = true
+  app:triggerBatchFeedback(reveal.batchResult)
+  return true
+end
+
+local function getRetroCoinMotion(progress, cardHeight)
+  if not progress then
+    return 0, 0, 1
+  end
+
+  local maxLift = math.floor(cardHeight * 0.21)
+  local liftRatio = 0
+
+  if progress < 0.35 then
+    liftRatio = progress / 0.35
+  elseif progress < 0.58 then
+    liftRatio = 1
+  else
+    liftRatio = math.max(0, 1 - ((progress - 0.58) / 0.42))
+  end
+
+  local liftOffset = -math.floor(liftRatio * maxLift)
+  local tilt = (progress < 1) and ((progress * 0.52) - 0.26) or 0
+  local scale = 1
+
+  return liftOffset, tilt, scale
+end
+
 function StageState.new()
   return setmetatable({
     statusMessage = "",
@@ -83,13 +124,19 @@ end
 
 function StageState:startCoinRowReveal(app, batchResult)
   local coinCount = #(batchResult.perCoin or {})
+  local revealDuration = app.config.get("ui.batchRevealDuration", 0.75)
+  local coinMotionDuration = 0.345
 
   self.coinRowReveal = {
     batchId = batchResult.batchId,
+    batchResult = batchResult,
     elapsed = 0,
-    revealDuration = app.config.get("ui.batchRevealDuration", 0.75),
-    displayDuration = 2.5,
+    revealDuration = revealDuration,
+    coinMotionDuration = coinMotionDuration,
+    displayDuration = math.max(2.7, revealDuration + coinMotionDuration + 1.1),
     coinCount = coinCount,
+    nextSoundIndex = 1,
+    feedbackPlayed = false,
   }
 end
 
@@ -99,6 +146,8 @@ function StageState:completeReveal(app)
   end
 
   local stageShouldAdvance = app.stageState and app.stageState.stageStatus ~= "active"
+
+  playCoinRowFeedback(app, self.coinRowReveal)
   self.reveal = nil
 
   if stageShouldAdvance then
@@ -154,7 +203,7 @@ function StageState:tryResolveBatch(app)
     return false, "call_required"
   end
 
-  local batchResult, errorMessage = app:resolveCurrentBatch(app.selectedCall)
+  local batchResult, errorMessage = app:resolveCurrentBatch(app.selectedCall, { deferFeedback = true })
 
   if not batchResult then
     self.statusMessage = errorMessage
@@ -814,10 +863,16 @@ function StageState:drawCoinRow(app, x, y, width, height)
   local cardY = y + titleHeight + math.floor((height - titleHeight - cardHeight) / 2)
   local reveal = self.coinRowReveal
   local visibleCount = #coins
+  local rowRevealActive = reveal and reveal.batchId == batchId
 
-  if reveal and reveal.batchId == batchId then
-    local revealRatio = math.min(1, reveal.elapsed / math.max(reveal.revealDuration, 0.001))
-    visibleCount = math.min(#coins, math.floor(revealRatio * math.max(1, #coins - 1)) + 1)
+  if rowRevealActive then
+    visibleCount = 0
+
+    for index = 1, #coins do
+      if reveal.elapsed >= getCoinRevealTime(reveal, index) then
+        visibleCount = index
+      end
+    end
   end
 
   self.handActionButtons = {}
@@ -835,8 +890,13 @@ function StageState:drawCoinRow(app, x, y, width, height)
     local fillColor = Theme.colors.panel
     local artSide = nil
     local artSelected = false
-    local revealAge = reveal and reveal.batchId == batchId and reveal.elapsed - ((index - 1) * (reveal.revealDuration / math.max(1, #coins))) or nil
-    local hovered = handHoverEnabled and not isDraggingHandCoin and mouseX and mouseY and mouseX >= cardX and mouseX <= (cardX + cardWidth) and mouseY >= cardY and mouseY <= (cardY + cardHeight)
+    local revealAge = rowRevealActive and reveal.elapsed - getCoinRevealTime(reveal, index) or nil
+    local liftProgress = revealAge and revealAge >= 0 and math.min(1, revealAge / math.max(0.001, reveal.coinMotionDuration or 0.46)) or nil
+    local liftOffset, motionTilt, motionScale = getRetroCoinMotion(liftProgress, cardHeight)
+    local impactPunch = revealAge and revealAge >= 0 and math.max(0, 1 - (revealAge / 0.26)) or 0
+    local cardDrawX = cardX
+    local displayY = cardY + liftOffset
+    local hovered = handHoverEnabled and not isDraggingHandCoin and mouseX and mouseY and mouseX >= cardDrawX and mouseX <= (cardDrawX + cardWidth) and mouseY >= displayY and mouseY <= (displayY + cardHeight)
 
     if hasResult then
       borderColor = coin.didMatch and Theme.colors.success or Theme.colors.danger
@@ -853,53 +913,54 @@ function StageState:drawCoinRow(app, x, y, width, height)
     end
 
     table.insert(self.handCardRects, {
-      x = cardX,
-      y = cardY,
+      x = cardDrawX,
+      y = displayY,
       width = cardWidth,
       height = cardHeight,
       slotIndex = coin.slotIndex or index,
       coinId = coin.coinId,
-      movable = not hasResult and self:isStageActive(app) and not self:isRevealActive(),
+      movable = not rowRevealActive and not hasResult and self:isStageActive(app) and not self:isRevealActive(),
     })
 
-    love.graphics.rectangle("fill", cardX, cardY, cardWidth, cardHeight, 12, 12)
+    love.graphics.rectangle("fill", cardDrawX, displayY, cardWidth, cardHeight, 12, 12)
     Theme.applyColor(borderColor)
-    love.graphics.setLineWidth((hasResult or hovered) and 2 or 1)
-    love.graphics.rectangle("line", cardX, cardY, cardWidth, cardHeight, 12, 12)
+    love.graphics.setLineWidth((hasResult or hovered) and 3 or 1)
+    love.graphics.rectangle("line", cardDrawX, displayY, cardWidth, cardHeight, 12, 12)
     love.graphics.setLineWidth(1)
 
     local coinSize = math.min(84, math.max(58, math.floor(cardWidth * 0.46)))
+    local animatedCoinSize = math.floor(coinSize * (motionScale + (impactPunch * 0.08)))
 
     love.graphics.setFont(app.fonts.small)
     Theme.applyColor(Theme.colors.text)
-    love.graphics.printf(app:getCoinName(coin.coinId), cardX + 8, cardY + 12, cardWidth - 16, "center")
+    love.graphics.printf(app:getCoinName(coin.coinId), cardDrawX + 8, displayY + 12, cardWidth - 16, "center")
 
-    CoinArt.draw(coin.coinId, cardX + math.floor((cardWidth - coinSize) / 2), cardY + 38, coinSize, {
+    CoinArt.draw(coin.coinId, cardDrawX + math.floor((cardWidth - animatedCoinSize) / 2), displayY + 38 - math.floor((animatedCoinSize - coinSize) / 2), animatedCoinSize, {
       side = artSide,
       selected = artSelected,
-      alpha = hasResult and 1.0 or 0.72,
-      tilt = hasResult and ((index % 2 == 0) and 0.08 or -0.08) or 0,
+      alpha = hasResult and 1.0 or 0.78,
+      tilt = liftProgress and motionTilt * ((index % 2 == 0) and 1 or -1) or (hasResult and ((index % 2 == 0) and 0.10 or -0.10) or 0),
     })
 
-    if hasResult and coin.didMatch and revealAge and revealAge >= 0 and revealAge <= 0.42 then
-      self:drawMatchParticles(cardX, cardY, cardWidth, cardHeight, revealAge)
+    if hasResult and revealAge and revealAge >= 0 and revealAge <= 0.60 then
+      self:drawRevealImpact(cardDrawX, displayY, cardWidth, cardHeight, revealAge, coin.didMatch)
     end
 
     if hasResult then
       Theme.applyColor(coin.didMatch and Theme.colors.success or Theme.colors.mutedText)
-      love.graphics.printf(coin.didMatch and string.upper(Terminology.getOutcomeLabel("match")) or string.upper(Terminology.getOutcomeLabel("miss")), cardX + 8, cardY + cardHeight - 36, cardWidth - 16, "center")
+      love.graphics.printf(coin.didMatch and string.upper(Terminology.getOutcomeLabel("match")) or string.upper(Terminology.getOutcomeLabel("miss")), cardDrawX + 8, displayY + cardHeight - 36, cardWidth - 16, "center")
 
       if coin.forcedResult then
         Theme.applyColor(Theme.colors.warning)
-        love.graphics.printf("FORCED", cardX + 8, cardY + cardHeight - 18, cardWidth - 16, "center")
+        love.graphics.printf("FORCED", cardDrawX + 8, displayY + cardHeight - 18, cardWidth - 16, "center")
       end
     else
       Theme.applyColor(Theme.colors.mutedText)
       local smallButtonWidth = math.min(56, cardWidth - 16)
-      local smallButtonY = cardY + cardHeight - 34
+      local smallButtonY = displayY + cardHeight - 34
       local buttons = {
         {
-          x = cardX + math.floor((cardWidth - smallButtonWidth) / 2),
+          x = cardDrawX + math.floor((cardWidth - smallButtonWidth) / 2),
           y = smallButtonY,
           width = smallButtonWidth,
           height = 24,
@@ -912,12 +973,15 @@ function StageState:drawCoinRow(app, x, y, width, height)
         },
       }
 
-      for _, button in ipairs(buttons) do
-        table.insert(self.handActionButtons, button)
-      end
+      if not rowRevealActive then
+        for _, button in ipairs(buttons) do
+          table.insert(self.handActionButtons, button)
+        end
 
-      Button.drawButtons(buttons, handHoverEnabled and mouseX or nil, handHoverEnabled and mouseY or nil)
+        Button.drawButtons(buttons, handHoverEnabled and mouseX or nil, handHoverEnabled and mouseY or nil)
+      end
     end
+
   end
 
   if self.draggingHandCoinId then
@@ -928,7 +992,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
 end
 
 function StageState:drawMatchParticles(cardX, cardY, cardWidth, cardHeight, age)
-  local alpha = math.max(0, 1 - (age / 0.42))
+  local alpha = math.max(0, 1 - (age / 0.60))
   local centerX = cardX + math.floor(cardWidth / 2)
   local centerY = cardY + math.floor(cardHeight / 2)
   local particles = {
@@ -938,17 +1002,86 @@ function StageState:drawMatchParticles(cardX, cardY, cardWidth, cardHeight, age)
     { 48, 22 },
     { -8, -52 },
     { 10, 48 },
+    { -58, 2 },
+    { 58, -4 },
+    { -20, -44 },
+    { 26, 42 },
+    { 0, -66 },
+    { 0, 62 },
+    { -70, -20 },
+    { 72, 24 },
   }
 
   Theme.applyColor({ Theme.colors.success[1], Theme.colors.success[2], Theme.colors.success[3], alpha })
 
   for index, particle in ipairs(particles) do
-    local drift = math.floor(age * 46)
-    local sparkleSize = index % 2 == 0 and 4 or 3
+    local drift = math.floor(age * 82)
+    local sparkleSize = index % 2 == 0 and 6 or 4
     local px = centerX + particle[1] + (particle[1] >= 0 and drift or -drift)
     local py = centerY + particle[2] + (particle[2] >= 0 and drift or -drift)
 
     love.graphics.rectangle("fill", px, py, sparkleSize, sparkleSize)
+    love.graphics.rectangle("fill", px - 3, py + math.floor(sparkleSize / 2), sparkleSize + 6, 2)
+    love.graphics.rectangle("fill", px + math.floor(sparkleSize / 2), py - 3, 2, sparkleSize + 6)
+  end
+end
+
+function StageState:drawMissParticles(cardX, cardY, cardWidth, cardHeight, age)
+  local alpha = math.max(0, 1 - (age / 0.60))
+  local centerX = cardX + math.floor(cardWidth / 2)
+  local centerY = cardY + math.floor(cardHeight / 2)
+  local particles = {
+    { -34, -18 },
+    { -14, 26 },
+    { 24, -24 },
+    { 42, 16 },
+    { -44, 18 },
+    { 6, -42 },
+    { 48, -6 },
+    { -52, -8 },
+    { 18, 34 },
+    { -70, 10 },
+    { 68, 8 },
+    { -8, -58 },
+    { 10, 54 },
+  }
+
+  Theme.applyColor({ Theme.colors.danger[1], Theme.colors.danger[2], Theme.colors.danger[3], alpha })
+
+  for index, particle in ipairs(particles) do
+    local fall = math.floor(age * 96)
+    local spread = math.floor(age * 36)
+    local px = centerX + particle[1]
+    local py = centerY + particle[2] + fall
+
+    love.graphics.rectangle("fill", px + (particle[1] >= 0 and spread or -spread), py, index % 2 == 0 and 12 or 8, 4)
+    love.graphics.rectangle("fill", px + 2, py + 4, 4, 4)
+  end
+end
+
+function StageState:drawRevealImpact(cardX, cardY, cardWidth, cardHeight, age, didMatch)
+  local progress = math.min(1, age / 0.60)
+  local color = didMatch and Theme.colors.success or Theme.colors.danger
+  local padding = math.floor(8 + (30 * progress))
+  local alpha = 0.68 * (1 - progress)
+
+  Theme.applyColor({ color[1], color[2], color[3], alpha })
+  love.graphics.setLineWidth(3)
+  love.graphics.rectangle(
+    "line",
+    cardX - padding,
+    cardY - padding,
+    cardWidth + (padding * 2),
+    cardHeight + (padding * 2),
+    14,
+    14
+  )
+  love.graphics.setLineWidth(1)
+
+  if didMatch then
+    self:drawMatchParticles(cardX, cardY, cardWidth, cardHeight, age)
+  else
+    self:drawMissParticles(cardX, cardY, cardWidth, cardHeight, age)
   end
 end
 
@@ -980,9 +1113,24 @@ end
 
 function StageState:update(app, dt)
   if self.coinRowReveal then
-    self.coinRowReveal.elapsed = self.coinRowReveal.elapsed + dt
+    local reveal = self.coinRowReveal
+    reveal.elapsed = reveal.elapsed + dt
 
-    if self.coinRowReveal.elapsed >= self.coinRowReveal.displayDuration then
+    while reveal.nextSoundIndex and reveal.nextSoundIndex <= (reveal.coinCount or 0) and reveal.elapsed >= getCoinRevealTime(reveal, reveal.nextSoundIndex) do
+      local coinState = reveal.batchResult and reveal.batchResult.perCoin and reveal.batchResult.perCoin[reveal.nextSoundIndex]
+
+      if coinState and app.audioSystem then
+        app.audioSystem:playCue(coinState.result == reveal.batchResult.call and "coin_reveal_match" or "coin_reveal_miss")
+      end
+
+      reveal.nextSoundIndex = reveal.nextSoundIndex + 1
+    end
+
+    if not reveal.feedbackPlayed and reveal.elapsed >= (reveal.revealDuration + (reveal.coinMotionDuration or 0)) then
+      playCoinRowFeedback(app, reveal)
+    end
+
+    if reveal.elapsed >= reveal.displayDuration then
       self.coinRowReveal = nil
     end
   end
@@ -993,7 +1141,7 @@ function StageState:update(app, dt)
 
   self.reveal.elapsed = self.reveal.elapsed + dt
 
-  if self.reveal.elapsed >= self.reveal.finishDuration then
+  if self.reveal.elapsed >= self.reveal.finishDuration and (not self.coinRowReveal or self.coinRowReveal.feedbackPlayed) then
     self:completeReveal(app)
   end
 end

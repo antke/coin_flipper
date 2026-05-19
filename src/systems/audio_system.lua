@@ -6,6 +6,31 @@ AudioSystem.__index = AudioSystem
 local TAU = math.pi * 2
 
 local CUES = {
+  button_click = {
+    volume = 0.24,
+    cooldown = 0.025,
+    sequence = {
+      { wave = "square", frequency = 560, duration = 0.026, attack = 0.001, release = 0.010 },
+      { wave = "triangle", frequency = 340, duration = 0.024, attack = 0.001, release = 0.012 },
+    },
+  },
+  coin_reveal_match = {
+    volume = 0.28,
+    cooldown = 0.035,
+    sequence = {
+      { wave = "triangle", frequency = 560, duration = 0.038, attack = 0.002, release = 0.014 },
+      { wave = "square", frequency = 720, duration = 0.038, attack = 0.002, release = 0.014 },
+      { wave = "sine", frequency = 980, duration = 0.052, attack = 0.002, release = 0.018 },
+    },
+  },
+  coin_reveal_miss = {
+    volume = 0.23,
+    cooldown = 0.035,
+    sequence = {
+      { wave = "saw", frequency = 300, duration = 0.045, attack = 0.002, release = 0.018, glide = -28 },
+      { wave = "triangle", frequency = 210, duration = 0.064, attack = 0.002, release = 0.026, glide = -34 },
+    },
+  },
   batch_match = {
     volume = 0.22,
     cooldown = 0.04,

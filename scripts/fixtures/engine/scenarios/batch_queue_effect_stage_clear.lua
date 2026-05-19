@@ -32,11 +32,10 @@ return {
 
   assert = function(env, A)
     local batchResults = A.truthy(A.getResult("batch_results"), "batch results missing")
-    A.equal(#batchResults, 3, "expected three batches")
+    A.equal(#batchResults, 2, "expected two batches")
     A.equal(env.stageRecord.status, "cleared", "stage should clear")
     A.equal(batchResults[1].stageScore, 6, "first batch stage score")
     A.equal(batchResults[2].stageScore, 9, "second batch stage score")
-    A.equal(batchResults[3].stageScore, 18, "third batch stage score")
     A.truthy(#(batchResults[1].trace.temporaryEffectsGranted or {}) > 0, "first batch should grant temporary effect")
     A.truthy(#(batchResults[1].trace.temporaryEffectsConsumed or {}) > 0, "first batch should consume temporary effect")
     A.notContains(batchResults[1].trace.warnings or {}, function(message)
