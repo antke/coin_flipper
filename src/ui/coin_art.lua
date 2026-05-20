@@ -27,62 +27,561 @@ local RARITY_PALETTES = {
   },
 }
 
-local SYMBOL_PATTERNS = {
+local FACE_PATTERNS = {
+  regular_dollar = {
+    "0000010000000",
+    "0000111000000",
+    "0001010100000",
+    "0011111100000",
+    "0010100000000",
+    "0001111000000",
+    "0000010100000",
+    "0011111100000",
+    "0001010100000",
+    "0000111000000",
+    "0000010000000",
+    "0000000000000",
+    "0000000000000",
+  },
+  match_spark = {
+    "0000001000000",
+    "0000011100000",
+    "0000111001000",
+    "0011011011000",
+    "0111111110000",
+    "0001111100000",
+    "0000111000000",
+    "0001010100000",
+    "0010010010000",
+    "0000010000000",
+    "0000101000000",
+    "0001000100000",
+    "0000000000000",
+  },
+  heads_hunter = {
+    "0000011100000",
+    "0000100010000",
+    "0000101010000",
+    "0000011100000",
+    "0000000000000",
+    "0011100011100",
+    "0100010100010",
+    "0101010101010",
+    "0011100011100",
+    "0001000100000",
+    "0010000010000",
+    "0100000001000",
+    "0000000000000",
+  },
+  tails_chaser = {
+    "0000001110000",
+    "0000110001000",
+    "0001000001000",
+    "0010000110000",
+    "0010001000000",
+    "0010010000000",
+    "0001100000000",
+    "0000110000000",
+    "0000011001000",
+    "0000001110000",
+    "0000000100000",
+    "0000001000000",
+    "0000000000000",
+  },
+  lucky_miss = {
+    "0001100011000",
+    "0010010100100",
+    "0100000000010",
+    "0100000000010",
+    "0100100010010",
+    "0011000111100",
+    "0000000000000",
+    "0000100010000",
+    "0000010100000",
+    "0000001000000",
+    "0000010100000",
+    "0000100010000",
+    "0000000000000",
+  },
+  weighted_shell = {
+    "0000011100000",
+    "0001111111000",
+    "0011111111100",
+    "0111011101110",
+    "0111111111110",
+    "0011011101100",
+    "0001111111000",
+    "0000111110000",
+    "0000011100000",
+    "0000111110000",
+    "0001111111000",
+    "0011111111100",
+    "0000000000000",
+  },
+  streak_drill = {
+    "1000000000000",
+    "1100000000000",
+    "1110000000000",
+    "0111000000000",
+    "0011100000000",
+    "0001110000000",
+    "0000111000000",
+    "0000011100000",
+    "0000001110000",
+    "0000000111000",
+    "0000000011100",
+    "0000000001110",
+    "0000000000111",
+  },
+  boss_biter = {
+    "0101000101000",
+    "1111101111100",
+    "1010101010100",
+    "1111111111110",
+    "0111111111100",
+    "0011011011000",
+    "0001111110000",
+    "0011111111000",
+    "0110101011100",
+    "1111111111110",
+    "0100100100100",
+    "1001001001000",
+    "0000000000000",
+  },
+  cross_catch = {
+    "1000000000001",
+    "0100000000010",
+    "0010000000100",
+    "0001000001000",
+    "0000100010000",
+    "0000010100000",
+    "0000001000000",
+    "0000010100000",
+    "0000100010000",
+    "0001000001000",
+    "0010000000100",
+    "0100000000010",
+    "1000000000001",
+  },
+  heads_banker = {
+    "0000011100000",
+    "0000101010000",
+    "0000100010000",
+    "0000011100000",
+    "0000000000000",
+    "0001111110000",
+    "0010000011000",
+    "0010111011000",
+    "0010101011000",
+    "0010111011000",
+    "0001111110000",
+    "0000101000000",
+    "0000000000000",
+  },
+  tails_banker = {
+    "0000111100000",
+    "0000011000000",
+    "0000011000000",
+    "0000011000000",
+    "0000011000000",
+    "0000000000000",
+    "0001111110000",
+    "0010000011000",
+    "0010111011000",
+    "0010101011000",
+    "0010111011000",
+    "0001111110000",
+    "0000000000000",
+  },
+  safety_net = {
+    "1000100010001",
+    "0101000101010",
+    "0010001000100",
+    "0101000101010",
+    "1000100010001",
+    "0000000000000",
+    "0011111111100",
+    "0010000000100",
+    "0010101010100",
+    "0010010100100",
+    "0010101010100",
+    "0011111111100",
+    "0000000000000",
+  },
+  reserve_token = {
+    "0000010000000",
+    "0000111000000",
+    "0001111100000",
+    "0011111110000",
+    "0111111111000",
+    "0001111100000",
+    "0001111100000",
+    "0001111100000",
+    "0001111100000",
+    "0011111110000",
+    "0111111111000",
+    "0000000000000",
+    "0000101010000",
+  },
+  mirror_mark = {
+    "0011100011100",
+    "0100010100010",
+    "1000010100001",
+    "1001111111001",
+    "1010010100101",
+    "1010010100101",
+    "1001111111001",
+    "1000010100001",
+    "0100010100010",
+    "0011100011100",
+    "0000010100000",
+    "0000010100000",
+    "0000000000000",
+  },
+  parachute_pin = {
+    "0000011100000",
+    "0001111111000",
+    "0011111111100",
+    "0111011101110",
+    "0101010101010",
+    "0001010101000",
+    "0001010101000",
+    "0000111110000",
+    "0000011100000",
+    "0000011100000",
+    "0000001000000",
+    "0000011100000",
+    "0000000000000",
+  },
+  tails_echo = {
+    "0000111100000",
+    "0000011000000",
+    "0000011000000",
+    "0000011000000",
+    "0000011000000",
+    "0000000000000",
+    "0001110000000",
+    "0010001000000",
+    "0100110100000",
+    "0101001010000",
+    "0100110100000",
+    "0010001000000",
+    "0001110000000",
+  },
+  heads_cache = {
+    "0000011100000",
+    "0000101010000",
+    "0000100010000",
+    "0000011100000",
+    "0000000000000",
+    "0011111111100",
+    "0010000000100",
+    "0010111110100",
+    "0010100010100",
+    "0010111110100",
+    "0010000000100",
+    "0011111111100",
+    "0000000000000",
+  },
+  tails_cache = {
+    "0000111100000",
+    "0000011000000",
+    "0000011000000",
+    "0000011000000",
+    "0000011000000",
+    "0000000000000",
+    "0011111111100",
+    "0010000000100",
+    "0010111110100",
+    "0010100010100",
+    "0010111110100",
+    "0010000000100",
+    "0011111111100",
+  },
+  echo_penny = {
+    "0000011100000",
+    "0001100011000",
+    "0010000000100",
+    "0100011100010",
+    "0100100010010",
+    "1001000001001",
+    "1001001001001",
+    "1001000001001",
+    "0100100010010",
+    "0100011100010",
+    "0010000000100",
+    "0001100011000",
+    "0000011100000",
+  },
+  perfect_penny = {
+    "0000001000000",
+    "0000011100000",
+    "0000111110000",
+    "0011111111100",
+    "0001111111000",
+    "0000111110000",
+    "0001111111000",
+    "0011111111100",
+    "0000111110000",
+    "0000011100000",
+    "0000001000000",
+    "0000100010000",
+    "0001000001000",
+  },
+  comeback_cent = {
+    "0000001111000",
+    "0000010001000",
+    "0000100001000",
+    "0001000010000",
+    "0010000100000",
+    "0010001000000",
+    "0011111111100",
+    "0000001000100",
+    "0000010000100",
+    "0000100001000",
+    "0001000010000",
+    "0011111100000",
+    "0000000000000",
+  },
+  heads_anchor = {
+    "0000011100000",
+    "0000101010000",
+    "0000100010000",
+    "0000011100000",
+    "0000001000000",
+    "0000001000000",
+    "0001111110000",
+    "0000001000000",
+    "0100001000010",
+    "0100001000010",
+    "0010010100100",
+    "0001100011000",
+    "0000000000000",
+  },
+  tails_anchor = {
+    "0000111100000",
+    "0000011000000",
+    "0000011000000",
+    "0000011000000",
+    "0000011000000",
+    "0000001000000",
+    "0001111110000",
+    "0000001000000",
+    "0100001000010",
+    "0100001000010",
+    "0010010100100",
+    "0001100011000",
+    "0000000000000",
+  },
+  banked_spark = {
+    "0000001000000",
+    "0000011100000",
+    "0000111001000",
+    "0001111110000",
+    "0000111000000",
+    "0000010000000",
+    "0001111110000",
+    "0010000011000",
+    "0010111011000",
+    "0010101011000",
+    "0010111011000",
+    "0001111110000",
+    "0000000000000",
+  },
+  pocket_refund = {
+    "0001111110000",
+    "0010000011000",
+    "0100000001000",
+    "0100111001000",
+    "0101000101000",
+    "0101000101000",
+    "0100111001000",
+    "0100000001000",
+    "0011111111000",
+    "0000001000000",
+    "0000010000000",
+    "0000100000000",
+    "0001110000000",
+  },
+  fresh_mint = {
+    "0000001000000",
+    "0000011100000",
+    "0000111110000",
+    "0001111111000",
+    "0011111111100",
+    "0000011100000",
+    "0000011100000",
+    "0000011100000",
+    "0000111110000",
+    "0001111111000",
+    "0000001000000",
+    "0000010100000",
+    "0000100010000",
+  },
+  opening_penny = {
+    "0001111111000",
+    "0010000000100",
+    "0100000000010",
+    "0100000000010",
+    "0100000000010",
+    "0100000000010",
+    "0100000000010",
+    "0100011100010",
+    "0100010100010",
+    "0100011100010",
+    "0010000000100",
+    "0001111111000",
+    "0000000000000",
+  },
+  slider_cent = {
+    "0000001000000",
+    "0000011000000",
+    "0000111111110",
+    "0000011000000",
+    "0000001000000",
+    "0000000000000",
+    "0111111111000",
+    "0000000110000",
+    "0000001110000",
+    "0000011000000",
+    "0000110000000",
+    "0011111111100",
+    "0000000000000",
+  },
+  commitment_chip = {
+    "0000011100000",
+    "0001100011000",
+    "0010000000100",
+    "0100011100010",
+    "0100100010010",
+    "1001001001001",
+    "1001011101001",
+    "1001001001001",
+    "0100100010010",
+    "0100011100010",
+    "0010000000100",
+    "0001100011000",
+    "0000011100000",
+  },
+  left_lift = {
+    "0000010000000",
+    "0000110000000",
+    "0001111111110",
+    "0000110000000",
+    "0000010000000",
+    "0000000000000",
+    "0000011100000",
+    "0000111110000",
+    "0001111111000",
+    "0011111111100",
+    "0000010000000",
+    "0000010000000",
+    "0000000000000",
+  },
+  right_drift = {
+    "0000000100000",
+    "0000000110000",
+    "0111111111000",
+    "0000000110000",
+    "0000000100000",
+    "0000000000000",
+    "0000011100000",
+    "0000111110000",
+    "0001111111000",
+    "0011111111100",
+    "0000001000000",
+    "0000001000000",
+    "0000000000000",
+  },
+  glass_nickel = {
+    "0000001000000",
+    "0000010100000",
+    "0000100010000",
+    "0001000001000",
+    "0010001000100",
+    "0100010000010",
+    "1000101010001",
+    "0100000100010",
+    "0010001000100",
+    "0001010001000",
+    "0000100010000",
+    "0000010100000",
+    "0000001000000",
+  },
+  moon_mint = {
+    "0000011110000",
+    "0001110001000",
+    "0011000000000",
+    "0110000000000",
+    "0110000000000",
+    "1100000000000",
+    "1100000000000",
+    "0110000000000",
+    "0110000000000",
+    "0011000000000",
+    "0001110001000",
+    "0000011110000",
+    "0000000000000",
+  },
+  sun_stamp = {
+    "1000010000100",
+    "0100010001000",
+    "0010010010000",
+    "0001111110000",
+    "0011111111000",
+    "0001111110000",
+    "1111111111111",
+    "0001111110000",
+    "0011111111000",
+    "0001111110000",
+    "0010010010000",
+    "0100010001000",
+    "1000010000100",
+  },
+  black_cat_cent = {
+    "0010000000100",
+    "0111000001110",
+    "1111100011111",
+    "1111111111111",
+    "1101011101011",
+    "1111111111111",
+    "1110011100111",
+    "1111001001111",
+    "0111111111110",
+    "0011111111100",
+    "0001100011000",
+    "0001000001000",
+    "0000000000000",
+  },
   heads = {
-    "1001",
-    "1111",
-    "1001",
-    "1001",
-    "1001",
+    "0000011100000",
+    "0000100010000",
+    "0000101010000",
+    "0000100010000",
+    "0000011100000",
+    "0000010100000",
+    "0000100010000",
+    "0001000001000",
+    "0000000000000",
+    "0001111110000",
+    "0000010000000",
+    "0000010000000",
+    "0001111110000",
   },
   tails = {
-    "1111",
-    "0110",
-    "0110",
-    "0110",
-    "0110",
-  },
-  economy = {
-    "0110",
-    "1000",
-    "0110",
-    "0001",
-    "1110",
-  },
-  weight = {
-    "0110",
-    "1111",
-    "1111",
-    "0110",
-    "0110",
-  },
-  streak = {
-    "1000",
-    "1100",
-    "1110",
-    "0111",
-    "0011",
-  },
-  boss = {
-    "1001",
-    "1111",
-    "0110",
-    "1111",
-    "1001",
-  },
-  score = {
-    "0110",
-    "1111",
-    "1111",
-    "0110",
-    "0110",
-  },
-  default = {
-    "0110",
-    "1001",
-    "1001",
-    "1001",
-    "0110",
+    "0001111110000",
+    "0000010000000",
+    "0000010000000",
+    "0000010000000",
+    "0000010000000",
+    "0000010000000",
+    "0000010000000",
+    "0000010000000",
+    "0000010000000",
+    "0000010000000",
+    "0000010000000",
+    "0000010000000",
+    "0000010000000",
   },
 }
 
@@ -108,25 +607,29 @@ local function resolveDefinition(coinOrId)
   return Coins.getById(coinOrId)
 end
 
-local function getSymbolKey(definition, side)
+local function getFaceKey(definition, side)
   if side == "heads" or side == "tails" then
     return side
   end
 
+  if definition and definition.art and definition.art.face then
+    return definition.art.face
+  end
+
   if hasTag(definition, "economy") or hasTag(definition, "shop") then
-    return "economy"
+    return "heads_cache"
   end
 
   if hasTag(definition, "weight") then
-    return "weight"
+    return "weighted_shell"
   end
 
   if hasTag(definition, "streak") then
-    return "streak"
+    return "echo_penny"
   end
 
   if hasTag(definition, "boss") then
-    return "boss"
+    return "boss_biter"
   end
 
   if hasTag(definition, "heads") then
@@ -138,10 +641,42 @@ local function getSymbolKey(definition, side)
   end
 
   if hasTag(definition, "score") then
-    return "score"
+    return "match_spark"
   end
 
-  return "default"
+  return "regular_dollar"
+end
+
+local function getRimType(definition)
+  if definition and definition.art and definition.art.rim then
+    return definition.art.rim
+  end
+
+  if hasTag(definition, "boss") then
+    return "boss"
+  end
+
+  if hasTag(definition, "neighbor") or hasTag(definition, "sleight") or hasTag(definition, "draw") or hasTag(definition, "reorder") or hasTag(definition, "flip") then
+    return "motion"
+  end
+
+  if hasTag(definition, "weight") then
+    return "weight"
+  end
+
+  if hasTag(definition, "streak") or hasTag(definition, "perfect") or hasTag(definition, "multiplier") then
+    return "combo"
+  end
+
+  if hasTag(definition, "safety") or hasTag(definition, "miss") or hasTag(definition, "counter") then
+    return "safety"
+  end
+
+  if hasTag(definition, "economy") or hasTag(definition, "shop") then
+    return "economy"
+  end
+
+  return "score"
 end
 
 local function drawPattern(pattern, x, y, pixelSize, color)
@@ -162,6 +697,428 @@ local function drawPattern(pattern, x, y, pixelSize, color)
   end
 end
 
+local FACE_GRID_SIZE = 25
+
+local function cell(ctx, x, y)
+  if x < 0 or y < 0 or x >= FACE_GRID_SIZE or y >= FACE_GRID_SIZE then
+    return
+  end
+
+  love.graphics.rectangle("fill", ctx.x + (x * ctx.cell), ctx.y + (y * ctx.cell), ctx.cell, ctx.cell)
+end
+
+local function block(ctx, x, y, width, height)
+  for row = 0, height - 1 do
+    for column = 0, width - 1 do
+      cell(ctx, x + column, y + row)
+    end
+  end
+end
+
+local function line(ctx, x1, y1, x2, y2, width)
+  local steps = math.max(math.abs(x2 - x1), math.abs(y2 - y1), 1)
+  width = width or 1
+
+  for index = 0, steps do
+    local t = index / steps
+    local x = math.floor(x1 + ((x2 - x1) * t) + 0.5)
+    local y = math.floor(y1 + ((y2 - y1) * t) + 0.5)
+    block(ctx, x - math.floor(width / 2), y - math.floor(width / 2), width, width)
+  end
+end
+
+local function mask(ctx, rows, x, y)
+  for rowIndex, row in ipairs(rows) do
+    for columnIndex = 1, #row do
+      if row:sub(columnIndex, columnIndex) == "1" then
+        cell(ctx, x + columnIndex - 1, y + rowIndex - 1)
+      end
+    end
+  end
+end
+
+local function head(ctx, x, y)
+  mask(ctx, {
+    "000111000",
+    "001111100",
+    "011000110",
+    "110101011",
+    "110000011",
+    "110111011",
+    "011000110",
+    "001111100",
+    "000111000",
+    "000010000",
+  }, x, y)
+end
+
+local function tail(ctx, x, y)
+  mask(ctx, {
+    "111111111",
+    "111111111",
+    "000111000",
+    "000111000",
+    "000111000",
+    "000111000",
+    "000111000",
+    "000111000",
+    "000111000",
+    "000111000",
+  }, x, y)
+end
+
+local function bag(ctx, x, y)
+  mask(ctx, {
+    "000010000",
+    "000111000",
+    "001111100",
+    "011111110",
+    "111101111",
+    "111111111",
+    "111101111",
+    "011111110",
+    "001111100",
+    "000111000",
+  }, x, y)
+end
+
+local function cache(ctx, x, y)
+  mask(ctx, {
+    "111111111",
+    "100000001",
+    "101111101",
+    "101000101",
+    "101010101",
+    "101000101",
+    "101111101",
+    "100000001",
+    "111111111",
+  }, x, y)
+end
+
+local function spark(ctx, x, y)
+  cell(ctx, x + 5, y)
+  block(ctx, x + 4, y + 1, 3, 1)
+  block(ctx, x + 3, y + 2, 5, 1)
+  block(ctx, x + 1, y + 3, 9, 2)
+  block(ctx, x, y + 5, 11, 1)
+  block(ctx, x + 2, y + 6, 7, 1)
+  block(ctx, x + 4, y + 7, 3, 1)
+  cell(ctx, x + 5, y + 8)
+  line(ctx, x + 5, y + 10, x + 5, y + 14, 2)
+  line(ctx, x + 2, y + 12, x + 8, y + 12, 1)
+end
+
+local function anchor(ctx, x, y)
+  line(ctx, x + 5, y, x + 5, y + 9, 2)
+  block(ctx, x + 1, y + 4, 9, 2)
+  line(ctx, x + 1, y + 9, x + 5, y + 12, 2)
+  line(ctx, x + 9, y + 9, x + 5, y + 12, 2)
+  block(ctx, x, y + 8, 2, 2)
+  block(ctx, x + 9, y + 8, 2, 2)
+end
+
+local function arrow(ctx, x, y, direction)
+  if direction == "left" then
+    line(ctx, x + 10, y + 5, x + 2, y + 5, 3)
+    line(ctx, x + 4, y + 1, x, y + 5, 2)
+    line(ctx, x, y + 5, x + 4, y + 9, 2)
+  elseif direction == "right" then
+    line(ctx, x, y + 5, x + 8, y + 5, 3)
+    line(ctx, x + 6, y + 1, x + 10, y + 5, 2)
+    line(ctx, x + 10, y + 5, x + 6, y + 9, 2)
+  else
+    line(ctx, x + 5, y + 10, x + 5, y + 2, 3)
+    line(ctx, x + 1, y + 4, x + 5, y, 2)
+    line(ctx, x + 9, y + 4, x + 5, y, 2)
+  end
+end
+
+local function star(ctx, x, y)
+  mask(ctx, {
+    "000010000",
+    "000111000",
+    "100111001",
+    "111111111",
+    "011111110",
+    "001111100",
+    "011101110",
+    "110000011",
+    "100000001",
+  }, x, y)
+end
+
+local function net(ctx, x, y)
+  for offset = 0, 10, 2 do
+    line(ctx, x + offset, y, x, y + offset, 1)
+    line(ctx, x + 10, y + offset, x + offset, y + 10, 1)
+  end
+  block(ctx, x, y, 11, 1)
+  block(ctx, x, y + 10, 11, 1)
+end
+
+local function shell(ctx, x, y)
+  mask(ctx, {
+    "000111000",
+    "001111100",
+    "011111110",
+    "111111111",
+    "110101011",
+    "111111111",
+    "011111110",
+    "001111100",
+    "000111000",
+  }, x, y)
+  line(ctx, x + 4, y + 1, x + 4, y + 8, 1)
+  line(ctx, x + 1, y + 4, x + 7, y + 8, 1)
+  line(ctx, x + 7, y + 4, x + 1, y + 8, 1)
+end
+
+local function moon(ctx, x, y)
+  mask(ctx, {
+    "00011110",
+    "00111100",
+    "01110000",
+    "11100000",
+    "11100000",
+    "11100000",
+    "01110000",
+    "00111100",
+    "00011110",
+  }, x, y)
+end
+
+local function cat(ctx, x, y)
+  mask(ctx, {
+    "100000001",
+    "110000011",
+    "111000111",
+    "111111111",
+    "101111101",
+    "111111111",
+    "111010111",
+    "011111110",
+    "001010100",
+  }, x, y)
+end
+
+local function diamond(ctx, x, y)
+  mask(ctx, {
+    "000010000",
+    "000111000",
+    "001101100",
+    "011000110",
+    "110010011",
+    "011000110",
+    "001101100",
+    "000111000",
+    "000010000",
+  }, x, y)
+end
+
+local FACE_DRAWERS = {
+  regular_dollar = function(ctx)
+    line(ctx, 10, 3, 10, 17, 2)
+    block(ctx, 7, 4, 7, 2)
+    block(ctx, 6, 6, 3, 2)
+    block(ctx, 7, 9, 7, 2)
+    block(ctx, 12, 11, 3, 2)
+    block(ctx, 6, 14, 8, 2)
+  end,
+  match_spark = function(ctx) spark(ctx, 7, 3) end,
+  heads_hunter = function(ctx)
+    head(ctx, 8, 1)
+    head(ctx, 3, 11)
+    head(ctx, 13, 11)
+    line(ctx, 10, 7, 5, 11, 1)
+    line(ctx, 10, 7, 15, 11, 1)
+  end,
+  tails_chaser = function(ctx)
+    tail(ctx, 8, 2)
+    line(ctx, 4, 12, 8, 16, 2)
+    line(ctx, 8, 16, 15, 15, 2)
+    line(ctx, 15, 15, 17, 10, 2)
+    cell(ctx, 16, 8)
+    cell(ctx, 14, 7)
+  end,
+  lucky_miss = function(ctx)
+    line(ctx, 5, 5, 5, 12, 2)
+    line(ctx, 15, 5, 15, 12, 2)
+    line(ctx, 5, 12, 10, 16, 2)
+    line(ctx, 15, 12, 10, 16, 2)
+    block(ctx, 7, 7, 2, 2)
+    block(ctx, 13, 3, 2, 2)
+  end,
+  weighted_shell = function(ctx) shell(ctx, 7, 4) end,
+  streak_drill = function(ctx)
+    line(ctx, 4, 4, 16, 16, 3)
+    line(ctx, 6, 2, 18, 14, 1)
+    line(ctx, 2, 6, 14, 18, 1)
+  end,
+  boss_biter = function(ctx)
+    block(ctx, 4, 4, 13, 2)
+    block(ctx, 5, 15, 11, 2)
+    for x = 5, 15, 3 do
+      line(ctx, x, 6, x + 1, 10, 1)
+      line(ctx, x + 1, 14, x, 10, 1)
+    end
+    block(ctx, 7, 9, 7, 2)
+  end,
+  cross_catch = function(ctx)
+    line(ctx, 4, 4, 16, 16, 2)
+    line(ctx, 16, 4, 4, 16, 2)
+    block(ctx, 8, 8, 5, 5)
+  end,
+  heads_banker = function(ctx) head(ctx, 3, 3); bag(ctx, 12, 11) end,
+  tails_banker = function(ctx) tail(ctx, 4, 3); bag(ctx, 12, 11) end,
+  safety_net = function(ctx) net(ctx, 6, 5); block(ctx, 5, 15, 11, 2) end,
+  reserve_token = function(ctx) cache(ctx, 7, 4); star(ctx, 8, 14) end,
+  mirror_mark = function(ctx)
+    line(ctx, 10, 3, 10, 18, 1)
+    head(ctx, 3, 7)
+    head(ctx, 13, 7)
+  end,
+  parachute_pin = function(ctx)
+    line(ctx, 5, 9, 10, 15, 1)
+    line(ctx, 15, 9, 10, 15, 1)
+    block(ctx, 6, 4, 9, 2)
+    line(ctx, 6, 6, 4, 9, 1)
+    line(ctx, 14, 6, 16, 9, 1)
+    star(ctx, 8, 14)
+  end,
+  tails_echo = function(ctx) tail(ctx, 4, 3); line(ctx, 12, 7, 17, 12, 1); line(ctx, 11, 11, 17, 17, 1); line(ctx, 14, 5, 19, 10, 1) end,
+  heads_cache = function(ctx) head(ctx, 3, 3); cache(ctx, 11, 11) end,
+  tails_cache = function(ctx) tail(ctx, 4, 3); cache(ctx, 11, 11) end,
+  echo_penny = function(ctx)
+    for radius = 3, 8, 2 do
+      block(ctx, 10 - radius, 10 - radius, radius * 2 + 1, 1)
+      block(ctx, 10 - radius, 10 + radius, radius * 2 + 1, 1)
+      block(ctx, 10 - radius, 10 - radius, 1, radius * 2 + 1)
+      block(ctx, 10 + radius, 10 - radius, 1, radius * 2 + 1)
+    end
+    cell(ctx, 10, 10)
+  end,
+  perfect_penny = function(ctx) star(ctx, 8, 4); line(ctx, 6, 13, 9, 16, 2); line(ctx, 9, 16, 16, 8, 2) end,
+  comeback_cent = function(ctx)
+    line(ctx, 15, 5, 5, 5, 2)
+    line(ctx, 5, 5, 5, 15, 2)
+    line(ctx, 5, 15, 16, 15, 2)
+    arrow(ctx, 4, 11, "right")
+  end,
+  heads_anchor = function(ctx) head(ctx, 8, 2); anchor(ctx, 6, 11) end,
+  tails_anchor = function(ctx) tail(ctx, 8, 2); anchor(ctx, 6, 11) end,
+  banked_spark = function(ctx) spark(ctx, 7, 2); bag(ctx, 8, 13) end,
+  pocket_refund = function(ctx) cache(ctx, 5, 5); arrow(ctx, 7, 13, "left") end,
+  fresh_mint = function(ctx) star(ctx, 8, 3); line(ctx, 10, 11, 10, 18, 2); line(ctx, 7, 14, 10, 11, 1); line(ctx, 13, 14, 10, 11, 1) end,
+  opening_penny = function(ctx) block(ctx, 5, 4, 11, 13); block(ctx, 7, 6, 7, 9); star(ctx, 8, 8) end,
+  slider_cent = function(ctx) arrow(ctx, 3, 4, "right"); line(ctx, 5, 13, 16, 13, 2); line(ctx, 7, 16, 18, 16, 2) end,
+  commitment_chip = function(ctx) diamond(ctx, 7, 3); line(ctx, 6, 14, 15, 14, 2); line(ctx, 8, 17, 13, 17, 2) end,
+  left_lift = function(ctx) arrow(ctx, 5, 3, "left"); arrow(ctx, 6, 11, "up") end,
+  right_drift = function(ctx) arrow(ctx, 8, 3, "right"); arrow(ctx, 6, 11, "up") end,
+  glass_nickel = function(ctx) diamond(ctx, 7, 3); line(ctx, 10, 3, 8, 16, 1); line(ctx, 13, 7, 6, 14, 1); line(ctx, 12, 11, 16, 17, 1) end,
+  moon_mint = function(ctx) moon(ctx, 7, 4); bag(ctx, 11, 13) end,
+  sun_stamp = function(ctx)
+    line(ctx, 10, 2, 10, 18, 1)
+    line(ctx, 2, 10, 18, 10, 1)
+    line(ctx, 4, 4, 16, 16, 1)
+    line(ctx, 16, 4, 4, 16, 1)
+    block(ctx, 7, 7, 7, 7)
+  end,
+  black_cat_cent = function(ctx) cat(ctx, 7, 5); line(ctx, 6, 15, 3, 17, 1); line(ctx, 14, 15, 17, 17, 1) end,
+  heads = function(ctx) head(ctx, 8, 4) end,
+  tails = function(ctx) tail(ctx, 8, 4) end,
+}
+
+local function drawFace(faceKey, pattern, x, y, size, scale, palette, alpha)
+  local drawer = FACE_DRAWERS[faceKey]
+
+  if drawer then
+    local pixelSize = math.max(1, math.floor(size / FACE_GRID_SIZE))
+    local faceSize = FACE_GRID_SIZE * pixelSize
+    local faceX = math.floor(x + ((size - faceSize) / 2))
+    local faceY = math.floor(y + ((size - faceSize) / 2) + (scale * 0.5))
+
+    local shadowOffset = math.max(1, math.floor(pixelSize / 3))
+
+    apply(palette.dark, 0.50 * alpha)
+    drawer({ x = faceX + shadowOffset, y = faceY + shadowOffset, cell = pixelSize })
+    apply(palette.shine, 0.98 * alpha)
+    drawer({ x = faceX, y = faceY, cell = pixelSize })
+    return
+  end
+
+  local symbolPixel = math.max(1, math.floor(size / 17))
+  local patternWidth = #pattern[1] * symbolPixel
+  local patternHeight = #pattern * symbolPixel
+
+  drawPattern(
+    pattern,
+    math.floor(x + ((size - patternWidth) / 2)),
+    math.floor(y + ((size - patternHeight) / 2) + (scale * 0.5)),
+    symbolPixel,
+    palette.shine
+  )
+end
+
+local function drawRimMark(x, y, width, height, color, alpha)
+  apply(color, alpha)
+  love.graphics.rectangle("fill", x, y, width, height)
+end
+
+local function drawRimMarks(rimType, x, y, size, scale, palette, alpha)
+  local color = palette.shine
+  local softAlpha = 0.82 * alpha
+
+  if rimType == "economy" then
+    for index = 0, 3 do
+      local markX = x + ((index * 4 + 2) * scale)
+      drawRimMark(markX, y + (2 * scale), 2 * scale, 2 * scale, color, softAlpha)
+      drawRimMark(markX, y + (12 * scale), 2 * scale, 2 * scale, color, softAlpha)
+    end
+    drawRimMark(x + (2 * scale), y + (6 * scale), 2 * scale, 2 * scale, color, softAlpha)
+    drawRimMark(x + (12 * scale), y + (6 * scale), 2 * scale, 2 * scale, color, softAlpha)
+  elseif rimType == "weight" then
+    drawRimMark(x + (3 * scale), y + (13 * scale), 10 * scale, scale, color, softAlpha)
+    drawRimMark(x + (2 * scale), y + (11 * scale), 3 * scale, 2 * scale, color, softAlpha)
+    drawRimMark(x + (11 * scale), y + (11 * scale), 3 * scale, 2 * scale, color, softAlpha)
+    drawRimMark(x + (1 * scale), y + (7 * scale), 2 * scale, 3 * scale, color, softAlpha)
+    drawRimMark(x + (13 * scale), y + (7 * scale), 2 * scale, 3 * scale, color, softAlpha)
+  elseif rimType == "combo" then
+    for index = 0, 2 do
+      drawRimMark(x + ((3 + index * 3) * scale), y + (2 * scale), 2 * scale, scale, color, softAlpha)
+      drawRimMark(x + ((4 + index * 3) * scale), y + (3 * scale), scale, 2 * scale, color, softAlpha)
+      drawRimMark(x + ((3 + index * 3) * scale), y + (13 * scale), 2 * scale, scale, color, softAlpha)
+      drawRimMark(x + ((4 + index * 3) * scale), y + (11 * scale), scale, 2 * scale, color, softAlpha)
+    end
+  elseif rimType == "safety" then
+    for index = 0, 4 do
+      drawRimMark(x + ((2 + index * 3) * scale), y + ((3 + index % 2) * scale), scale, 3 * scale, color, softAlpha)
+      drawRimMark(x + ((2 + index * 3) * scale), y + ((10 - index % 2) * scale), scale, 3 * scale, color, softAlpha)
+    end
+    drawRimMark(x + (2 * scale), y + (5 * scale), 12 * scale, scale, color, softAlpha * 0.85)
+    drawRimMark(x + (2 * scale), y + (10 * scale), 12 * scale, scale, color, softAlpha * 0.85)
+  elseif rimType == "motion" then
+    drawRimMark(x + (2 * scale), y + (4 * scale), 4 * scale, scale, color, softAlpha)
+    drawRimMark(x + (2 * scale), y + (11 * scale), 4 * scale, scale, color, softAlpha)
+    drawRimMark(x + (10 * scale), y + (4 * scale), 4 * scale, scale, color, softAlpha)
+    drawRimMark(x + (10 * scale), y + (11 * scale), 4 * scale, scale, color, softAlpha)
+    drawRimMark(x + (5 * scale), y + (3 * scale), scale, scale, color, softAlpha)
+    drawRimMark(x + (10 * scale), y + (12 * scale), scale, scale, color, softAlpha)
+  elseif rimType == "boss" then
+    for index = 0, 3 do
+      drawRimMark(x + ((3 + index * 3) * scale), y + (2 * scale), scale, 3 * scale, color, softAlpha)
+      drawRimMark(x + ((4 + index * 3) * scale), y + (11 * scale), scale, 3 * scale, color, softAlpha)
+    end
+    drawRimMark(x + (2 * scale), y + (7 * scale), 2 * scale, scale, color, softAlpha)
+    drawRimMark(x + (12 * scale), y + (8 * scale), 2 * scale, scale, color, softAlpha)
+  else
+    drawRimMark(x + (2 * scale), y + (5 * scale), 2 * scale, scale, color, softAlpha)
+    drawRimMark(x + (12 * scale), y + (10 * scale), 2 * scale, scale, color, softAlpha)
+    drawRimMark(x + (7 * scale), y + (1 * scale), 2 * scale, scale, color, softAlpha)
+    drawRimMark(x + (7 * scale), y + (14 * scale), 2 * scale, scale, color, softAlpha)
+  end
+end
+
 function CoinArt.getPalette(definition)
   definition = resolveDefinition(definition)
   return RARITY_PALETTES[(definition and definition.rarity) or "common"] or RARITY_PALETTES.common
@@ -172,20 +1129,13 @@ function CoinArt.draw(coinOrId, x, y, size, options)
   local definition = resolveDefinition(coinOrId)
   local palette = CoinArt.getPalette(definition)
   local scale = size / 16
-  local symbolKey = getSymbolKey(definition, options.side)
-  local pattern = SYMBOL_PATTERNS[symbolKey] or SYMBOL_PATTERNS.default
+  local faceKey = getFaceKey(definition, options.side)
+  local pattern = FACE_PATTERNS[faceKey] or FACE_PATTERNS.regular_dollar
+  local rimType = getRimType(definition)
   local alpha = options.alpha or 1.0
-  local tilt = options.tilt or 0
 
   x = math.floor(x)
   y = math.floor(y)
-
-  if tilt ~= 0 then
-    love.graphics.push()
-    love.graphics.translate(x + (size / 2), y + (size / 2))
-    love.graphics.rotate(tilt)
-    love.graphics.translate(-(x + (size / 2)), -(y + (size / 2)))
-  end
 
   if options.glow ~= false then
     for index = 1, 3 do
@@ -202,8 +1152,8 @@ function CoinArt.draw(coinOrId, x, y, size, options)
     end
   end
 
-  apply(Theme.colors.shadow, 0.28 * alpha)
-  love.graphics.rectangle("fill", x + (2 * scale), y + (3 * scale), size, size, 6, 6)
+  apply(Theme.colors.shadow, 0.24 * alpha)
+  love.graphics.rectangle("fill", x, y + (2 * scale), size, size, 6, 6)
 
   local rows = {
     { 5, 6 },
@@ -251,22 +1201,9 @@ function CoinArt.draw(coinOrId, x, y, size, options)
     love.graphics.rectangle("fill", x + (3 * scale), y + (rowIndex * scale), 10 * scale, math.max(1, scale * 0.35))
   end
 
-  apply(palette.rim, 0.95 * alpha)
-  love.graphics.rectangle("fill", x + (2 * scale), y + (5 * scale), 2 * scale, scale)
-  love.graphics.rectangle("fill", x + (12 * scale), y + (10 * scale), 2 * scale, scale)
-  love.graphics.rectangle("fill", x + (7 * scale), y + (1 * scale), 2 * scale, scale)
-  love.graphics.rectangle("fill", x + (7 * scale), y + (14 * scale), 2 * scale, scale)
+  drawRimMarks(rimType, x, y, size, scale, palette, alpha)
 
-  local symbolPixel = math.max(1, math.floor(size / 22))
-  local patternWidth = #pattern[1] * symbolPixel
-  local patternHeight = #pattern * symbolPixel
-  drawPattern(
-    pattern,
-    math.floor(x + ((size - patternWidth) / 2)),
-    math.floor(y + ((size - patternHeight) / 2) + (scale * 0.5)),
-    symbolPixel,
-    palette.shine
-  )
+  drawFace(faceKey, pattern, x, y, size, scale, palette, alpha)
 
   if options.selected then
     apply(palette.glow or Theme.colors.accent, 0.90)
@@ -275,9 +1212,6 @@ function CoinArt.draw(coinOrId, x, y, size, options)
     love.graphics.setLineWidth(1)
   end
 
-  if tilt ~= 0 then
-    love.graphics.pop()
-  end
 end
 
 function CoinArt.drawMini(coinOrId, x, y, size, options)
@@ -288,15 +1222,6 @@ function CoinArt.drawCard(coinOrId, x, y, width, height, options)
   options = options or {}
   local definition = resolveDefinition(coinOrId)
   local palette = CoinArt.getPalette(definition)
-  local tilt = options.tilt or 0
-
-  if tilt ~= 0 then
-    love.graphics.push()
-    love.graphics.translate(x + (width / 2), y + (height / 2))
-    love.graphics.rotate(tilt)
-    love.graphics.translate(-(x + (width / 2)), -(y + (height / 2)))
-  end
-
   apply(Theme.colors.shadow, 0.34)
   love.graphics.rectangle("fill", x + 5, y + 7, width, height, 12, 12)
   love.graphics.setColor(0.08, 0.09, 0.13, 0.96)
@@ -315,12 +1240,7 @@ function CoinArt.drawCard(coinOrId, x, y, width, height, options)
     side = options.side,
     selected = options.selected,
     glow = true,
-    tilt = -tilt,
   })
-
-  if tilt ~= 0 then
-    love.graphics.pop()
-  end
 end
 
 return CoinArt

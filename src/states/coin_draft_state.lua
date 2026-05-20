@@ -1,7 +1,6 @@
 local Button = require("src.ui.button")
+local CoinCard = require("src.ui.coin_card")
 local Layout = require("src.ui.layout")
-local Panel = require("src.ui.panel")
-local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
 
 local CoinDraftState = {}
@@ -97,17 +96,9 @@ function CoinDraftState:drawOfferCards(app, cards)
 
   for index, card in ipairs(cards) do
     local x = startX + ((index - 1) * (cardWidth + gap))
-    Panel.draw(x, cardY, cardWidth, cardHeight, card.name)
-    local content = Panel.getContentArea(x, cardY, cardWidth, cardHeight, card.name)
-    local descriptionY = content.y + (Theme.spacing.lineHeight * 2)
-    local lines = {
-      string.format("Rarity: %s", card.rarity or "common"),
-      "",
-    }
-
-    love.graphics.setFont(app.fonts.body)
-    Layout.drawWrappedLines(lines, content.x, content.y, content.width, Theme.colors.text, Theme.spacing.lineHeight, content.height - 58)
-    Layout.drawRichWrappedText(Terminology.getMechanicRichText(card.description or ""), content.x, descriptionY, content.width, Theme.colors.text, Theme.spacing.lineHeight, content.height - 58 - (Theme.spacing.lineHeight * 2))
+    CoinCard.draw(app, card, x, cardY, cardWidth, cardHeight, {
+      showCount = false,
+    })
   end
 end
 

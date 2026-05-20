@@ -1,74 +1,7 @@
-local CoinArt = require("src.ui.coin_art")
-local Layout = require("src.ui.layout")
-local Terminology = require("src.content.terminology")
+local CoinCard = require("src.ui.coin_card")
 local Theme = require("src.ui.theme")
 
 local PurseView = {}
-
-local function setColorWithAlpha(color, alpha)
-  love.graphics.setColor(color[1], color[2], color[3], alpha)
-end
-
-local function getWrappedPreview(text, width, maxLines)
-  local font = love.graphics.getFont()
-  local _, wrapped = font:getWrap(tostring(text or ""), math.max(1, width))
-  local lines = {}
-
-  for index = 1, math.min(#wrapped, maxLines) do
-    table.insert(lines, wrapped[index])
-  end
-
-  if #wrapped > maxLines and #lines > 0 then
-    local last = lines[#lines]
-    lines[#lines] = string.format("%s...", last:sub(1, math.max(1, #last - 3)))
-  end
-
-  return table.concat(lines, "\n")
-end
-
-local function drawCard(app, card, x, y, width, height, showZones)
-  local coinSize = math.min(60, math.max(44, math.floor(height * 0.38)))
-  local artX = x + 12
-  local artY = y + 38
-  local textX = artX + coinSize + 12
-  local textWidth = math.max(40, x + width - textX - 12)
-
-  setColorWithAlpha(Theme.colors.panel, 0.92)
-  love.graphics.rectangle("fill", x, y, width, height, 12, 12)
-  setColorWithAlpha(Theme.colors.panelBorder, 0.90)
-  love.graphics.setLineWidth(1)
-  love.graphics.rectangle("line", x, y, width, height, 12, 12)
-
-  love.graphics.setFont(app.fonts.body)
-  Theme.applyColor(Theme.colors.text)
-  love.graphics.printf(card.name or card.coinId, x + 10, y + 10, width - 20, "center")
-
-  CoinArt.draw(card.coinId, artX, artY, coinSize, {
-    selected = false,
-    tilt = -0.04,
-  })
-
-  love.graphics.setFont(app.fonts.small)
-  Theme.applyColor(Theme.colors.mutedText)
-  local descriptionLineHeight = app.fonts.small:getHeight() + 2
-  Layout.drawRichWrappedText(Terminology.getMechanicRichText(card.description), textX, y + 38, textWidth, Theme.colors.mutedText, descriptionLineHeight, descriptionLineHeight * 4)
-
-  local countText = string.format("x%d", card.count or 0)
-  if showZones then
-    countText = string.format(
-      "x%d  avail %d | hand %d | spent %d",
-      card.count or 0,
-      card.available or 0,
-      card.hand or 0,
-      card.exhausted or 0
-    )
-  end
-
-  setColorWithAlpha(Theme.colors.accent, 0.18)
-  love.graphics.rectangle("fill", x + 10, y + height - 28, width - 20, 20, 8, 8)
-  Theme.applyColor(Theme.colors.text)
-  love.graphics.printf(countText, x + 14, y + height - 25, width - 28, "center")
-end
 
 local function getGridMetrics(area, cardCount, options)
   local gap = Theme.spacing.itemGap
@@ -179,7 +112,9 @@ function PurseView.draw(app, area, stageState, options)
     local cardY = metrics.gridY + (row * (metrics.cardHeight + metrics.gap)) - scrollY
 
     if cardY + metrics.cardHeight >= metrics.gridY and cardY <= metrics.gridY + metrics.gridHeight then
-      drawCard(app, card, cardX, cardY, metrics.cardWidth, metrics.cardHeight, stageState ~= nil)
+      CoinCard.draw(app, card, cardX, cardY, metrics.cardWidth, metrics.cardHeight, {
+        showZones = stageState ~= nil,
+      })
     end
   end
 

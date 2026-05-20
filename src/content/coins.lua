@@ -570,9 +570,48 @@ local definitions = {
   },
 }
 
+local visualIdentities = {
+  regular_dollar = { face = "regular_dollar", rim = "score" },
+  match_spark = { face = "match_spark", rim = "score" },
+  heads_hunter = { face = "heads_hunter", rim = "score" },
+  tails_chaser = { face = "tails_chaser", rim = "score" },
+  lucky_miss = { face = "lucky_miss", rim = "safety" },
+  weighted_shell = { face = "weighted_shell", rim = "weight" },
+  streak_drill = { face = "streak_drill", rim = "combo" },
+  boss_biter = { face = "boss_biter", rim = "boss" },
+  cross_catch = { face = "cross_catch", rim = "safety" },
+  heads_banker = { face = "heads_banker", rim = "economy" },
+  tails_banker = { face = "tails_banker", rim = "economy" },
+  safety_net = { face = "safety_net", rim = "safety" },
+  reserve_token = { face = "reserve_token", rim = "economy" },
+  mirror_mark = { face = "mirror_mark", rim = "combo" },
+  parachute_pin = { face = "parachute_pin", rim = "safety" },
+  tails_echo = { face = "tails_echo", rim = "combo" },
+  heads_cache = { face = "heads_cache", rim = "economy" },
+  tails_cache = { face = "tails_cache", rim = "economy" },
+  echo_penny = { face = "echo_penny", rim = "combo" },
+  perfect_penny = { face = "perfect_penny", rim = "combo" },
+  comeback_cent = { face = "comeback_cent", rim = "safety" },
+  heads_anchor = { face = "heads_anchor", rim = "weight" },
+  tails_anchor = { face = "tails_anchor", rim = "weight" },
+  banked_spark = { face = "banked_spark", rim = "economy" },
+  pocket_refund = { face = "pocket_refund", rim = "motion" },
+  fresh_mint = { face = "fresh_mint", rim = "motion" },
+  opening_penny = { face = "opening_penny", rim = "motion" },
+  slider_cent = { face = "slider_cent", rim = "motion" },
+  commitment_chip = { face = "commitment_chip", rim = "motion" },
+  left_lift = { face = "left_lift", rim = "motion" },
+  right_drift = { face = "right_drift", rim = "motion" },
+  glass_nickel = { face = "glass_nickel", rim = "combo" },
+  moon_mint = { face = "moon_mint", rim = "weight" },
+  sun_stamp = { face = "sun_stamp", rim = "combo" },
+  black_cat_cent = { face = "black_cat_cent", rim = "safety" },
+}
+
 local byId = {}
 
 for _, definition in ipairs(definitions) do
+  definition.art = definition.art or visualIdentities[definition.id]
   byId[definition.id] = definition
 end
 
