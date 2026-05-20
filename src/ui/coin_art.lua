@@ -1137,6 +1137,19 @@ function CoinArt.draw(coinOrId, x, y, size, options)
   x = math.floor(x)
   y = math.floor(y)
 
+  local tilt = options.tilt or 0
+  local scaleX = options.scaleX or 1
+  local scaleY = options.scaleY or 1
+  local transformed = tilt ~= 0 or scaleX ~= 1 or scaleY ~= 1
+
+  if transformed then
+    love.graphics.push()
+    love.graphics.translate(x + (size / 2), y + (size / 2))
+    love.graphics.rotate(tilt)
+    love.graphics.scale(scaleX, scaleY)
+    love.graphics.translate(-(x + (size / 2)), -(y + (size / 2)))
+  end
+
   if options.glow ~= false then
     for index = 1, 3 do
       apply(palette.glow or palette.rim, (0.10 / index) * alpha)
@@ -1208,8 +1221,12 @@ function CoinArt.draw(coinOrId, x, y, size, options)
   if options.selected then
     apply(palette.glow or Theme.colors.accent, 0.90)
     love.graphics.setLineWidth(2)
-    love.graphics.rectangle("line", x - 3, y - 3, size + 6, size + 6, 6, 6)
+    love.graphics.circle("line", x + (size / 2), y + (size / 2), (size / 2) + 3)
     love.graphics.setLineWidth(1)
+  end
+
+  if transformed then
+    love.graphics.pop()
   end
 
 end

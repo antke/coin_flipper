@@ -42,25 +42,72 @@ end
 
 local function getRetroCoinMotion(progress, cardHeight)
   if not progress then
-    return 0, 0, 1
+    return 0, 0, 1, 1, 1, nil, true
   end
 
   local maxLift = math.floor(cardHeight * 0.21)
-  local liftRatio = 0
+  local arc = math.sin(progress * math.pi)
+  local settled = progress >= 0.78
+  local flipProgress = math.min(1, progress / 0.78)
+  local spinProgress = flipProgress
+  local edgeFactor = math.abs(math.cos(spinProgress * math.pi))
+  local liftOffset = -math.floor(arc * maxLift)
+  local tilt = math.sin(flipProgress * math.pi * 2) * 0.16
+  local scale = 1 + (arc * 0.05)
+  local scaleX = 0.18 + (edgeFactor * 0.82)
+  local scaleY = 1 + (arc * 0.08)
+  local spinSide = (math.floor(spinProgress * 2) % 2 == 0) and "heads" or "tails"
 
-  if progress < 0.35 then
-    liftRatio = progress / 0.35
-  elseif progress < 0.58 then
-    liftRatio = 1
-  else
-    liftRatio = math.max(0, 1 - ((progress - 0.58) / 0.42))
+  return liftOffset, tilt, scale, scaleX, scaleY, spinSide, settled
+end
+
+local function getSleightAnimationProgress(animation)
+  return math.min(1, animation.elapsed / math.max(0.001, animation.duration or 0.315))
+end
+
+local function easeOutCubic(progress)
+  local inverse = 1 - progress
+  return 1 - (inverse * inverse * inverse)
+end
+
+local function drawSleightBadge(centerX, centerY, radius, disabled, hovered)
+  local fill = disabled and Theme.colors.panelBorder or Theme.colors.warning
+  local border = disabled and Theme.colors.panelBorder or Theme.colors.highlight
+  local icon = disabled and Theme.colors.mutedText or Theme.colors.background
+  local alpha = disabled and 0.40 or (hovered and 0.96 or 0.84)
+
+  setColorWithAlpha(fill, alpha)
+  love.graphics.circle("fill", centerX, centerY, radius)
+
+  Theme.applyColor(border)
+  love.graphics.setLineWidth(2)
+  love.graphics.circle("line", centerX, centerY, radius)
+
+  Theme.applyColor(icon)
+
+  local lastX, lastY = nil, nil
+  local endX, endY = nil, nil
+
+  for step = 0, 8 do
+    local progress = step / 8
+    local angle = -2.45 + (progress * 4.05)
+    local spiralRadius = (radius - 6) * (0.48 + (progress * 0.52))
+    local pointX = centerX + math.cos(angle) * spiralRadius
+    local pointY = centerY + math.sin(angle) * spiralRadius
+
+    if lastX then
+      love.graphics.line(lastX, lastY, pointX, pointY)
+    end
+
+    lastX, lastY = pointX, pointY
+    endX, endY = pointX, pointY
   end
 
-  local liftOffset = -math.floor(liftRatio * maxLift)
-  local tilt = (progress < 1) and ((progress * 0.52) - 0.26) or 0
-  local scale = 1
+  if endX and endY then
+    love.graphics.polygon("fill", endX, endY, endX - 5, endY - 1, endX - 2, endY + 5)
+  end
 
-  return liftOffset, tilt, scale
+  love.graphics.setLineWidth(1)
 end
 
 function StageState.new()
@@ -76,6 +123,7 @@ function StageState.new()
     logDialogScrollOffset = 0,
     logScrollButtons = {},
     coinRowReveal = nil,
+    sleightAnimations = {},
     reveal = nil,
     handCardRects = {},
     draggingHandSlotIndex = nil,
@@ -124,7 +172,7 @@ end
 function StageState:startCoinRowReveal(app, batchResult)
   local coinCount = #(batchResult.perCoin or {})
   local revealDuration = app.config.get("ui.batchRevealDuration", 0.75)
-  local coinMotionDuration = 0.345
+  local coinMotionDuration = 0.25
 
   self.coinRowReveal = {
     batchId = batchResult.batchId,
@@ -265,6 +313,16 @@ function StageState:trySleightSlot(app, slotIndex)
 
   local ok, result = app:sleightHandSlot(slotIndex)
   self.statusMessage = ok and string.format("Sleighted slot %d.", slotIndex) or tostring(result)
+
+  if ok and result then
+    self.sleightAnimations[slotIndex] = {
+      elapsed = 0,
+      duration = 0.315,
+      returnedCoinId = result.returnedDefinitionId,
+      replacementCoinId = result.replacementDefinitionId,
+    }
+  end
+
   return ok, result
 end
 
@@ -859,7 +917,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
   cardHeight = math.max(132, cardHeight)
   local totalWidth = (cardWidth * #coins) + (cardGap * (#coins - 1))
   local startX = x + math.floor((width - totalWidth) / 2)
-  local cardY = y + titleHeight + math.floor((height - titleHeight - cardHeight) / 2)
+  local centerLineY = y + math.floor(height / 2)
   local reveal = self.coinRowReveal
   local visibleCount = #coins
   local rowRevealActive = reveal and reveal.batchId == batchId
@@ -885,26 +943,40 @@ function StageState:drawCoinRow(app, x, y, width, height)
   for index, coin in ipairs(coins) do
     local cardX = startX + ((index - 1) * (cardWidth + cardGap))
     local hasResult = coin.result ~= nil and index <= visibleCount
-    local borderColor = Theme.colors.panelBorder
-    local fillColor = Theme.colors.panel
     local artSide = nil
     local artSelected = false
     local revealAge = rowRevealActive and reveal.elapsed - getCoinRevealTime(reveal, index) or nil
     local liftProgress = revealAge and revealAge >= 0 and math.min(1, revealAge / math.max(0.001, reveal.coinMotionDuration or 0.46)) or nil
-    local liftOffset, motionTilt, motionScale = getRetroCoinMotion(liftProgress, cardHeight)
-    local impactPunch = revealAge and revealAge >= 0 and math.max(0, 1 - (revealAge / 0.26)) or 0
+    local liftOffset, motionTilt, motionScale, motionScaleX, motionScaleY, spinSide, resultSettled = getRetroCoinMotion(liftProgress, cardHeight)
+    local impactAge = revealAge and revealAge >= 0 and revealAge - ((reveal.coinMotionDuration or 0.46) * 0.78) or nil
+    local impactPunch = impactAge and impactAge >= 0 and math.max(0, 1 - (impactAge / 0.26)) or 0
+    local sleightAnimation = not hasResult and not rowRevealActive and self.sleightAnimations and self.sleightAnimations[coin.slotIndex or index] or nil
     local cardDrawX = cardX
-    local displayY = cardY + liftOffset
-    local hovered = handHoverEnabled and not isDraggingHandCoin and mouseX and mouseY and mouseX >= cardDrawX and mouseX <= (cardDrawX + cardWidth) and mouseY >= displayY and mouseY <= (displayY + cardHeight)
+    local coinSize = math.min(96, math.max(62, math.floor(cardWidth * 0.54)))
+    local animatedCoinSize = math.floor(coinSize * (motionScale + (impactPunch * 0.08)))
+    local coinCenterX = cardDrawX + math.floor(cardWidth / 2)
+    local staggerOffset = (index % 2 == 0) and 16 or -16
+    local coinCenterY = centerLineY + staggerOffset + liftOffset
+    local coinDrawX = coinCenterX - math.floor(animatedCoinSize / 2)
+    local coinDrawY = coinCenterY - math.floor(animatedCoinSize / 2)
+    local labelY = coinDrawY + animatedCoinSize + 12
+    local badgeRadius = 16
+    local badgeCenterX = coinDrawX + animatedCoinSize - 7
+    local badgeCenterY = coinDrawY + animatedCoinSize - 7
+    local hitWidth = math.max(animatedCoinSize + 34, math.min(cardWidth, 112))
+    local hitX = coinCenterX - math.floor(hitWidth / 2)
+    local hitY = coinDrawY - 14
+    local hitHeight = (labelY + app.fonts.small:getHeight() + 10) - hitY
 
     if hasResult then
-      borderColor = coin.didMatch and Theme.colors.success or Theme.colors.danger
-      fillColor = borderColor
-      artSide = coin.result
-      artSelected = coin.didMatch
-      setColorWithAlpha(fillColor, 0.16)
-    else
-      setColorWithAlpha(fillColor, 0.82)
+      hitHeight = hitHeight + 34
+    end
+
+    local hovered = handHoverEnabled and not isDraggingHandCoin and mouseX and mouseY and mouseX >= hitX and mouseX <= (hitX + hitWidth) and mouseY >= hitY and mouseY <= (hitY + hitHeight)
+
+    if hasResult then
+      artSide = resultSettled and coin.result or spinSide
+      artSelected = resultSettled and coin.didMatch
     end
 
     if hovered then
@@ -912,57 +984,75 @@ function StageState:drawCoinRow(app, x, y, width, height)
     end
 
     table.insert(self.handCardRects, {
-      x = cardDrawX,
-      y = displayY,
-      width = cardWidth,
-      height = cardHeight,
+      x = hitX,
+      y = hitY,
+      width = hitWidth,
+      height = hitHeight,
       slotIndex = coin.slotIndex or index,
       coinId = coin.coinId,
       movable = not rowRevealActive and not hasResult and self:isStageActive(app) and not self:isRevealActive(),
     })
 
-    love.graphics.rectangle("fill", cardDrawX, displayY, cardWidth, cardHeight, 12, 12)
-    Theme.applyColor(borderColor)
-    love.graphics.setLineWidth((hasResult or hovered) and 3 or 1)
-    love.graphics.rectangle("line", cardDrawX, displayY, cardWidth, cardHeight, 12, 12)
-    love.graphics.setLineWidth(1)
+    if hasResult and resultSettled then
+      local haloColor = coin.didMatch and Theme.colors.success or Theme.colors.danger
 
-    local coinSize = math.min(84, math.max(58, math.floor(cardWidth * 0.46)))
-    local animatedCoinSize = math.floor(coinSize * (motionScale + (impactPunch * 0.08)))
+      setColorWithAlpha(haloColor, 0.15)
+      love.graphics.circle("fill", coinCenterX, coinCenterY, math.floor(animatedCoinSize / 2) + 14)
+      setColorWithAlpha(haloColor, 0.58)
+      love.graphics.setLineWidth(2)
+      love.graphics.circle("line", coinCenterX, coinCenterY, math.floor(animatedCoinSize / 2) + 9)
+      love.graphics.setLineWidth(1)
+    elseif hovered then
+      setColorWithAlpha(Theme.colors.accent, 0.12)
+      love.graphics.circle("fill", coinCenterX, coinCenterY, math.floor(animatedCoinSize / 2) + 12)
+      setColorWithAlpha(Theme.colors.accent, 0.36)
+      love.graphics.setLineWidth(2)
+      love.graphics.circle("line", coinCenterX, coinCenterY, math.floor(animatedCoinSize / 2) + 7)
+      love.graphics.setLineWidth(1)
+    end
+
+    setColorWithAlpha(Theme.colors.shadow, 0.34)
+    love.graphics.ellipse("fill", coinCenterX, coinDrawY + animatedCoinSize + 8, math.floor(animatedCoinSize * 0.42), 8)
 
     love.graphics.setFont(app.fonts.small)
-    Theme.applyColor(Theme.colors.text)
-    love.graphics.printf(app:getCoinName(coin.coinId), cardDrawX + 8, displayY + 12, cardWidth - 16, "center")
+    Theme.applyColor(Theme.colors.mutedText)
+    love.graphics.printf(app:getCoinName(coin.coinId), cardDrawX + 4, labelY, cardWidth - 8, "center")
 
-    CoinArt.draw(coin.coinId, cardDrawX + math.floor((cardWidth - animatedCoinSize) / 2), displayY + 38 - math.floor((animatedCoinSize - coinSize) / 2), animatedCoinSize, {
+    CoinArt.draw(coin.coinId, coinDrawX, coinDrawY, animatedCoinSize, {
       side = artSide,
       selected = artSelected,
-      alpha = hasResult and 1.0 or 0.78,
+      alpha = sleightAnimation and 0.16 or (hasResult and 1.0 or 0.78),
       tilt = liftProgress and motionTilt * ((index % 2 == 0) and 1 or -1) or (hasResult and ((index % 2 == 0) and 0.10 or -0.10) or 0),
+      scaleX = liftProgress and motionScaleX or 1,
+      scaleY = liftProgress and motionScaleY or 1,
     })
 
-    if hasResult and revealAge and revealAge >= 0 and revealAge <= 0.60 then
-      self:drawRevealImpact(cardDrawX, displayY, cardWidth, cardHeight, revealAge, coin.didMatch)
+    if sleightAnimation then
+      self:drawSleightSwitchAnimation(cardDrawX, coinDrawY, cardWidth, cardHeight, coinSize, sleightAnimation)
+    end
+
+    if hasResult and impactAge and impactAge >= 0 and impactAge <= 0.60 then
+      self:drawRevealImpact(coinDrawX, coinDrawY, animatedCoinSize, animatedCoinSize, impactAge, coin.didMatch)
     end
 
     if hasResult then
-      Theme.applyColor(coin.didMatch and Theme.colors.success or Theme.colors.mutedText)
-      love.graphics.printf(coin.didMatch and string.upper(Terminology.getOutcomeLabel("match")) or string.upper(Terminology.getOutcomeLabel("miss")), cardDrawX + 8, displayY + cardHeight - 36, cardWidth - 16, "center")
+      if resultSettled then
+        Theme.applyColor(coin.didMatch and Theme.colors.success or Theme.colors.mutedText)
+        love.graphics.printf(coin.didMatch and string.upper(Terminology.getOutcomeLabel("match")) or string.upper(Terminology.getOutcomeLabel("miss")), cardDrawX + 8, labelY + 18, cardWidth - 16, "center")
 
-      if coin.forcedResult then
-        Theme.applyColor(Theme.colors.warning)
-        love.graphics.printf("FORCED", cardDrawX + 8, displayY + cardHeight - 18, cardWidth - 16, "center")
+        if coin.forcedResult then
+          Theme.applyColor(Theme.colors.warning)
+          love.graphics.printf("FORCED", cardDrawX + 8, labelY + 36, cardWidth - 16, "center")
+        end
       end
     else
-      Theme.applyColor(Theme.colors.mutedText)
-      local smallButtonWidth = math.min(56, cardWidth - 16)
-      local smallButtonY = displayY + cardHeight - 34
+      local badgeSize = badgeRadius * 2
       local buttons = {
         {
-          x = cardDrawX + math.floor((cardWidth - smallButtonWidth) / 2),
-          y = smallButtonY,
-          width = smallButtonWidth,
-          height = 24,
+          x = badgeCenterX - badgeRadius,
+          y = badgeCenterY - badgeRadius,
+          width = badgeSize,
+          height = badgeSize,
           label = "S",
           variant = "warning",
           disabled = coin.sleightUsed,
@@ -975,9 +1065,14 @@ function StageState:drawCoinRow(app, x, y, width, height)
       if not rowRevealActive then
         for _, button in ipairs(buttons) do
           table.insert(self.handActionButtons, button)
+          drawSleightBadge(
+            badgeCenterX,
+            badgeCenterY,
+            badgeRadius,
+            button.disabled,
+            handHoverEnabled and mouseX and mouseY and Button.containsPoint(button, mouseX, mouseY)
+          )
         end
-
-        Button.drawButtons(buttons, handHoverEnabled and mouseX or nil, handHoverEnabled and mouseY or nil)
       end
     end
 
@@ -1061,20 +1156,15 @@ end
 function StageState:drawRevealImpact(cardX, cardY, cardWidth, cardHeight, age, didMatch)
   local progress = math.min(1, age / 0.60)
   local color = didMatch and Theme.colors.success or Theme.colors.danger
+  local centerX = cardX + math.floor(cardWidth / 2)
+  local centerY = cardY + math.floor(cardHeight / 2)
+  local radius = math.floor(math.max(cardWidth, cardHeight) / 2)
   local padding = math.floor(8 + (30 * progress))
   local alpha = 0.68 * (1 - progress)
 
   Theme.applyColor({ color[1], color[2], color[3], alpha })
   love.graphics.setLineWidth(3)
-  love.graphics.rectangle(
-    "line",
-    cardX - padding,
-    cardY - padding,
-    cardWidth + (padding * 2),
-    cardHeight + (padding * 2),
-    14,
-    14
-  )
+  love.graphics.circle("line", centerX, centerY, radius + padding)
   love.graphics.setLineWidth(1)
 
   if didMatch then
@@ -1082,6 +1172,43 @@ function StageState:drawRevealImpact(cardX, cardY, cardWidth, cardHeight, age, d
   else
     self:drawMissParticles(cardX, cardY, cardWidth, cardHeight, age)
   end
+end
+
+function StageState:drawSleightSwitchAnimation(cardX, coinY, cardWidth, cardHeight, coinSize, animation)
+  local progress = getSleightAnimationProgress(animation)
+  local eased = easeOutCubic(progress)
+  local centerX = cardX + math.floor(cardWidth / 2)
+  local coinX = centerX - math.floor(coinSize / 2)
+  local baseY = coinY
+  local travel = math.floor(cardHeight * 0.34)
+  local outgoingY = baseY + math.floor(eased * travel)
+  local incomingY = baseY - math.floor((1 - eased) * travel)
+  local outgoingAlpha = math.max(0, 0.88 * (1 - progress))
+  local incomingAlpha = math.min(1, 0.20 + (0.80 * eased))
+  local pulseAlpha = math.max(0, 1 - progress)
+  local streamX = centerX - 7
+
+  love.graphics.setLineWidth(3)
+  Theme.applyColor({ Theme.colors.warning[1], Theme.colors.warning[2], Theme.colors.warning[3], 0.52 * pulseAlpha })
+  love.graphics.line(streamX, baseY + coinSize + 8, streamX, baseY + coinSize + travel - 4)
+  love.graphics.setLineWidth(1)
+
+  if animation.returnedCoinId then
+    CoinArt.draw(animation.returnedCoinId, coinX, outgoingY, coinSize, {
+      alpha = outgoingAlpha,
+      tilt = 0.16 + (progress * 0.34),
+    })
+  end
+
+  if animation.replacementCoinId then
+    CoinArt.draw(animation.replacementCoinId, coinX, incomingY, coinSize, {
+      alpha = incomingAlpha,
+      tilt = -0.18 + (progress * 0.18),
+    })
+  end
+
+  Theme.applyColor({ Theme.colors.warning[1], Theme.colors.warning[2], Theme.colors.warning[3], 0.84 * pulseAlpha })
+  love.graphics.printf("SLEIGHT", cardX + 8, baseY + coinSize + 12, cardWidth - 16, "center")
 end
 
 function StageState:getHandCardAtPoint(x, y)
@@ -1100,6 +1227,7 @@ function StageState:enter(app)
   app:ensureHandDrawn()
   self.reveal = nil
   self.coinRowReveal = nil
+  self.sleightAnimations = {}
   self.draggingHandSlotIndex = nil
   self.draggingHandCoinId = nil
   self.helpDialogOpen = false
@@ -1115,6 +1243,14 @@ function StageState:enter(app)
 end
 
 function StageState:update(app, dt)
+  for slotIndex, animation in pairs(self.sleightAnimations or {}) do
+    animation.elapsed = animation.elapsed + dt
+
+    if animation.elapsed >= (animation.duration or 0.315) then
+      self.sleightAnimations[slotIndex] = nil
+    end
+  end
+
   if self.coinRowReveal then
     local reveal = self.coinRowReveal
     reveal.elapsed = reveal.elapsed + dt
