@@ -1574,10 +1574,6 @@ function Validator.validateActiveRunArtifactPayload(artifact)
     end
   end
 
-  if artifact.currentState == "post_stage_analytics" and artifact.postResultNextState ~= "post_stage_analytics" then
-    return false, "active run artifact post_stage_analytics state must preserve postResultNextState"
-  end
-
   if (artifact.currentState == "reward_preview" or artifact.currentState == "boss_reward")
     and type(artifact.rewardPreviewSession) ~= "table" then
     return false, string.format("active run artifact state %s requires rewardPreviewSession", artifact.currentState)

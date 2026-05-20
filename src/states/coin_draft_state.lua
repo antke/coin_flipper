@@ -1,6 +1,8 @@
 local Button = require("src.ui.button")
-local CoinCard = require("src.ui.coin_card")
+local CoinArt = require("src.ui.coin_art")
 local Layout = require("src.ui.layout")
+local Panel = require("src.ui.panel")
+local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
 
 local CoinDraftState = {}
@@ -28,27 +30,64 @@ function CoinDraftState:enter(app)
   self.statusMessage = "Choose a coin to add to your purse. Offers refresh after each pick."
 end
 
-function CoinDraftState:buildButtons(app)
+function CoinDraftState:getLayout(app)
   local cards = app:getDraftOfferCards()
+  local padding = Theme.spacing.screenPadding
+  local gap = Theme.spacing.blockGap
   local width = love.graphics.getWidth()
   local height = love.graphics.getHeight()
-  local footerMetrics = Layout.getFooterMetrics(height)
-  local cardWidth = 260
-  local cardHeight = 260
-  local gap = Theme.spacing.blockGap
-  local totalWidth = (#cards * cardWidth) + (math.max(#cards - 1, 0) * gap)
-  local startX = math.floor((width - totalWidth) / 2)
-  local cardY = 210
-  local buttons = {}
+  local infoY = 118
+  local infoHeight = 84
+  local offerPanelY = infoY + infoHeight + gap
+  local footerMetrics = Layout.getFooterMetrics(height, {
+    statusHeight = 54,
+  })
+  local offerCount = math.max(1, #cards)
+  local columns = math.min(3, offerCount)
+  local panelWidth = math.floor((width - (padding * 2) - (gap * (columns - 1))) / columns)
+  local panelHeight = math.max(230, footerMetrics.contentBottomY - offerPanelY)
+  local panelLayout = {}
 
   for index, card in ipairs(cards) do
-    local x = startX + ((index - 1) * (cardWidth + gap))
+    local x = padding + ((index - 1) * (panelWidth + gap))
+
+    table.insert(panelLayout, {
+      index = index,
+      card = card,
+      x = x,
+      y = offerPanelY,
+      width = panelWidth,
+      height = panelHeight,
+    })
+  end
+
+  return {
+    padding = padding,
+    gap = gap,
+    width = width,
+    height = height,
+    infoY = infoY,
+    infoHeight = infoHeight,
+    footerMetrics = footerMetrics,
+    panelLayout = panelLayout,
+  }
+end
+
+function CoinDraftState:buildButtons(app)
+  local layout = self:getLayout(app)
+  local buttons = {}
+
+  for _, entry in ipairs(layout.panelLayout) do
+    local card = entry.card
+    local contentArea = Panel.getContentArea(entry.x, entry.y, entry.width, entry.height, string.format("Option %d", entry.index))
+    local buttonHeight = 38
+
     table.insert(buttons, {
       id = card.coinId,
-      x = x + 24,
-      y = cardY + cardHeight - 58,
-      width = cardWidth - 48,
-      height = 42,
+      x = contentArea.x,
+      y = contentArea.y + contentArea.height - buttonHeight,
+      width = contentArea.width,
+      height = buttonHeight,
       label = "Draft",
       variant = "primary",
       onClick = function()
@@ -70,10 +109,10 @@ function CoinDraftState:buildButtons(app)
   end
 
   table.insert(buttons, {
-    x = width - Theme.spacing.screenPadding - 150,
-    y = footerMetrics.buttonY,
+    x = layout.width - Theme.spacing.screenPadding - 150,
+    y = layout.footerMetrics.buttonY,
     width = 150,
-    height = footerMetrics.buttonHeight,
+    height = layout.footerMetrics.buttonHeight,
     label = "Pause",
     variant = "default",
     onClick = function()
@@ -85,29 +124,37 @@ function CoinDraftState:buildButtons(app)
   return buttons
 end
 
-function CoinDraftState:drawOfferCards(app, cards)
-  local width = love.graphics.getWidth()
-  local cardWidth = 260
-  local cardHeight = 260
-  local gap = Theme.spacing.blockGap
-  local totalWidth = (#cards * cardWidth) + (math.max(#cards - 1, 0) * gap)
-  local startX = math.floor((width - totalWidth) / 2)
-  local cardY = 210
+function CoinDraftState:drawOfferCards(app, panelLayout)
+  for _, entry in ipairs(panelLayout) do
+    local card = entry.card
+    Panel.draw(entry.x, entry.y, entry.width, entry.height, string.format("Option %d", entry.index))
+    local contentArea = Panel.getContentArea(entry.x, entry.y, entry.width, entry.height, string.format("Option %d", entry.index))
+    local buttonHeight = 38
+    local artSize = math.min(86, math.max(54, math.floor(contentArea.width * 0.30)))
+    local textX = contentArea.x + artSize + Theme.spacing.itemGap
+    local textY = contentArea.y
+    local textWidth = contentArea.width - artSize - Theme.spacing.itemGap
 
-  for index, card in ipairs(cards) do
-    local x = startX + ((index - 1) * (cardWidth + gap))
-    CoinCard.draw(app, card, x, cardY, cardWidth, cardHeight, {
-      showCount = false,
+    CoinArt.draw(card.coinId, contentArea.x, contentArea.y, artSize, {
+      selected = true,
+      tilt = (entry.index % 2 == 0) and 0.08 or -0.08,
     })
+
+    local lines = {
+      string.format("%s", card.name or card.coinId),
+      string.format("Rarity: %s", card.rarity or "n/a"),
+      "Adds +1 coin instance to your purse.",
+      "",
+      Terminology.getMechanicRichText(card.description),
+    }
+
+    Layout.drawWrappedLines(lines, textX, textY, textWidth, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height - (buttonHeight + 8))
   end
 end
 
 function CoinDraftState:draw(app)
-  local width = love.graphics.getWidth()
-  local height = love.graphics.getHeight()
   local session = app:getDraftSession() or {}
-  local cards = app:getDraftOfferCards()
-  local padding = Theme.spacing.screenPadding
+  local layout = self:getLayout(app)
 
   love.graphics.setFont(app.fonts.title)
   Layout.centeredText("Coin Draft", 64, app.fonts.title, Theme.colors.text)
@@ -118,9 +165,9 @@ function CoinDraftState:draw(app)
     "Your purse starts with 10 plain $ Coins. Each draft pick adds one special coin instance.",
     self.statusMessage,
   }
-  Layout.drawWrappedLines(lines, padding, 118, width - (padding * 2), Theme.colors.text, Theme.spacing.lineHeight, 84)
+  Layout.drawWrappedLines(lines, layout.padding, layout.infoY, layout.width - (layout.padding * 2), Theme.colors.text, Theme.spacing.lineHeight, layout.infoHeight)
 
-  self:drawOfferCards(app, cards)
+  self:drawOfferCards(app, layout.panelLayout)
 
   local mouseX, mouseY = love.mouse.getPosition()
   Button.drawButtons(self:buildButtons(app), mouseX, mouseY)

@@ -18,6 +18,29 @@ local Theme = {
     heading = 20,
     body = 15,
     small = 12,
+    outcomeBurst = 112,
+  },
+
+  fontPaths = {
+    outcomeBurst = nil,
+  },
+
+  outcomeBurst = {
+    duration = 1.05,
+    flashInDuration = 0.12,
+    fadeOutDuration = 0.32,
+    popScale = 1.28,
+    labels = {
+      [0] = "OUCH",
+      [2] = "NICE",
+      [3] = "SUPER",
+      [4] = "JACKPOT",
+      [5] = "LEGENDARY",
+      default = "LEGENDARY",
+      clutch = "CLUTCH",
+      jackpot = "JACKPOT",
+      overkill = "OVERKILL",
+    },
   },
 
   spacing = {

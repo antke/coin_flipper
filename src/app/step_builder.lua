@@ -390,7 +390,14 @@ local RULES = {
   {
     from = "stage",
     event = "stage_complete",
-    build = function()
+    build = function(_, app)
+      if app and app.stageState and app.stageState.stageStatus == "failed" then
+        return {
+          { type = "action", action = "finalize_current_stage" },
+          { type = "state", state = "summary" },
+        }
+      end
+
       return {
         { type = "action", action = "finalize_current_stage" },
         { type = "state", state = "result" },

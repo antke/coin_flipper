@@ -14,6 +14,7 @@ local Log = require("src.core.log")
 local MetaProgressionSystem = require("src.systems.meta_progression_system")
 local MetaState = require("src.domain.meta_state")
 local MetaUpgrades = require("src.content.meta_upgrades")
+local OutcomeBurst = require("src.ui.outcome_burst")
 local ProgressionSystem = require("src.systems.progression_system")
 local PurseHookSystem = require("src.systems.purse_hook_system")
 local PurseSystem = require("src.systems.purse_system")
@@ -39,12 +40,24 @@ local Validator = require("src.core.validator")
 local Game = {}
 Game.__index = Game
 
+local function createConfiguredFont(name, size)
+  local fontPath = Theme.fontPaths and Theme.fontPaths[name]
+  local font = fontPath and love.graphics.newFont(fontPath, size) or love.graphics.newFont(size)
+
+  if name == "outcomeBurst" and font.setFilter then
+    font:setFilter("nearest", "nearest")
+  end
+
+  return font
+end
+
 local function createFonts()
   return {
-    title = love.graphics.newFont(Theme.fontSizes.title),
-    heading = love.graphics.newFont(Theme.fontSizes.heading),
-    body = love.graphics.newFont(Theme.fontSizes.body),
-    small = love.graphics.newFont(Theme.fontSizes.small),
+    title = createConfiguredFont("title", Theme.fontSizes.title),
+    heading = createConfiguredFont("heading", Theme.fontSizes.heading),
+    body = createConfiguredFont("body", Theme.fontSizes.body),
+    small = createConfiguredFont("small", Theme.fontSizes.small),
+    outcomeBurst = createConfiguredFont("outcomeBurst", Theme.fontSizes.outcomeBurst),
   }
 end
 
@@ -107,6 +120,7 @@ function Game.new()
     preserveActiveRunSaveOnce = false,
     feedbackClock = 0,
     activeFeedback = nil,
+    activeOutcomeBurst = nil,
     screenFlash = {
       color = Theme.colors.accent,
       alpha = 0,
@@ -510,6 +524,7 @@ function Game:draw()
   Theme.clearColor(Theme.colors.background)
   self.stateGraph:draw()
   self:drawFeedbackOverlay()
+  self:drawOutcomeBurst()
   self.debugOverlay:draw()
 end
 
@@ -623,6 +638,18 @@ function Game:showFeedback(kind, title, message, options)
   end
 end
 
+function Game:showOutcomeBurst(label, kind, options)
+  if not label or label == "" then
+    return
+  end
+
+  local color = self:getFeedbackColor(kind)
+  local burstOptions = options or {}
+  burstOptions.config = burstOptions.config or Theme.outcomeBurst
+  burstOptions.color = burstOptions.color or color
+  self.activeOutcomeBurst = OutcomeBurst.new(label, burstOptions)
+end
+
 function Game:clearFeedback(options)
   local clearOptions = options or {}
 
@@ -650,6 +677,8 @@ function Game:updateFeedback(dt)
       self.activeFeedback = nil
     end
   end
+
+  self.activeOutcomeBurst = OutcomeBurst.update(self.activeOutcomeBurst, dt)
 
   if (self.screenFlash.alpha or 0) > 0 then
     self.screenFlash.alpha = math.max(0, self.screenFlash.alpha - (dt * 0.32))
@@ -731,74 +760,18 @@ function Game:drawFeedbackOverlay()
   love.graphics.setLineWidth(previousLineWidth)
 end
 
+function Game:drawOutcomeBurst()
+  OutcomeBurst.draw(self.activeOutcomeBurst, self.fonts)
+end
+
 function Game:triggerBatchFeedback(batchResult)
   if not batchResult then
     return
   end
 
-  local matchCount = 0
-  for _, coinState in ipairs(batchResult.perCoin or {}) do
-    if coinState.result == batchResult.call then
-      matchCount = matchCount + 1
-    end
-  end
+  local label, kind = OutcomeBurst.getBatchLabel(batchResult, Theme.outcomeBurst)
 
-  local shopDelta = batchResult.scoreBreakdown and batchResult.scoreBreakdown.totalShopPointDelta or 0
-  local stageGain = batchResult.scoreBreakdown and batchResult.scoreBreakdown.totalStageScoreDelta or 0
-  local runGain = batchResult.scoreBreakdown and batchResult.scoreBreakdown.totalRunScoreDelta or 0
-  local isBossStage = batchResult.batch and batchResult.batch.stageType == "boss"
-
-  if batchResult.status == "cleared" then
-    local title = isBossStage and "Boss Defeated!" or "Stage Cleared!"
-    local message = string.format("+%d %s | %d/%d reached", stageGain, Terminology.getTermLabel("score"), batchResult.stageScore or 0, batchResult.targetScore or 0)
-    self:showFeedback(isBossStage and "boss" or "success", title, message, {
-      duration = isBossStage and 1.9 or 1.5,
-      flashAlpha = isBossStage and 0.12 or 0.08,
-      soundCue = isBossStage and "boss_defeat" or "stage_clear",
-    })
-    return
-  end
-
-  if batchResult.status == "failed" then
-    self:showFeedback("danger", isBossStage and "Boss Holds the Table" or "Stage Failed", "No flips remain. Regroup and try a new path.", {
-      duration = 1.6,
-      flashAlpha = 0.11,
-      soundCue = "stage_fail",
-    })
-    return
-  end
-
-  if matchCount > 0 then
-    local title = matchCount == #(batchResult.perCoin or {}) and Terminology.getOutcomeLabel("all_matched") .. "!" or string.format("Matched %d coin(s)", matchCount)
-    local message = string.format("+%d %s | %d flips left", stageGain, Terminology.getTermLabel("stage_score"), batchResult.flipsRemaining or 0)
-    self:showFeedback(matchCount == #(batchResult.perCoin or {}) and "success" or "accent", title, message, {
-      duration = 1.15,
-      flashAlpha = 0.05,
-      soundCue = matchCount == #(batchResult.perCoin or {}) and "batch_perfect" or "batch_match",
-    })
-    return
-  end
-
-  if shopDelta > 0 then
-    local message = string.format("Banked %+d %s(s) for the next stop.", shopDelta, Terminology.getTermLabel("chip"))
-
-    if runGain > 0 then
-      message = string.format("Banked %+d %s(s) and %+d %s.", shopDelta, Terminology.getTermLabel("chip"), runGain, Terminology.getTermLabel("run_score"))
-    end
-
-    self:showFeedback("warning", "Miss — but not empty-handed", message, {
-      duration = 1.2,
-      flashAlpha = 0.05,
-      soundCue = "shop_gain",
-    })
-    return
-  end
-
-  self:showFeedback("warning", "Missed the Call", string.format("No score this flip. %d flips remain.", batchResult.flipsRemaining or 0), {
-    duration = 0.95,
-    flashAlpha = 0.03,
-    soundCue = "batch_miss",
-  })
+  self:showOutcomeBurst(label, kind)
 end
 
 function Game:getBossModifierCards(modifierIds)
@@ -953,7 +926,7 @@ function Game:buildMacroContext(currentStateName, transitionPayload)
     currentStateName = currentStateName,
     payload = Utils.clone(transitionPayload or {}),
     event = transitionPayload and transitionPayload.event or nil,
-    postResultDestinationState = self:getPostResultDestinationState(),
+    postResultDestinationState = self:getPostResultNextState(),
     metaReturnState = metaFlowContext.returnState,
     metaAllowStartRun = metaFlowContext.allowStartRun,
     continueRunState = self:getContinueRunStateName(),
@@ -1517,6 +1490,117 @@ function Game:recordRunStartIfNeeded()
   return true
 end
 
+function Game:syncLatestBatchTerminalState()
+  local stageState = self.stageState
+
+  if not stageState then
+    return false
+  end
+
+  local batchResult = self.lastBatchResult
+  local changed = false
+
+  local function syncTrace(trace)
+    if not trace then
+      return
+    end
+
+    trace.stageStatusAfter = stageState.stageStatus
+    trace.stageScoreAfter = stageState.stageScore
+    trace.runScoreAfter = self.runState and self.runState.runTotalScore or trace.runScoreAfter
+    trace.shopPointsAfter = self.runState and self.runState.shopPoints or trace.shopPointsAfter
+    trace.flipsRemainingAfter = stageState.flipsRemaining
+    changed = true
+  end
+
+  if batchResult then
+    batchResult.status = stageState.stageStatus
+    batchResult.stageScore = stageState.stageScore
+    batchResult.targetScore = stageState.targetScore
+    batchResult.runTotalScore = self.runState and self.runState.runTotalScore or batchResult.runTotalScore
+    batchResult.shopPoints = self.runState and self.runState.shopPoints or batchResult.shopPoints
+    batchResult.flipsRemaining = stageState.flipsRemaining
+    syncTrace(batchResult.trace)
+
+    if batchResult.batch then
+      batchResult.batch.trace = batchResult.trace
+      batchResult.batch.scoreBreakdown = batchResult.scoreBreakdown
+    end
+  end
+
+  syncTrace(stageState.lastBatchResults)
+
+  local flipBatches = self.runState and self.runState.history and self.runState.history.flipBatches or nil
+  local lastHistoryBatch = flipBatches and flipBatches[#flipBatches] or nil
+
+  if batchResult and lastHistoryBatch and lastHistoryBatch.batchId == batchResult.batchId then
+    syncTrace(lastHistoryBatch.trace)
+  end
+
+  return changed
+end
+
+function Game:normalizeStageCompletion()
+  local stageState = self.stageState
+
+  if not stageState then
+    return false, nil, false
+  end
+
+  local previousStatus = stageState.stageStatus
+  local previousFlipsRemaining = stageState.flipsRemaining
+  local purse = stageState.purse
+  local purseExhausted = purse ~= nil
+    and #(purse.handSlots or {}) == 0
+    and #(purse.availableInstanceIds or {}) == 0
+
+  if stageState.stageStatus == "active" then
+    if stageState.targetScore ~= nil and (stageState.stageScore or 0) >= stageState.targetScore then
+      stageState.stageStatus = "cleared"
+    elseif stageState.flipsRemaining ~= nil and stageState.flipsRemaining <= 0 then
+      stageState.flipsRemaining = 0
+      stageState.stageStatus = "failed"
+    elseif purseExhausted then
+      if stageState.targetScore ~= nil and (stageState.stageScore or 0) >= stageState.targetScore then
+        stageState.stageStatus = "cleared"
+      else
+        stageState.flipsRemaining = 0
+        stageState.stageStatus = "failed"
+      end
+
+      table.insert(purse.exhaustionEvents, {
+        batchIndex = stageState.batchIndex,
+        flipsRemaining = stageState.flipsRemaining,
+        status = stageState.stageStatus,
+      })
+    end
+  elseif stageState.stageStatus == "failed" and (stageState.flipsRemaining or 0) > 0 then
+    stageState.flipsRemaining = 0
+  end
+
+  local changed = stageState.stageStatus ~= previousStatus or stageState.flipsRemaining ~= previousFlipsRemaining
+
+  if changed or stageState.stageStatus ~= "active" then
+    self:syncLatestBatchTerminalState()
+  end
+
+  return stageState.stageStatus ~= "active", stageState.stageStatus, changed
+end
+
+function Game:requestStageCompletion()
+  local isComplete = self:normalizeStageCompletion()
+
+  if not isComplete then
+    return false, "stage_active"
+  end
+
+  if not self.stateGraph then
+    return false, "state_graph_unavailable"
+  end
+
+  return self.stateGraph:request("stage_complete")
+end
+
 function Game:ensureHandDrawn()
   if not self.runState or not self.stageState or self.stageState.stageStatus ~= "active" then
     return nil, "stage_not_active"
@@ -1526,6 +1610,7 @@ function Game:ensureHandDrawn()
   PurseHookSystem.runAfterHandDraw(self.runState, self.stageState, self.metaProjection, { call = self.selectedCall })
 
   if warning == "purse_empty" then
+    self:normalizeStageCompletion()
     return nil, warning
   end
 
@@ -1693,6 +1778,8 @@ function Game:resolveCurrentBatch(call, options)
 
   self.lastBatchResult = batchResult
   table.insert(self.runState.history.flipBatches, Utils.clone(batchResult.batch))
+  self:normalizeStageCompletion()
+  batchResult = self.lastBatchResult
   self:assertRuntimeInvariants("game.resolveCurrentBatch", { batchResult = batchResult, history = true })
   self.logger:info("Resolved batch", { batch = batchResult.batchId, status = batchResult.status, call = call })
   self.logger:debug(self:formatBatchLogLine(batchResult))
@@ -1700,7 +1787,10 @@ function Game:resolveCurrentBatch(call, options)
     self:triggerBatchFeedback(batchResult)
   end
 
-  self:saveActiveRun("resolve_batch", "stage")
+  if self.stageState.stageStatus == "active" then
+    self:saveActiveRun("resolve_batch", "stage")
+  end
+
   return batchResult
 end
 
@@ -1940,6 +2030,29 @@ end
 function Game:finalizeCurrentStage()
   if not self.runState or not self.stageState then
     return nil, "stage_not_initialized"
+  end
+
+  self:normalizeStageCompletion()
+
+  if self.stageState.stageStatus == "active" then
+    return nil, "stage_still_active"
+  end
+
+  if self.lastStageResult
+    and self.lastStageResult.roundIndex == self.runState.roundIndex
+    and self.lastStageResult.stageId == self.stageState.stageId
+    and self.lastStageResult.status == self.stageState.stageStatus then
+    self.postResultNextState = self.postResultNextState or self:computePostResultNextState()
+
+    if self:shouldUseRewardPreview() or self:shouldUseBossRewardEvent() then
+      self:ensureRewardSession()
+    end
+
+    return self.lastStageResult, {
+      alreadyFinalized = true,
+      shouldPersistMeta = false,
+      metaReward = 0,
+    }
   end
 
   local stageRecord, finalizeMeta = RunHistorySystem.finalizeStage(self.runState, self.stageState, self.metaState)
@@ -2776,7 +2889,7 @@ function Game:getPostResultDestinationLabel()
 end
 
 function Game:getPostStageReviewFollowupLine()
-  local destination = self:getPostResultDestinationState()
+  local destination = self:getPostResultNextState()
 
   if destination == "boss_reward" then
     return "Victory reward follows."

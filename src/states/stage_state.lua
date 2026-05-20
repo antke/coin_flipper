@@ -15,12 +15,11 @@ local function setColorWithAlpha(color, alpha)
 end
 
 local function routeIfStageComplete(app)
-  if app.stageState and app.stageState.stageStatus ~= "active" then
-    app.stateGraph:request("stage_complete")
-    return true
+  if not app or not app.requestStageCompletion then
+    return false
   end
 
-  return false
+  return app:requestStageCompletion() == true
 end
 
 local function getCoinRevealTime(reveal, index)
@@ -1108,7 +1107,11 @@ function StageState:enter(app)
   self.purseDialogScrollOffset = 0
   self.logDialogOpen = false
   self.logDialogScrollOffset = 0
-  self.statusMessage = "Review your hand, then pick HEADS or TAILS."
+  if app.stageState and app.stageState.stageStatus ~= "active" then
+    self.statusMessage = string.format("Stage %s.", app.stageState.stageStatus)
+  else
+    self.statusMessage = "Review your hand, then pick HEADS or TAILS."
+  end
 end
 
 function StageState:update(app, dt)
@@ -1136,12 +1139,16 @@ function StageState:update(app, dt)
   end
 
   if not self:isRevealActive() then
+    if not self.coinRowReveal then
+      routeIfStageComplete(app)
+    end
+
     return
   end
 
   self.reveal.elapsed = self.reveal.elapsed + dt
 
-  if self.reveal.elapsed >= self.reveal.finishDuration and (not self.coinRowReveal or self.coinRowReveal.feedbackPlayed) then
+  if self.reveal.elapsed >= self.reveal.finishDuration and not self.coinRowReveal then
     self:completeReveal(app)
   end
 end
