@@ -1407,7 +1407,71 @@ This keeps boundaries clean.
 
 This prototype does not need final art, but the UI must communicate complex resolution clearly.
 
-## 20.1 Minimum required screens
+## 20.1 Responsive layout strategy
+
+Use a web-style centered app container rather than scaling the whole game canvas.
+
+The physical Love2D window may be any size, but gameplay UI should be laid out inside a centered, clamped rectangle:
+
+- minimum target: `960x540`
+- default/standard target: `1280x720`
+- large target: `1440x810`
+- maximum target: `1600x900`
+
+Above the maximum target, the UI should stop expanding and remain centered in the window. Extra space becomes background/gutter, similar to a website with a centered `max-width` layout.
+
+Below the minimum target, do not show a blocking "window too small" message. Keep the compact layout readable and use the available window size. The current minimum remains `960x540`, but this can be revisited later; `1280x720` may become the lowest supported target if the UI no longer needs to support very small laptop windows.
+
+Implementation direction:
+
+- Add a viewport/screen-metrics resolver that returns the centered UI rect, current breakpoint tier, spacing tokens, font sizes, and common component metrics.
+- Gradually replace direct layout reads from `love.graphics.getWidth()` / `love.graphics.getHeight()` with the resolved UI rect.
+- Prefer breakpoint-based layout changes over continuous per-pixel layout changes.
+- Start migration with the stage screen, then move through shop, loadout, collection, meta, and simpler menu/result screens.
+
+Conceptual resolver output:
+
+```lua
+ui = {
+  window = { width = 2560, height = 1440 },
+  rect = { x = 480, y = 270, width = 1600, height = 900 },
+  tier = "max",
+  spacing = { page = 36, gap = 24, panelPadding = 22 },
+  fontSizes = { title = 38, heading = 24, body = 18, small = 14 },
+  metrics = { buttonHeight = 54, cardMinWidth = 96, cardMaxWidth = 220 },
+}
+```
+
+Future layout templates may use CSS-grid-like named regions, expressed as Lua tables. For example, the stage screen can be described in terms of `header`, `stats`, `hand`, `status`, `actions`, and modal/detail regions instead of scattered hardcoded coordinates.
+
+## 20.2 Font and asset scaling policy
+
+Do not scale the whole rendered game output to fit the window. Global canvas scaling risks blurry text and uneven asset rendering.
+
+Fonts should be recreated at real pixel sizes for the active breakpoint tier. This keeps text crisp because Love2D rasterizes the font at the requested size instead of stretching already-rendered text.
+
+Suggested first-pass font tiers:
+
+```lua
+compact  = { title = 26, heading = 18, body = 14, small = 11, outcomeBurst = 88  }
+standard = { title = 30, heading = 20, body = 15, small = 12, outcomeBurst = 112 }
+large    = { title = 34, heading = 22, body = 16, small = 13, outcomeBurst = 124 }
+max      = { title = 38, heading = 24, body = 18, small = 14, outcomeBurst = 136 }
+```
+
+Font files can be added later if the default Love2D font is not sufficient. They help with style, readability, and consistent metrics, but the scaling rule remains the same: create fonts at tier-specific pixel sizes rather than stretching rendered text.
+
+Most current UI is drawn from primitives: panels, cards, outlines, buttons, and text. These should scale by recalculating layout dimensions from the viewport metrics.
+
+For future coin art:
+
+- PNG is an appropriate default format.
+- Prefer source art large enough for the maximum display size.
+- Avoid scaling small icons far beyond their intended size.
+- Use `nearest` filtering for pixel art and `linear` filtering for illustrated/non-pixel art.
+- Size images intentionally inside card/detail regions instead of relying on global screen scaling.
+
+## 20.3 Minimum required screens
 
 1. Menu
 2. Loadout Selection
@@ -1415,8 +1479,9 @@ This prototype does not need final art, but the UI must communicate complex reso
 4. Result Screen
 5. Shop Screen
 6. Summary Screen
+7. Settings Screen
 
-## 20.2 Loadout selection screen requirements
+## 20.4 Loadout selection screen requirements
 
 The loadout selection screen should show at minimum:
 
@@ -1430,7 +1495,7 @@ The loadout selection screen should show at minimum:
 
 If the player makes no changes, they should still be able to continue quickly with the previously committed build.
 
-## 20.3 Stage screen requirements
+## 20.5 Stage screen requirements
 
 The stage screen should show at minimum:
 
@@ -1447,7 +1512,24 @@ The stage screen should show at minimum:
 - last batch result summary
 - expandable or visible score breakdown
 
-## 20.4 Debug overlay requirements
+## 20.6 Settings screen requirements
+
+The first settings screen should stay intentionally small.
+
+Required initial setting:
+
+- screen size preset
+
+Initial presets:
+
+- `960x540`
+- `1280x720`
+- `1440x810`
+- `1600x900`
+
+Later settings may include fullscreen, VSync, manual UI scale override, text-size override, reduce animation, or contrast options, but these are not required for the first pass.
+
+## 20.7 Debug overlay requirements
 
 Debug information is essential.
 

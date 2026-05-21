@@ -1,0 +1,8 @@
+.boss-warning-screen {
+  place-items: center;
+}
+
+.boss-warning-card {
+  width: 64%;
+  min-height: 50%;
+}

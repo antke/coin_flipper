@@ -1,0 +1,8 @@
+.boot-screen {
+  place-items: center;
+}
+
+.logo-panel {
+  width: 56%;
+  min-height: 34%;
+}

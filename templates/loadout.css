@@ -1,0 +1,10 @@
+.loadout-screen {
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+}
+
+.loadout-header { grid-column: 1 / span 12; grid-row: 1 / span 1; }
+.coin-slots { grid-column: 1 / span 8; grid-row: 2 / span 2; }
+.inventory-grid { grid-column: 1 / span 8; grid-row: 4 / span 4; }
+.loadout-detail { grid-column: 9 / span 4; grid-row: 2 / span 6; }
+.loadout-actions { grid-column: 1 / span 12; grid-row: 8 / span 1; }

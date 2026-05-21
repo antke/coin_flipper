@@ -1,0 +1,8 @@
+.pause-screen {
+  place-items: center;
+}
+
+.pause-dialog {
+  width: 34%;
+  min-height: 52%;
+}

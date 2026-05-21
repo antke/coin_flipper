@@ -1,0 +1,9 @@
+.encounter-screen {
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+}
+
+.encounter-header { grid-column: 1 / span 12; grid-row: 1 / span 1; }
+.encounter-info { grid-column: 2 / span 7; grid-row: 2 / span 5; }
+.encounter-rewards { grid-column: 9 / span 3; grid-row: 2 / span 5; }
+.encounter-actions { grid-column: 2 / span 10; grid-row: 7 / span 2; }

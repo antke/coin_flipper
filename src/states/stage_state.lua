@@ -49,13 +49,13 @@ local function getRetroCoinMotion(progress, cardHeight)
   local arc = math.sin(progress * math.pi)
   local settled = progress >= 0.78
   local flipProgress = math.min(1, progress / 0.78)
-  local spinProgress = flipProgress
+  local spinProgress = flipProgress * 3
   local edgeFactor = math.abs(math.cos(spinProgress * math.pi))
   local liftOffset = -math.floor(arc * maxLift)
   local tilt = math.sin(flipProgress * math.pi * 2) * 0.16
   local scale = 1 + (arc * 0.05)
-  local scaleX = 0.18 + (edgeFactor * 0.82)
-  local scaleY = 1 + (arc * 0.08)
+  local scaleX = 1
+  local scaleY = 0.18 + (edgeFactor * 0.82)
   local spinSide = (math.floor(spinProgress * 2) % 2 == 0) and "heads" or "tails"
 
   return liftOffset, tilt, scale, scaleX, scaleY, spinSide, settled
@@ -68,6 +68,51 @@ end
 local function easeOutCubic(progress)
   local inverse = 1 - progress
   return 1 - (inverse * inverse * inverse)
+end
+
+local function getUiRect(app)
+  local metrics = app:getUiMetrics()
+  return metrics.rect, metrics.spacing, metrics.metrics, metrics.window
+end
+
+local function getMainLoopLayout(app)
+  local rect = getUiRect(app)
+
+  return Layout.resolveGrid(rect, 12, 8, 0, {
+    score = { column = 1, row = 1, columnSpan = 2, rowSpan = 2 },
+    stageStats = { column = 3, row = 1, columnSpan = 9, rowSpan = 2 },
+    controls = { column = 12, row = 1, columnSpan = 1, rowSpan = 2 },
+    gameWindow = { column = 1, row = 3, columnSpan = 12, rowSpan = 4 },
+    actions = { column = 1, row = 7, columnSpan = 12, rowSpan = 2 },
+  })
+end
+
+local function insetRect(rect, inset)
+  local amount = math.max(0, inset or 0)
+
+  return {
+    x = rect.x + amount,
+    y = rect.y + amount,
+    width = math.max(1, rect.width - (amount * 2)),
+    height = math.max(1, rect.height - (amount * 2)),
+  }
+end
+
+local function getControlButtonFrame(app, index, count)
+  local layout = getMainLoopLayout(app)
+  local _, spacing = getUiRect(app)
+  local area = layout.controls
+  local gap = spacing.itemGap
+  local size = math.max(1, math.min(40, area.width - (gap * 2), math.floor((area.height - (gap * (count - 1))) / count)))
+  local groupHeight = (size * count) + (gap * (count - 1))
+  local startY = area.y + math.floor((area.height - groupHeight) / 2)
+
+  return {
+    x = area.x + math.floor((area.width - size) / 2),
+    y = startY + ((index - 1) * (size + gap)),
+    width = size,
+    height = size,
+  }
 end
 
 local function drawSleightBadge(centerX, centerY, radius, disabled, hovered)
@@ -365,29 +410,17 @@ function StageState:tryMoveSlotTo(app, fromSlotIndex, toSlotIndex)
   return true
 end
 
-function StageState:buildButtons(app, x, y, width)
-  local gap = Theme.spacing.itemGap
-  local buttonWidth = math.floor((width - (gap * 2)) / 3)
-  local buttonHeight = 42
+function StageState:buildButtons(app, x, y, width, height)
+  local _, spacing, componentMetrics = getUiRect(app)
+  local gap = spacing.itemGap
+  local buttonWidth = math.max(1, math.floor((width - (gap * 2)) / 3))
+  local buttonHeight = math.max(1, height or componentMetrics.buttonHeight)
   local stageActive = self:isStageActive(app)
   local revealActive = self:isRevealActive()
 
   self.buttons = {
     {
       x = x,
-      y = y,
-      width = buttonWidth,
-      height = buttonHeight,
-      label = "HEADS",
-      variant = app.selectedCall == "heads" and "primary" or "default",
-      focused = app.selectedCall == "heads",
-      disabled = not stageActive or revealActive,
-      onClick = function()
-        return self:selectCall(app, "heads")
-      end,
-    },
-    {
-      x = x + buttonWidth + gap,
       y = y,
       width = buttonWidth,
       height = buttonHeight,
@@ -400,7 +433,7 @@ function StageState:buildButtons(app, x, y, width)
       end,
     },
     {
-      x = x + ((buttonWidth + gap) * 2),
+      x = x + buttonWidth + gap,
       y = y,
       width = buttonWidth,
       height = buttonHeight,
@@ -409,6 +442,19 @@ function StageState:buildButtons(app, x, y, width)
       disabled = not stageActive or revealActive or not app.selectedCall,
       onClick = function()
         return self:tryResolveBatch(app)
+      end,
+    },
+    {
+      x = x + ((buttonWidth + gap) * 2),
+      y = y,
+      width = buttonWidth,
+      height = buttonHeight,
+      label = "HEADS",
+      variant = app.selectedCall == "heads" and "primary" or "default",
+      focused = app.selectedCall == "heads",
+      disabled = not stageActive or revealActive,
+      onClick = function()
+        return self:selectCall(app, "heads")
       end,
     },
   }
@@ -433,27 +479,31 @@ function StageState:buildButtons(app, x, y, width)
 end
 
 function StageState:getButtonLayout(app)
-  local padding = Theme.spacing.screenPadding
-  local width = love.graphics.getWidth()
-  local height = love.graphics.getHeight()
+  local layout = getMainLoopLayout(app)
+  local _, spacing, componentMetrics = getUiRect(app)
+  local area = layout.actions
+  local horizontalInset = spacing.blockGap
+  local buttonHeight = math.min(
+    math.max(componentMetrics.buttonHeight, math.floor(area.height * 0.36)),
+    math.max(1, area.height - (spacing.blockGap * 2))
+  )
 
   return {
-    x = padding,
-    y = height - padding - 42,
-    width = width - (padding * 2),
+    x = area.x + horizontalInset,
+    y = area.y + area.height - spacing.blockGap - buttonHeight,
+    width = math.max(1, area.width - (horizontalInset * 2)),
+    height = buttonHeight,
   }
 end
 
-function StageState:getHelpButtonLayout()
-  local padding = Theme.spacing.screenPadding
-  local size = 40
-  local width = love.graphics.getWidth()
+function StageState:getHelpButtonLayout(app)
+  local frame = getControlButtonFrame(app, 3, 3)
 
   return {
-    x = width - padding - size,
-    y = padding,
-    width = size,
-    height = size,
+    x = frame.x,
+    y = frame.y,
+    width = frame.width,
+    height = frame.height,
     label = "?",
     variant = self.helpDialogOpen and "primary" or "default",
     onClick = function()
@@ -463,16 +513,14 @@ function StageState:getHelpButtonLayout()
   }
 end
 
-function StageState:getPurseButtonLayout()
-  local padding = Theme.spacing.screenPadding
-  local size = 40
-  local width = love.graphics.getWidth()
+function StageState:getPurseButtonLayout(app)
+  local frame = getControlButtonFrame(app, 2, 3)
 
   return {
-    x = width - padding - (size * 2) - Theme.spacing.itemGap,
-    y = padding,
-    width = size,
-    height = size,
+    x = frame.x,
+    y = frame.y,
+    width = frame.width,
+    height = frame.height,
     label = "P",
     variant = self.purseDialogOpen and "primary" or "default",
     onClick = function()
@@ -487,7 +535,7 @@ function StageState:getPurseButtonLayout()
 end
 
 function StageState:scrollPurseDialog(app, direction)
-  local dialog = self:getHelpDialogLayout()
+  local dialog = self:getHelpDialogLayout(app)
   local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
   local maxScrollOffset = PurseView.getMaxScrollOffset(app, contentArea, app.stageState)
 
@@ -495,16 +543,14 @@ function StageState:scrollPurseDialog(app, direction)
   return true
 end
 
-function StageState:getLogButtonLayout()
-  local padding = Theme.spacing.screenPadding
-  local size = 40
-  local width = love.graphics.getWidth()
+function StageState:getLogButtonLayout(app)
+  local frame = getControlButtonFrame(app, 1, 3)
 
   return {
-    x = width - padding - (size * 3) - (Theme.spacing.itemGap * 2),
-    y = padding,
-    width = size,
-    height = size,
+    x = frame.x,
+    y = frame.y,
+    width = frame.width,
+    height = frame.height,
     label = "L",
     variant = self.logDialogOpen and "primary" or "default",
     onClick = function()
@@ -546,7 +592,7 @@ end
 function StageState:scrollLogDialog(app, direction)
   love.graphics.setFont(app.fonts.body)
 
-  local dialog = self:getHelpDialogLayout()
+  local dialog = self:getHelpDialogLayout(app)
   local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Flip Log")
   local maxScrollOffset = self:getLogMaxScrollOffset(app:getFlipLogLines(), contentArea)
 
@@ -623,16 +669,14 @@ function StageState:getHelpDialogLines(app)
   return lines
 end
 
-function StageState:getHelpDialogLayout()
-  local width = love.graphics.getWidth()
-  local height = love.graphics.getHeight()
-  local padding = Theme.spacing.screenPadding
-  local dialogWidth = math.min(700, math.max(280, width - (padding * 4)))
-  local dialogHeight = math.min(460, math.max(260, height - (padding * 4)))
+function StageState:getHelpDialogLayout(app)
+  local rect, spacing = getUiRect(app)
+  local dialogWidth = math.min(700, math.max(1, rect.width - (spacing.screenPadding * 2)))
+  local dialogHeight = math.min(460, math.max(1, rect.height - (spacing.screenPadding * 2)))
 
   return {
-    x = math.floor((width - dialogWidth) / 2),
-    y = math.floor((height - dialogHeight) / 2),
+    x = rect.x + math.floor((rect.width - dialogWidth) / 2),
+    y = rect.y + math.floor((rect.height - dialogHeight) / 2),
     width = dialogWidth,
     height = dialogHeight,
   }
@@ -643,15 +687,14 @@ function StageState:drawHelpDialog(app)
     return
   end
 
-  local width = love.graphics.getWidth()
-  local height = love.graphics.getHeight()
-  local dialog = self:getHelpDialogLayout()
+  local _, _, _, window = getUiRect(app)
+  local dialog = self:getHelpDialogLayout(app)
   local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Help")
   local closeButton = self:getHelpDialogCloseButton(dialog.x, dialog.y, dialog.width)
   local mouseX, mouseY = love.mouse.getPosition()
 
   love.graphics.setColor(0, 0, 0, 0.50)
-  love.graphics.rectangle("fill", 0, 0, width, height)
+  love.graphics.rectangle("fill", 0, 0, window.width, window.height)
 
   Panel.draw(dialog.x, dialog.y, dialog.width, dialog.height, "Help")
   Button.drawButtons({ closeButton }, mouseX, mouseY)
@@ -673,9 +716,8 @@ function StageState:drawPurseDialog(app)
     return
   end
 
-  local width = love.graphics.getWidth()
-  local height = love.graphics.getHeight()
-  local dialog = self:getHelpDialogLayout()
+  local _, _, _, window = getUiRect(app)
+  local dialog = self:getHelpDialogLayout(app)
   local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
   local closeButton = self:getHelpDialogCloseButton(dialog.x, dialog.y, dialog.width)
   local mouseX, mouseY = love.mouse.getPosition()
@@ -686,7 +728,7 @@ function StageState:drawPurseDialog(app)
   end
 
   love.graphics.setColor(0, 0, 0, 0.50)
-  love.graphics.rectangle("fill", 0, 0, width, height)
+  love.graphics.rectangle("fill", 0, 0, window.width, window.height)
   Panel.draw(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
   Button.drawButtons({ closeButton }, mouseX, mouseY)
   local maxPurseScrollOffset = PurseView.getMaxScrollOffset(app, contentArea, app.stageState)
@@ -714,9 +756,8 @@ function StageState:drawLogDialog(app)
     return
   end
 
-  local width = love.graphics.getWidth()
-  local height = love.graphics.getHeight()
-  local dialog = self:getHelpDialogLayout()
+  local _, _, _, window = getUiRect(app)
+  local dialog = self:getHelpDialogLayout(app)
   local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Flip Log")
   local closeButton = self:getHelpDialogCloseButton(dialog.x, dialog.y, dialog.width)
   local mouseX, mouseY = love.mouse.getPosition()
@@ -727,7 +768,7 @@ function StageState:drawLogDialog(app)
   end
 
   love.graphics.setColor(0, 0, 0, 0.50)
-  love.graphics.rectangle("fill", 0, 0, width, height)
+  love.graphics.rectangle("fill", 0, 0, window.width, window.height)
   Panel.draw(dialog.x, dialog.y, dialog.width, dialog.height, "Flip Log")
   Button.drawButtons({ closeButton }, mouseX, mouseY)
   love.graphics.setFont(app.fonts.body)
@@ -757,15 +798,14 @@ function StageState:drawCoinDetailOverlay(app, coinId, x, y)
     return
   end
 
-  local width = 330
-  local height = 150
-  local screenWidth = love.graphics.getWidth()
-  local screenHeight = love.graphics.getHeight()
-  local overlayX = math.min(x + 18, screenWidth - width - Theme.spacing.screenPadding)
-  local overlayY = math.min(y + 18, screenHeight - height - Theme.spacing.screenPadding)
+  local rect, spacing = getUiRect(app)
+  local width = math.min(330, math.max(1, rect.width - (spacing.screenPadding * 2)))
+  local height = math.min(150, math.max(1, rect.height - (spacing.screenPadding * 2)))
+  local overlayX = math.min(x + 18, rect.x + rect.width - width - spacing.screenPadding)
+  local overlayY = math.min(y + 18, rect.y + rect.height - height - spacing.screenPadding)
 
-  overlayX = math.max(Theme.spacing.screenPadding, overlayX)
-  overlayY = math.max(Theme.spacing.screenPadding, overlayY)
+  overlayX = math.max(rect.x + spacing.screenPadding, overlayX)
+  overlayY = math.max(rect.y + spacing.screenPadding, overlayY)
 
   love.graphics.setColor(0.03, 0.04, 0.07, 0.96)
   love.graphics.rectangle("fill", overlayX + 4, overlayY + 4, width, height)
@@ -804,20 +844,34 @@ function StageState:getHelpDialogCloseButton(dialogX, dialogY, dialogWidth)
   }
 end
 
-function StageState:drawStageSummary(app, area)
+function StageState:drawScorePanel(app, area)
   local stage = app.stageState
   local scoreColor = stage.stageScore >= stage.targetScore and Theme.colors.success or Theme.colors.text
+  local contentArea = Panel.getContentArea(area.x, area.y, area.width, area.height, "Score")
+
+  Panel.draw(area.x, area.y, area.width, area.height, "Score")
+
+  love.graphics.setFont(app.fonts.title)
+  Theme.applyColor(scoreColor)
+  love.graphics.printf(tostring(stage.stageScore), contentArea.x, contentArea.y + 6, math.max(1, contentArea.width), "center")
+
+  love.graphics.setFont(app.fonts.small)
+  Theme.applyColor(Theme.colors.mutedText)
+  love.graphics.printf(string.format("Target %d", stage.targetScore), contentArea.x, contentArea.y + app.fonts.title:getHeight() + 12, math.max(1, contentArea.width), "center")
+end
+
+function StageState:drawStageSummary(app, area)
+  local stage = app.stageState
   local stats = {
-    { label = "Score", value = string.format("%d/%d", stage.stageScore, stage.targetScore), color = scoreColor },
     { label = "Chips", value = tostring(app.runState and app.runState.shopPoints or 0), color = Theme.colors.text },
     { label = "Flips", value = tostring(stage.flipsRemaining), color = Theme.colors.text },
     { label = "Call", value = app.selectedCall and string.upper(app.selectedCall) or "-", color = Theme.colors.text },
   }
 
   local statGap = Theme.spacing.itemGap
-  local statWidth = math.floor((area.width - (statGap * (#stats - 1))) / #stats)
-  local statHeight = 48
-  local statY = area.y
+  local statWidth = math.max(1, math.floor((area.width - (statGap * (#stats - 1))) / #stats))
+  local statHeight = math.min(56, math.max(1, area.height))
+  local statY = area.y + math.floor(math.max(0, area.height - statHeight) / 2)
 
   for index, stat in ipairs(stats) do
     local statX = area.x + ((index - 1) * (statWidth + statGap))
@@ -829,11 +883,11 @@ function StageState:drawStageSummary(app, area)
 
     love.graphics.setFont(app.fonts.small)
     Theme.applyColor(Theme.colors.mutedText)
-    love.graphics.printf(stat.label, statX + 8, statY + 7, statWidth - 16, "center")
+    love.graphics.printf(stat.label, statX + 8, statY + 7, math.max(1, statWidth - 16), "center")
 
     love.graphics.setFont(app.fonts.body)
     Theme.applyColor(stat.color)
-    love.graphics.printf(stat.value, statX + 8, statY + 24, statWidth - 16, "center")
+    love.graphics.printf(stat.value, statX + 8, statY + 24, math.max(1, statWidth - 16), "center")
   end
 
   if stage.stageType == "boss" then
@@ -895,6 +949,7 @@ end
 
 function StageState:drawCoinRow(app, x, y, width, height)
   local coins, call, batchId = self:getVisibleCoinStates(app)
+  local _, _, componentMetrics = getUiRect(app)
 
   if #coins == 0 then
     love.graphics.setFont(app.fonts.body)
@@ -915,8 +970,8 @@ function StageState:drawCoinRow(app, x, y, width, height)
   local maxCardHeight = math.max(132, height - titleHeight - 18)
   local cardHeight = math.min(230, maxCardHeight)
   local availableCardWidth = math.floor((width - (cardGap * (#coins - 1))) / #coins)
-  local cardWidth = math.min(190, availableCardWidth, math.floor(cardHeight * 0.92))
-  cardWidth = math.max(82, cardWidth)
+  local cardWidth = math.min(componentMetrics.cardMaxWidth, availableCardWidth, math.floor(cardHeight * 0.92))
+  cardWidth = math.max(componentMetrics.cardMinWidth, cardWidth)
   cardHeight = math.max(132, cardHeight)
   local totalWidth = (cardWidth * #coins) + (cardGap * (#coins - 1))
   local startX = x + math.floor((width - totalWidth) / 2)
@@ -1303,13 +1358,11 @@ function StageState:drawRevealOverlay(app)
   end
 
   local reveal = self.reveal
-  local width = love.graphics.getWidth()
-  local height = love.graphics.getHeight()
-  local padding = Theme.spacing.screenPadding
-  local overlayWidth = math.min(760, width - (padding * 4))
-  local overlayHeight = math.min(340, height - (padding * 6))
-  local overlayX = math.floor((width - overlayWidth) / 2)
-  local overlayY = math.floor((height - overlayHeight) / 2)
+  local rect, spacing, _, window = getUiRect(app)
+  local overlayWidth = math.min(760, math.max(1, rect.width - (spacing.screenPadding * 2)))
+  local overlayHeight = math.min(340, math.max(1, rect.height - (spacing.screenPadding * 2)))
+  local overlayX = rect.x + math.floor((rect.width - overlayWidth) / 2)
+  local overlayY = rect.y + math.floor((rect.height - overlayHeight) / 2)
   local contentArea = Panel.getContentArea(overlayX, overlayY, overlayWidth, overlayHeight, "Flip Reveal")
   local pulse = app:getUiPulse(5.2, 0.10, 0.22)
   local coinCount = math.max(1, #reveal.coins)
@@ -1317,7 +1370,7 @@ function StageState:drawRevealOverlay(app)
   local visibleCount = math.min(coinCount, math.floor(revealRatio * math.max(1, coinCount - 1)) + 1)
 
   love.graphics.setColor(0, 0, 0, 0.45)
-  love.graphics.rectangle("fill", 0, 0, width, height)
+  love.graphics.rectangle("fill", 0, 0, window.width, window.height)
 
   Panel.draw(overlayX, overlayY, overlayWidth, overlayHeight, "Flip Reveal")
 
@@ -1565,7 +1618,7 @@ function StageState:wheelmoved(app, _, y)
     end
 
     local mouseX, mouseY = love.mouse.getPosition()
-    local dialog = self:getHelpDialogLayout()
+    local dialog = self:getHelpDialogLayout(app)
     local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Flip Log")
 
     if Button.containsPoint(contentArea, mouseX, mouseY) then
@@ -1580,7 +1633,7 @@ function StageState:wheelmoved(app, _, y)
   end
 
   local mouseX, mouseY = love.mouse.getPosition()
-  local dialog = self:getHelpDialogLayout()
+  local dialog = self:getHelpDialogLayout(app)
   local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
 
   if Button.containsPoint(contentArea, mouseX, mouseY) then
@@ -1589,40 +1642,41 @@ function StageState:wheelmoved(app, _, y)
 end
 
 function StageState:draw(app)
-  local padding = Theme.spacing.screenPadding
-  local gap = Theme.spacing.blockGap
-  local width = love.graphics.getWidth()
-  local height = love.graphics.getHeight()
-  local topY = 72
-  local availableHeight = height - topY - padding
-  local topHeight = app.stageState and app.stageState.stageType == "boss" and 150 or 112
-  topHeight = math.min(topHeight, math.max(80, math.floor((availableHeight - gap) * 0.35)))
-  local panelWidth = width - (padding * 2)
+  local _, spacing = getUiRect(app)
+  local layout = getMainLoopLayout(app)
+  local scoreArea = insetRect(layout.score, spacing.itemGap)
+  local statsArea = insetRect(layout.stageStats, spacing.itemGap)
+  local controlsArea = insetRect(layout.controls, spacing.itemGap)
+  local gameArea = insetRect(layout.gameWindow, spacing.itemGap)
+  local actionsArea = insetRect(layout.actions, spacing.itemGap)
   local buttonLayout = self:getButtonLayout(app)
-  local coinRowY = topY + topHeight + gap
-  local statusY = buttonLayout.y - 28
-  local coinRowBottom = statusY - 16
-  local coinRowHeight = math.max(120, coinRowBottom - coinRowY)
   local mouseX, mouseY = love.mouse.getPosition()
 
-  love.graphics.setFont(app.fonts.heading)
-  Theme.applyColor(Theme.colors.text)
-  love.graphics.print(app.currentStageDefinition.label, padding, padding + 4)
+  self:drawScorePanel(app, scoreArea)
 
-  Panel.draw(padding, topY, panelWidth, topHeight, "Stage")
+  Panel.draw(statsArea.x, statsArea.y, statsArea.width, statsArea.height, app.currentStageDefinition.label)
 
-  local stageArea = Panel.getContentArea(padding, topY, panelWidth, topHeight, "Stage")
+  local stageArea = Panel.getContentArea(statsArea.x, statsArea.y, statsArea.width, statsArea.height, app.currentStageDefinition.label)
 
   self:drawStageSummary(app, stageArea)
-  self:drawCoinRow(app, padding, coinRowY, panelWidth, coinRowHeight)
+
+  Panel.draw(controlsArea.x, controlsArea.y, controlsArea.width, controlsArea.height)
+
+  Panel.draw(gameArea.x, gameArea.y, gameArea.width, gameArea.height, "Hand")
+
+  local coinRowArea = Panel.getContentArea(gameArea.x, gameArea.y, gameArea.width, gameArea.height, "Hand")
+
+  self:drawCoinRow(app, coinRowArea.x, coinRowArea.y, coinRowArea.width, coinRowArea.height)
+
+  Panel.draw(actionsArea.x, actionsArea.y, actionsArea.width, actionsArea.height)
 
   love.graphics.setFont(app.fonts.small)
   Theme.applyColor(Theme.colors.mutedText)
-  love.graphics.printf(self.statusMessage, padding, statusY, panelWidth, "center")
+  love.graphics.printf(self.statusMessage, actionsArea.x + spacing.itemGap, actionsArea.y + spacing.itemGap, math.max(1, actionsArea.width - (spacing.itemGap * 2)), "center")
 
-  Button.drawButtons(self:buildButtons(app, buttonLayout.x, buttonLayout.y, buttonLayout.width), mouseX, mouseY)
+  Button.drawButtons(self:buildButtons(app, buttonLayout.x, buttonLayout.y, buttonLayout.width, buttonLayout.height), mouseX, mouseY)
 
-  Button.drawButtons({ self:getLogButtonLayout(), self:getPurseButtonLayout(), self:getHelpButtonLayout() }, mouseX, mouseY)
+  Button.drawButtons({ self:getLogButtonLayout(app), self:getPurseButtonLayout(app), self:getHelpButtonLayout(app) }, mouseX, mouseY)
   self:drawHelpDialog(app)
   self:drawPurseDialog(app)
   self:drawLogDialog(app)
@@ -1636,7 +1690,7 @@ function StageState:mousepressed(app, x, y, button)
   local handled = false
 
   if self.logDialogOpen then
-    local dialog = self:getHelpDialogLayout()
+    local dialog = self:getHelpDialogLayout(app)
     local closeButton = self:getHelpDialogCloseButton(dialog.x, dialog.y, dialog.width)
     closeButton.onClick = function()
       self.logDialogOpen = false
@@ -1657,7 +1711,7 @@ function StageState:mousepressed(app, x, y, button)
   end
 
   if self.purseDialogOpen then
-    local dialog = self:getHelpDialogLayout()
+    local dialog = self:getHelpDialogLayout(app)
     local closeButton = self:getHelpDialogCloseButton(dialog.x, dialog.y, dialog.width)
     closeButton.onClick = function()
       self.purseDialogOpen = false
@@ -1678,7 +1732,7 @@ function StageState:mousepressed(app, x, y, button)
   end
 
   if self.helpDialogOpen then
-    local dialog = self:getHelpDialogLayout()
+    local dialog = self:getHelpDialogLayout(app)
 
     handled = Button.handleMousePressed({ self:getHelpDialogCloseButton(dialog.x, dialog.y, dialog.width) }, x, y)
 
@@ -1689,7 +1743,7 @@ function StageState:mousepressed(app, x, y, button)
     return
   end
 
-  handled = Button.handleMousePressed({ self:getLogButtonLayout(), self:getPurseButtonLayout(), self:getHelpButtonLayout() }, x, y)
+  handled = Button.handleMousePressed({ self:getLogButtonLayout(app), self:getPurseButtonLayout(app), self:getHelpButtonLayout(app) }, x, y)
 
   if handled then
     return
@@ -1708,7 +1762,7 @@ function StageState:mousepressed(app, x, y, button)
   end
 
   local buttonLayout = self:getButtonLayout(app)
-  Button.handleMousePressed(self:buildButtons(app, buttonLayout.x, buttonLayout.y, buttonLayout.width), x, y)
+  Button.handleMousePressed(self:buildButtons(app, buttonLayout.x, buttonLayout.y, buttonLayout.width, buttonLayout.height), x, y)
 end
 
 function StageState:mousereleased(app, x, y, button)

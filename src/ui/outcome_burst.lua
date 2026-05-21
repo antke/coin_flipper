@@ -135,21 +135,20 @@ local function drawTextPass(label, width, offsetX, offsetY, color, alpha)
   love.graphics.printf(label, offsetX - width * 0.5, offsetY, width, "center")
 end
 
-function OutcomeBurst.draw(burst, fonts)
+function OutcomeBurst.draw(burst, fonts, viewportRect)
   if not burst or burst.label == "" then
     return
   end
 
-  local width = love.graphics.getWidth()
-  local height = love.graphics.getHeight()
+  local rect = viewportRect or { x = 0, y = 0, width = love.graphics.getWidth(), height = love.graphics.getHeight() }
   local currentFont = love.graphics.getFont()
   local font = fonts and (fonts.outcomeBurst or fonts.title) or currentFont
   local labelWidth = math.max(font:getWidth(burst.label), 1)
-  local drawWidth = math.min(width - 32, labelWidth + 48)
+  local drawWidth = math.min(math.max(1, rect.width - 32), labelWidth + 48)
   local alpha = getAlpha(burst)
   local scale = getScale(burst)
-  local x = math.floor(width * 0.5)
-  local y = math.floor((height - font:getHeight()) * 0.5)
+  local x = rect.x + math.floor(rect.width * 0.5)
+  local y = rect.y + math.floor((rect.height - font:getHeight()) * 0.5)
   local outline = math.max(3, math.floor(font:getHeight() * 0.08))
 
   love.graphics.push()

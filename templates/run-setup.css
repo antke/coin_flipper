@@ -1,0 +1,10 @@
+.run-setup-screen {
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+}
+
+.setup-header { grid-column: 1 / span 12; grid-row: 1 / span 1; }
+.seed-panel { grid-column: 1 / span 8; grid-row: 2 / span 2; }
+.starter-panel { grid-column: 1 / span 8; grid-row: 4 / span 4; }
+.summary-panel { grid-column: 9 / span 4; grid-row: 2 / span 6; }
+.setup-actions { grid-column: 1 / span 12; grid-row: 8 / span 1; }

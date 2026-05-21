@@ -8,6 +8,7 @@ local DebugOverlay = require("src.ui.debug_overlay")
 local EffectiveValueSystem = require("src.systems.effective_value_system")
 local GameConfig = require("src.app.config")
 local HookRegistry = require("src.core.hook_registry")
+local Layout = require("src.ui.layout")
 local Loadout = require("src.domain.loadout")
 local LoadoutSystem = require("src.systems.loadout_system")
 local Log = require("src.core.log")
@@ -51,13 +52,15 @@ local function createConfiguredFont(name, size)
   return font
 end
 
-local function createFonts()
+local function createFonts(fontSizes)
+  fontSizes = fontSizes or Theme.fontSizes
+
   return {
-    title = createConfiguredFont("title", Theme.fontSizes.title),
-    heading = createConfiguredFont("heading", Theme.fontSizes.heading),
-    body = createConfiguredFont("body", Theme.fontSizes.body),
-    small = createConfiguredFont("small", Theme.fontSizes.small),
-    outcomeBurst = createConfiguredFont("outcomeBurst", Theme.fontSizes.outcomeBurst),
+    title = createConfiguredFont("title", fontSizes.title),
+    heading = createConfiguredFont("heading", fontSizes.heading),
+    body = createConfiguredFont("body", fontSizes.body),
+    small = createConfiguredFont("small", fontSizes.small),
+    outcomeBurst = createConfiguredFont("outcomeBurst", fontSizes.outcomeBurst),
   }
 end
 
@@ -131,12 +134,32 @@ function Game.new()
     },
     activeRunArtifact = nil,
     activeRunSaveAvailable = false,
+    uiMetrics = nil,
   }, Game)
 
   self.stateGraph = StateGraph.new(self, StepBuilder, logger)
   self.debugOverlay = DebugOverlay.new(self)
 
   return self
+end
+
+function Game:refreshUiMetrics(width, height)
+  local nextMetrics = Layout.resolveViewport(width, height)
+  local previousTier = self.uiMetrics and self.uiMetrics.tier or nil
+
+  self.uiMetrics = nextMetrics
+  Theme.applyViewportMetrics(nextMetrics)
+
+  if not self.fonts or previousTier ~= nextMetrics.tier then
+    self.fonts = createFonts(nextMetrics.fontSizes)
+    love.graphics.setFont(self.fonts.body)
+  end
+
+  return nextMetrics
+end
+
+function Game:getUiMetrics()
+  return self.uiMetrics or self:refreshUiMetrics()
 end
 
 function Game:registerStates()
@@ -496,7 +519,7 @@ function Game:abandonRun()
 end
 
 function Game:load()
-  self.fonts = createFonts()
+  self:refreshUiMetrics()
   love.graphics.setFont(self.fonts.body)
   Button.setSoundPlayer(function(cueName)
     if self.audioSystem then
@@ -521,6 +544,7 @@ function Game:update(dt)
 end
 
 function Game:draw()
+  self:refreshUiMetrics()
   Theme.clearColor(Theme.colors.background)
   self.stateGraph:draw()
   self:drawFeedbackOverlay()
@@ -572,6 +596,7 @@ function Game:wheelmoved(x, y)
 end
 
 function Game:resize(width, height)
+  self:refreshUiMetrics(width, height)
   self.stateGraph:resize(width, height)
 end
 
@@ -686,14 +711,15 @@ function Game:updateFeedback(dt)
 end
 
 function Game:drawFeedbackOverlay()
-  local width = love.graphics.getWidth()
-  local height = love.graphics.getHeight()
+  local ui = self:getUiMetrics()
+  local rect = ui.rect
+  local window = ui.window
   local previousLineWidth = love.graphics.getLineWidth()
 
   if (self.screenFlash.alpha or 0) > 0 then
     local flashColor = self.screenFlash.color or Theme.colors.accent
     love.graphics.setColor(flashColor[1], flashColor[2], flashColor[3], self.screenFlash.alpha)
-    love.graphics.rectangle("fill", 0, 0, width, height)
+    love.graphics.rectangle("fill", 0, 0, window.width, window.height)
   end
 
   if not self.activeFeedback then
@@ -706,14 +732,14 @@ function Game:drawFeedbackOverlay()
   local remaining = math.max(0, feedback.duration - feedback.elapsed)
   local fadeOut = remaining < 0.22 and (remaining / 0.22) or 1
   local alpha = math.min(1, progress) * fadeOut
-  local availableWidth = width - (padding * 2)
+  local availableWidth = rect.width - (padding * 2)
 
   if availableWidth < 220 then
     return
   end
 
   local bannerWidth = math.max(220, math.min(560, availableWidth))
-  local bannerX = math.floor((width - bannerWidth) * 0.5)
+  local bannerX = rect.x + math.floor((rect.width - bannerWidth) * 0.5)
   local currentFont = love.graphics.getFont()
   local headingFont = self.fonts.heading or currentFont
   local bodyFont = self.fonts.body or currentFont
@@ -727,7 +753,7 @@ function Game:drawFeedbackOverlay()
     messageLines = math.max(1, #wrappedMessage)
   end
 
-  local bannerY = padding + 6 - math.floor((1 - alpha) * 18)
+  local bannerY = rect.y + padding + 6 - math.floor((1 - alpha) * 18)
   local bannerHeight = 22 + (titleLines * headingFont:getHeight()) + (messageLines > 0 and ((messageLines * bodyFont:getHeight()) + 10) or 0)
   local pulseBorder = self:getUiPulse(6.0, 0.70, 1.0)
 
@@ -761,7 +787,7 @@ function Game:drawFeedbackOverlay()
 end
 
 function Game:drawOutcomeBurst()
-  OutcomeBurst.draw(self.activeOutcomeBurst, self.fonts)
+  OutcomeBurst.draw(self.activeOutcomeBurst, self.fonts, self:getUiMetrics().rect)
 end
 
 function Game:triggerBatchFeedback(batchResult)

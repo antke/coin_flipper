@@ -21,6 +21,13 @@ local Theme = {
     outcomeBurst = 112,
   },
 
+  fontSizeTiers = {
+    compact = { title = 26, heading = 18, body = 14, small = 11, outcomeBurst = 88 },
+    standard = { title = 30, heading = 20, body = 15, small = 12, outcomeBurst = 112 },
+    large = { title = 34, heading = 22, body = 16, small = 13, outcomeBurst = 124 },
+    max = { title = 38, heading = 24, body = 18, small = 14, outcomeBurst = 136 },
+  },
+
   fontPaths = {
     outcomeBurst = nil,
   },
@@ -53,7 +60,27 @@ local Theme = {
     panelTitleHeight = 28,
     statusPadding = 16,
   },
+
+  spacingTiers = {
+    compact = { screenPadding = 20, blockGap = 16, itemGap = 10, lineHeight = 22, panelPadding = 14, panelTitleHeight = 24, statusPadding = 12 },
+    standard = { screenPadding = 28, blockGap = 20, itemGap = 12, lineHeight = 24, panelPadding = 18, panelTitleHeight = 28, statusPadding = 16 },
+    large = { screenPadding = 32, blockGap = 22, itemGap = 14, lineHeight = 26, panelPadding = 20, panelTitleHeight = 30, statusPadding = 18 },
+    max = { screenPadding = 36, blockGap = 24, itemGap = 16, lineHeight = 28, panelPadding = 22, panelTitleHeight = 32, statusPadding = 20 },
+  },
+
+  componentMetricTiers = {
+    compact = { buttonHeight = 42, cardMinWidth = 76, cardMaxWidth = 170 },
+    standard = { buttonHeight = 42, cardMinWidth = 82, cardMaxWidth = 190 },
+    large = { buttonHeight = 48, cardMinWidth = 90, cardMaxWidth = 205 },
+    max = { buttonHeight = 54, cardMinWidth = 96, cardMaxWidth = 220 },
+  },
 }
+
+function Theme.applyViewportMetrics(metrics)
+  local tier = metrics and metrics.tier or "standard"
+  Theme.fontSizes = Theme.fontSizeTiers[tier]
+  Theme.spacing = Theme.spacingTiers[tier]
+end
 
 function Theme.applyColor(color)
   love.graphics.setColor(color[1], color[2], color[3], color[4] or 1.0)

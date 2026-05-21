@@ -1,0 +1,9 @@
+.post-stage-analytics-screen {
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+}
+
+.analytics-header { grid-column: 1 / span 12; grid-row: 1 / span 1; }
+.analytics-chart { grid-column: 1 / span 8; grid-row: 2 / span 5; }
+.analytics-stats { grid-column: 9 / span 4; grid-row: 2 / span 5; }
+.analytics-actions { grid-column: 1 / span 12; grid-row: 7 / span 2; }

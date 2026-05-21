@@ -2,6 +2,16 @@ local Theme = require("src.ui.theme")
 
 local Layout = {}
 
+local TARGETS = {
+  { tier = "compact", width = 960, height = 540 },
+  { tier = "standard", width = 1280, height = 720 },
+  { tier = "large", width = 1440, height = 810 },
+  { tier = "max", width = 1600, height = 900 },
+}
+
+local MIN_TARGET = TARGETS[1]
+local MAX_TARGET = TARGETS[#TARGETS]
+
 local function isRichText(value)
   return type(value) == "table" and value.richText == true and type(value.segments) == "table"
 end
@@ -33,6 +43,86 @@ end
 
 local function drawEllipsis(startX, currentY, color, bold)
   drawTextToken("…", startX, currentY, color, bold)
+end
+
+local function resolveTier(width, height)
+  local tier = "compact"
+
+  for _, target in ipairs(TARGETS) do
+    if width >= target.width and height >= target.height then
+      tier = target.tier
+    end
+  end
+
+  return tier
+end
+
+local function copyTable(source)
+  local result = {}
+
+  for key, value in pairs(source or {}) do
+    result[key] = value
+  end
+
+  return result
+end
+
+function Layout.resolveViewport(windowWidth, windowHeight)
+  local width = math.floor(windowWidth or love.graphics.getWidth())
+  local height = math.floor(windowHeight or love.graphics.getHeight())
+  local rectWidth = math.max(1, math.min(width, MAX_TARGET.width))
+  local rectHeight = math.max(1, math.min(height, MAX_TARGET.height))
+  local tier = resolveTier(rectWidth, rectHeight)
+
+  return {
+    window = {
+      width = width,
+      height = height,
+    },
+    rect = {
+      x = math.floor((width - rectWidth) / 2),
+      y = math.floor((height - rectHeight) / 2),
+      width = rectWidth,
+      height = rectHeight,
+    },
+    target = {
+      minWidth = MIN_TARGET.width,
+      minHeight = MIN_TARGET.height,
+      maxWidth = MAX_TARGET.width,
+      maxHeight = MAX_TARGET.height,
+    },
+    tier = tier,
+    spacing = copyTable(Theme.spacingTiers[tier]),
+    fontSizes = copyTable(Theme.fontSizeTiers[tier]),
+    metrics = copyTable(Theme.componentMetricTiers[tier]),
+  }
+end
+
+function Layout.resolveGrid(rect, columns, rows, gap, areas)
+  local resolved = {}
+  local columnCount = math.max(1, columns or 1)
+  local rowCount = math.max(1, rows or 1)
+  local gridGap = math.max(0, gap or 0)
+  local cellWidth = math.max(0, ((rect.width or 0) - (gridGap * (columnCount - 1))) / columnCount)
+  local cellHeight = math.max(0, ((rect.height or 0) - (gridGap * (rowCount - 1))) / rowCount)
+
+  for name, area in pairs(areas or {}) do
+    local column = math.max(1, area.column or 1)
+    local row = math.max(1, area.row or 1)
+    local columnSpan = math.max(1, area.columnSpan or 1)
+    local rowSpan = math.max(1, area.rowSpan or 1)
+    local x = (rect.x or 0) + ((column - 1) * (cellWidth + gridGap))
+    local y = (rect.y or 0) + ((row - 1) * (cellHeight + gridGap))
+
+    resolved[name] = {
+      x = math.floor(x),
+      y = math.floor(y),
+      width = math.max(1, math.floor((cellWidth * columnSpan) + (gridGap * (columnSpan - 1)))),
+      height = math.max(1, math.floor((cellHeight * rowSpan) + (gridGap * (rowSpan - 1)))),
+    }
+  end
+
+  return resolved
 end
 
 function Layout.centeredText(text, y, font, color)
