@@ -38,6 +38,7 @@ local Theme = {
       [5] = "LEGENDARY",
       default = "LEGENDARY",
       clutch = "CLUTCH",
+      combo = "COMBO",
       jackpot = "JACKPOT",
       overkill = "OVERKILL",
     },

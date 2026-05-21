@@ -876,6 +876,7 @@ function StageState:getVisibleCoinStates(app)
 
   for slotIndex, slot in ipairs(app.stageState and app.stageState.purse and app.stageState.purse.handSlots or {}) do
     local coinId = slot.definitionId
+    local definition = coinId and Coins.getById(coinId) or nil
 
     if coinId and slot.instanceId then
       table.insert(coins, {
@@ -883,6 +884,8 @@ function StageState:getVisibleCoinStates(app)
         instanceId = slot.instanceId,
         slotIndex = slotIndex,
         sleightUsed = slot.sleightUsed == true,
+        cannotSleight = definition and definition.cannotSleight == true,
+        cannotReorder = definition and definition.cannotReorder == true,
       })
     end
   end
@@ -990,7 +993,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
       height = hitHeight,
       slotIndex = coin.slotIndex or index,
       coinId = coin.coinId,
-      movable = not rowRevealActive and not hasResult and self:isStageActive(app) and not self:isRevealActive(),
+      movable = not rowRevealActive and not hasResult and not coin.cannotReorder and self:isStageActive(app) and not self:isRevealActive(),
     })
 
     if hasResult and resultSettled then
@@ -1055,7 +1058,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
           height = badgeSize,
           label = "S",
           variant = "warning",
-          disabled = coin.sleightUsed,
+          disabled = coin.sleightUsed or coin.cannotSleight,
           onClick = function()
             return self:trySleightSlot(app, coin.slotIndex or index)
           end,
@@ -1073,6 +1076,11 @@ function StageState:drawCoinRow(app, x, y, width, height)
             handHoverEnabled and mouseX and mouseY and Button.containsPoint(button, mouseX, mouseY)
           )
         end
+      end
+
+      if coin.cannotReorder then
+        Theme.applyColor(Theme.colors.warning)
+        love.graphics.printf("LOCKED", cardDrawX + 8, labelY + 18, cardWidth - 16, "center")
       end
     end
 

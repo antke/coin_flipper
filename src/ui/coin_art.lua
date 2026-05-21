@@ -25,6 +25,13 @@ local RARITY_PALETTES = {
     shine = { 0.94, 0.84, 1.00, 1.0 },
     glow = { 0.82, 0.28, 1.00, 1.0 },
   },
+  cursed = {
+    rim = { 0.58, 0.05, 0.07, 1.0 },
+    face = { 0.18, 0.46, 0.20, 1.0 },
+    dark = { 0.05, 0.12, 0.07, 1.0 },
+    shine = { 0.74, 1.00, 0.45, 1.0 },
+    glow = { 0.86, 0.05, 0.08, 1.0 },
+  },
 }
 
 local FACE_PATTERNS = {
@@ -607,11 +614,7 @@ local function resolveDefinition(coinOrId)
   return Coins.getById(coinOrId)
 end
 
-local function getFaceKey(definition, side)
-  if side == "heads" or side == "tails" then
-    return side
-  end
-
+local function getFaceKey(definition)
   if definition and definition.art and definition.art.face then
     return definition.art.face
   end
@@ -650,6 +653,10 @@ end
 local function getRimType(definition)
   if definition and definition.art and definition.art.rim then
     return definition.art.rim
+  end
+
+  if definition and (definition.rarity == "cursed" or hasTag(definition, "cursed")) then
+    return "cursed"
   end
 
   if hasTag(definition, "boss") then
@@ -916,6 +923,30 @@ local function diamond(ctx, x, y)
   }, x, y)
 end
 
+local function skull(ctx, x, y)
+  mask(ctx, {
+    "001111100",
+    "011111110",
+    "110111011",
+    "111111111",
+    "101111101",
+    "111010111",
+    "011111110",
+    "001010100",
+    "001010100",
+  }, x, y)
+end
+
+local function chain(ctx, x, y)
+  for index = 0, 2 do
+    local linkX = x + (index * 4)
+    block(ctx, linkX, y + 2, 4, 1)
+    block(ctx, linkX, y + 6, 4, 1)
+    block(ctx, linkX, y + 3, 1, 3)
+    block(ctx, linkX + 3, y + 3, 1, 3)
+  end
+end
+
 local FACE_DRAWERS = {
   regular_dollar = function(ctx)
     line(ctx, 10, 3, 10, 17, 2)
@@ -1025,6 +1056,11 @@ local FACE_DRAWERS = {
     block(ctx, 7, 7, 7, 7)
   end,
   black_cat_cent = function(ctx) cat(ctx, 7, 5); line(ctx, 6, 15, 3, 17, 1); line(ctx, 14, 15, 17, 17, 1) end,
+  grave_taler = function(ctx) skull(ctx, 6, 3); chain(ctx, 5, 14) end,
+  blood_oracle = function(ctx) skull(ctx, 6, 3); line(ctx, 10, 13, 6, 18, 2); line(ctx, 10, 13, 14, 18, 2) end,
+  triple_crown = function(ctx) head(ctx, 1, 6); head(ctx, 8, 3); head(ctx, 15, 6) end,
+  switchback_cent = function(ctx) head(ctx, 3, 4); tail(ctx, 8, 8); head(ctx, 13, 4) end,
+  edge_echo = function(ctx) star(ctx, 2, 6); line(ctx, 6, 10, 14, 10, 1); star(ctx, 12, 6) end,
   heads = function(ctx) head(ctx, 8, 4) end,
   tails = function(ctx) tail(ctx, 8, 4) end,
 }
@@ -1111,6 +1147,13 @@ local function drawRimMarks(rimType, x, y, size, scale, palette, alpha)
     end
     drawRimMark(x + (2 * scale), y + (7 * scale), 2 * scale, scale, color, softAlpha)
     drawRimMark(x + (12 * scale), y + (8 * scale), 2 * scale, scale, color, softAlpha)
+  elseif rimType == "cursed" then
+    for index = 0, 3 do
+      drawRimMark(x + ((2 + index * 4) * scale), y + (2 * scale), 2 * scale, 2 * scale, color, softAlpha)
+      drawRimMark(x + ((2 + index * 4) * scale), y + (12 * scale), 2 * scale, 2 * scale, color, softAlpha)
+    end
+    drawRimMark(x + (1 * scale), y + (6 * scale), 2 * scale, 4 * scale, color, softAlpha)
+    drawRimMark(x + (13 * scale), y + (6 * scale), 2 * scale, 4 * scale, color, softAlpha)
   else
     drawRimMark(x + (2 * scale), y + (5 * scale), 2 * scale, scale, color, softAlpha)
     drawRimMark(x + (12 * scale), y + (10 * scale), 2 * scale, scale, color, softAlpha)
@@ -1129,7 +1172,7 @@ function CoinArt.draw(coinOrId, x, y, size, options)
   local definition = resolveDefinition(coinOrId)
   local palette = CoinArt.getPalette(definition)
   local scale = size / 16
-  local faceKey = getFaceKey(definition, options.side)
+  local faceKey = getFaceKey(definition)
   local pattern = FACE_PATTERNS[faceKey] or FACE_PATTERNS.regular_dollar
   local rimType = getRimType(definition)
   local alpha = options.alpha or 1.0

@@ -208,6 +208,7 @@ function FlipResolver.buildBatchResult(runState, stageState, context, resolution
     batchId = context.batchId,
     call = context.call,
     perCoin = context.perCoin,
+    batchFlags = Utils.clone(context.batchFlags or {}),
     scoreBreakdown = context.scoreBreakdown,
     trace = context.trace,
     status = stageState.stageStatus,

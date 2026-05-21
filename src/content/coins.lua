@@ -568,6 +568,98 @@ local definitions = {
       },
     },
   },
+  {
+    id = "grave_taler",
+    name = "Grave Taler",
+    rarity = "cursed",
+    price = 14,
+    description = "Cursed. Cannot be Sleighted or reordered. When it matches your call, gain +5 stage score and +5 run score.",
+    tags = { "cursed", "locked", "match", "score" },
+    cannotSleight = true,
+    cannotReorder = true,
+    triggers = {
+      {
+        hook = "after_coin_roll",
+        condition = { match = true },
+        effects = {
+          { op = "add_stage_score", amount = 5 },
+          { op = "add_run_score", amount = 5 },
+        },
+      },
+    },
+  },
+  {
+    id = "blood_oracle",
+    name = "Blood Oracle",
+    rarity = "cursed",
+    price = 16,
+    description = "Cursed. Cannot be Sleighted or reordered. Gains +0.25 Heads weight before rolling. On a Heads match, gain +6 stage score.",
+    tags = { "cursed", "locked", "heads", "weight", "score" },
+    cannotSleight = true,
+    cannotReorder = true,
+    triggers = {
+      {
+        hook = "before_coin_roll",
+        effects = {
+          { op = "modify_coin_weight", side = "heads", amount = 0.25 },
+        },
+      },
+      {
+        hook = "after_coin_roll",
+        condition = { call = "heads", result = "heads" },
+        effects = {
+          { op = "add_stage_score", amount = 6 },
+        },
+      },
+    },
+  },
+  {
+    id = "triple_crown",
+    name = "Triple Crown",
+    rarity = "uncommon",
+    description = "COMBO: If any three adjacent coins land Heads, gain +4 stage score and +4 run score.",
+    tags = { "combo", "pattern", "heads", "score" },
+    customResolver = "src.systems.combo_resolver",
+    combo = {
+      kind = "adjacent_results",
+      results = { "heads", "heads", "heads" },
+      stageScore = 4,
+      runScore = 4,
+      label = "Triple Heads Combo",
+    },
+    triggers = {},
+  },
+  {
+    id = "switchback_cent",
+    name = "Switchback Cent",
+    rarity = "uncommon",
+    description = "COMBO: If any three adjacent coins land Heads-Tails-Heads, gain +3 stage score and +2 shop points.",
+    tags = { "combo", "pattern", "economy", "score" },
+    customResolver = "src.systems.combo_resolver",
+    combo = {
+      kind = "adjacent_results",
+      results = { "heads", "tails", "heads" },
+      stageScore = 3,
+      shopPoints = 2,
+      label = "Switchback Combo",
+    },
+    triggers = {},
+  },
+  {
+    id = "edge_echo",
+    name = "Edge Echo",
+    rarity = "common",
+    description = "COMBO: If the leftmost and rightmost coins land the same side, gain +2 stage score and +2 run score.",
+    tags = { "combo", "pattern", "score" },
+    customResolver = "src.systems.combo_resolver",
+    combo = {
+      kind = "matching_edges",
+      stageScore = 2,
+      runScore = 2,
+      label = "Edge Echo Combo",
+    },
+    triggers = {},
+  },
 }
 
 local visualIdentities = {
@@ -606,6 +698,11 @@ local visualIdentities = {
   moon_mint = { face = "moon_mint", rim = "weight" },
   sun_stamp = { face = "sun_stamp", rim = "combo" },
   black_cat_cent = { face = "black_cat_cent", rim = "safety" },
+  grave_taler = { face = "grave_taler", rim = "cursed" },
+  blood_oracle = { face = "blood_oracle", rim = "cursed" },
+  triple_crown = { face = "triple_crown", rim = "combo" },
+  switchback_cent = { face = "switchback_cent", rim = "combo" },
+  edge_echo = { face = "edge_echo", rim = "combo" },
 }
 
 local byId = {}

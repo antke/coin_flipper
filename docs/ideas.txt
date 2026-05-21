@@ -22,13 +22,13 @@ Use `docs/hybrid-coin-purse-plan.md` as the deeper reference for the core purse 
 Ordered by likely value for the game right now, considering impact, implementation cost, clarity, and balance risk under the hybrid purse loop.
 
 1. **Stronger Feedback and Celebration**  
-   Still the best value-to-effort idea. The hybrid loop has more decision moments now, so the game needs stronger callouts for good hands, clever Sleights, useful reorders, overkill, rare hits, and risky wins.
+   Still the best value-to-effort idea, but the visual foundation now exists. The next pass should add semantic callouts for genuinely notable outcomes: perfect hands, clever Sleights, useful reorders, combo hits, overkill, rare hits, and risky cursed-coin wins.
 
 2. **Tactical Hand Order / Neighbour Coins**  
    Reordering is now part of the core loop, so neighbour effects are no longer a fixed-slot feature. They are one of the strongest ways to make each drawn hand feel like a tactical puzzle.
 
-3. **Pattern Matching Rewards**  
-   Strong fit for a hand-based game. Patterns should evaluate the final resolved hand after Sleight and reordering, making hand manipulation matter without replacing normal call-based scoring.
+3. **Combo / Pattern Rewards**  
+   Strong fit for a hand-based game. Treat patterns as combo goals that evaluate the final resolved hand after Sleight and reordering, then celebrate successful hits with a clear `COMBO` callout alongside the existing outcome burst language.
 
 4. **Push Your Luck**  
    Still promising and relatively contained. It adds a post-success decision without competing directly with Sleight.
@@ -36,8 +36,8 @@ Ordered by likely value for the game right now, considering impact, implementati
 5. **Purse Shop / Economy Tuning**  
    The shop is now the main purse-growth moment. The next design work is pricing, offer quality, rerolls, bloat pressure, and when thinning/removal becomes necessary.
 
-6. **Cursed / Cannot-Sleight Coins**  
-   More viable now because `cannotSleight` gives cursed coins a clear purse-specific identity: sticky risk that the player cannot easily dodge once drawn.
+6. **Cursed / Locked Coins**  
+   More viable now because `cannotSleight` and reorder locks give cursed coins a clear purse-specific identity: sticky risk that can pay big but becomes an anchor once drawn. Cursed should be its own rarity/presentation style, with deathly green or blood-red coloring rather than another normal rarity tier.
 
 7. **Coin Merging, Thinning, or Upgrades**  
    Duplicates are now real, so merge/upgrades are more relevant. Treat them primarily as purse-quality tools, not just power scaling.
@@ -141,7 +141,7 @@ The hybrid loop creates more notable moments than the old model: good draws, bad
 
 ### Comment
 
-This should remain near the top of the backlog. The current game already has basic feedback, but the hybrid loop needs callouts that specifically reward hand manipulation. Start with a small set of high-confidence events: perfect hand, overkill, last-flip clear, and Sleight-triggered gain.
+This should remain near the top of the backlog, but the next work should be semantic rather than more presentation polish. The current game already has coin reveal motion, match/miss particles, Sleight animation, and central outcome burst labels; extend that system with a small set of high-confidence facts: perfect hand, overkill, last-flip clear, combo/pattern hit, cursed survival, and Sleight-triggered gain.
 
 ---
 
@@ -196,11 +196,11 @@ This is now one of the strongest mechanical directions because it directly uses 
 
 ---
 
-## 3. Pattern Matching Rewards
+## 3. Combo / Pattern Rewards
 
 ### Core idea
 
-Reward specific final hand patterns such as `HHH`, `HTH`, all same, alternating results, edge matches, or call-aligned sequences.
+Reward specific final hand patterns as combo goals, such as `HHH`, `HTH`, all same, alternating results, edge matches, or call-aligned sequences.
 
 Pattern checks should happen after Sleight, reordering, coin flips, and result-modifying effects.
 
@@ -217,7 +217,7 @@ Pattern checks should happen after Sleight, reordering, coin flips, and result-m
 - Define whether patterns use results, calls, coin tags, coin identities, or positions.
 - Start with exact result patterns and simple whole-hand conditions.
 - UI must show the target clearly before the flip when possible.
-- Feedback should highlight why a pattern matched or failed.
+- Feedback should highlight successful combo hits clearly, usually with a `COMBO` outcome burst.
 
 ### Technical notes
 
@@ -246,7 +246,7 @@ Pattern checks should happen after Sleight, reordering, coin flips, and result-m
 
 ### Comment
 
-This has become more valid after the hybrid change. The player now sees a hand, can Sleight, and can reorder before committing, so pattern goals are actionable rather than purely passive. Start simple: all same, all match call, exact three-result sequences, and edge/center conditions.
+This has become more valid after the hybrid change. The player now sees a hand, can Sleight, and can reorder before committing, so combo goals are actionable rather than purely passive. Start simple: all same, all match call, exact three-result sequences, and edge/center conditions. Treat “pattern coin” and “combo coin” as the same family unless a future mechanic creates a meaningful distinction.
 
 ---
 

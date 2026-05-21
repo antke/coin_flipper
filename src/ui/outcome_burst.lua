@@ -60,6 +60,10 @@ function OutcomeBurst.getBatchLabel(batchResult, config)
     return nil
   end
 
+  if batchResult.batchFlags and batchResult.batchFlags.combo_matched then
+    return labels.combo or getMatchLabel(matchCount, coinCount, config), "success"
+  end
+
   if matchCount == 0 then
     return labels[0], "danger"
   end

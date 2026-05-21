@@ -86,40 +86,29 @@ function CoinDraftState:getLayout(app)
   }
 end
 
+local function containsPoint(rect, x, y)
+  return x >= rect.x and x <= (rect.x + rect.width) and y >= rect.y and y <= (rect.y + rect.height)
+end
+
+function CoinDraftState:chooseOffer(app, coinId)
+  local ok, doneOrError = app:chooseDraftCoin(coinId)
+
+  if not ok then
+    self.statusMessage = tostring(doneOrError)
+    return false
+  end
+
+  if doneOrError == true then
+    return app.stateGraph:request("draft_complete")
+  end
+
+  self.statusMessage = "Coin added. New offers loaded."
+  return true
+end
+
 function CoinDraftState:buildButtons(app)
   local layout = self:getLayout(app)
   local buttons = {}
-
-  for _, entry in ipairs(layout.panelLayout) do
-    local card = entry.card
-    local contentArea = Panel.getContentArea(entry.x, entry.y, entry.width, entry.height, string.format("Option %d", entry.index))
-    local buttonHeight = 38
-
-    table.insert(buttons, {
-      id = card.coinId,
-      x = contentArea.x,
-      y = contentArea.y + contentArea.height - buttonHeight,
-      width = contentArea.width,
-      height = buttonHeight,
-      label = "Draft",
-      variant = "primary",
-      onClick = function()
-        local ok, doneOrError = app:chooseDraftCoin(card.coinId)
-
-        if not ok then
-          self.statusMessage = tostring(doneOrError)
-          return false
-        end
-
-        if doneOrError == true then
-          return app.stateGraph:request("draft_complete")
-        end
-
-        self.statusMessage = "Coin added. New offers loaded."
-        return true
-      end,
-    })
-  end
 
   table.insert(buttons, {
     x = layout.width - Theme.spacing.screenPadding - 150,
@@ -138,11 +127,14 @@ function CoinDraftState:buildButtons(app)
 end
 
 function CoinDraftState:drawOfferCards(app, panelLayout)
+  local mouseX, mouseY = love.mouse.getPosition()
+
   for _, entry in ipairs(panelLayout) do
     local card = entry.card
-    Panel.draw(entry.x, entry.y, entry.width, entry.height, string.format("Option %d", entry.index))
-    local contentArea = Panel.getContentArea(entry.x, entry.y, entry.width, entry.height, string.format("Option %d", entry.index))
-    local buttonHeight = 38
+    local hovered = mouseX and mouseY and containsPoint(entry, mouseX, mouseY)
+
+    Panel.draw(entry.x, entry.y, entry.width, entry.height)
+    local contentArea = Panel.getContentArea(entry.x, entry.y, entry.width, entry.height)
     local artSize = math.min(86, math.max(54, math.floor(contentArea.width * 0.30)))
     local textX = contentArea.x + artSize + Theme.spacing.itemGap
     local textY = contentArea.y
@@ -156,12 +148,18 @@ function CoinDraftState:drawOfferCards(app, panelLayout)
     local lines = {
       string.format("%s", card.name or card.coinId),
       string.format("Rarity: %s", card.rarity or "n/a"),
-      "Adds +1 coin instance to your purse.",
       "",
       Terminology.getMechanicRichText(card.description),
     }
 
-    Layout.drawWrappedLines(lines, textX, textY, textWidth, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height - (buttonHeight + 8))
+    Layout.drawWrappedLines(lines, textX, textY, textWidth, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height)
+
+    if hovered then
+      Theme.applyColor(Theme.colors.highlight)
+      love.graphics.setLineWidth(3)
+      love.graphics.rectangle("line", entry.x, entry.y, entry.width, entry.height)
+      love.graphics.setLineWidth(1)
+    end
   end
 end
 
@@ -292,6 +290,14 @@ end
 function CoinDraftState:mousepressed(app, x, y, button)
   if button ~= 1 then
     return
+  end
+
+  local layout = self:getLayout(app)
+
+  for _, entry in ipairs(layout.panelLayout) do
+    if containsPoint(entry, x, y) then
+      return self:chooseOffer(app, entry.card.coinId)
+    end
   end
 
   Button.handleMousePressed(self:buildButtons(app), x, y)

@@ -32,6 +32,11 @@ local function ensureDefinitionInCollection(runState, definitionId)
   end
 end
 
+local function slotHasReorderLock(slot)
+  local definition = slot and slot.definitionId and Coins.getById(slot.definitionId) or nil
+  return definition and definition.cannotReorder == true
+end
+
 function PurseSystem.getHandSize(runState)
   local resolved = runState and runState.resolvedValues and runState.resolvedValues["purse.handSize"] or nil
   return math.max(1, tonumber(resolved) or DEFAULT_HAND_SIZE)
@@ -232,6 +237,10 @@ function PurseSystem.moveHandSlot(stageState, slotIndex, direction)
 
   if not handSlots or not handSlots[slotIndex] or not handSlots[targetIndex] then
     return false, "cannot_reorder"
+  end
+
+  if slotHasReorderLock(handSlots[slotIndex]) or slotHasReorderLock(handSlots[targetIndex]) then
+    return false, "cannot_reorder_cursed"
   end
 
   local movedInstanceId = handSlots[slotIndex].instanceId

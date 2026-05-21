@@ -3,6 +3,7 @@ local ShopContent = {
     common = 8,
     uncommon = 15,
     rare = 25,
+    cursed = 14,
   },
 }
 
