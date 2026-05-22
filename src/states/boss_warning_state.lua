@@ -118,8 +118,10 @@ function BossWarningState:draw(app)
   local contentArea = Panel.getContentArea(panelX, panelY, panelWidth, panelHeight, app.currentStageDefinition and app.currentStageDefinition.label or "Boss")
   local cards = app:getBossModifierCards()
   local cardGap = 10
+  local opponent = app.stageState and app.stageState.opponent or {}
   local keyLines = {
-    string.format("Target Score: %d", app.stageState and app.stageState.targetScore or 0),
+    string.format("Opponent: %s", opponent.name or "Boss"),
+    string.format("Opponent HP: %d", app.stageState and app.stageState.targetScore or 0),
     string.format("Flips Available: %d", app.stageState and app.stageState.flipsRemaining or 0),
     string.format("Current Build: %s", app:getCurrentLoadoutKey()),
   }

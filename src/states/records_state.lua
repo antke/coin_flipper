@@ -284,7 +284,7 @@ function RecordsState:draw(app)
   local detailLines = record and {
     string.format("Result: %s", tostring(record.resultType or record.runStatus or "n/a")),
     string.format("Final Stage: %s", tostring(record.finalStageLabel or "n/a")),
-    string.format("Run Total Score: %s", tostring(record.runTotalScore or 0)),
+    string.format("Run Total Damage: %s", tostring(record.runTotalScore or 0)),
     string.format("Meta Reward Earned: %s", tostring(record.metaRewardEarned or 0)),
   } or { "No run record selected." }
 

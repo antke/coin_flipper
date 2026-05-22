@@ -1,24 +1,9 @@
-local ShopContent = {
-  rarityPrices = {
-    common = 8,
-    uncommon = 15,
-    rare = 25,
-    cursed = 14,
-  },
-}
+local EconomyContent = require("src.content.economy")
+
+local ShopContent = {}
 
 function ShopContent.resolvePrice(offerType, definition)
-  if definition.price then
-    return definition.price
-  end
-
-  local basePrice = ShopContent.rarityPrices[definition.rarity or "common"] or 4
-
-  if offerType == "upgrade" then
-    return basePrice + 1
-  end
-
-  return basePrice
+  return EconomyContent.resolveOfferPrice(offerType, definition)
 end
 
 return ShopContent

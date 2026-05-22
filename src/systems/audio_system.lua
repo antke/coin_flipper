@@ -31,6 +31,31 @@ local CUES = {
       { wave = "triangle", frequency = 210, duration = 0.064, attack = 0.002, release = 0.026, glide = -34 },
     },
   },
+  coin_flip = {
+    volume = 0.22,
+    cooldown = 0.08,
+    sequence = {
+      { wave = "triangle", frequency = 420, duration = 0.040, attack = 0.002, release = 0.014, glide = 240 },
+      { wave = "square", frequency = 760, duration = 0.032, attack = 0.001, release = 0.012, amplitude = 0.62, glide = -180 },
+      { wave = "sine", frequency = 980, duration = 0.048, attack = 0.002, release = 0.020, amplitude = 0.55, glide = -320 },
+    },
+  },
+  coin_whoosh = {
+    volume = 0.17,
+    cooldown = 0.045,
+    sequence = {
+      { wave = "saw", frequency = 220, duration = 0.050, attack = 0.006, release = 0.020, amplitude = 0.35, glide = 190 },
+      { wave = "sine", frequency = 480, duration = 0.060, attack = 0.004, release = 0.028, amplitude = 0.50, glide = -260 },
+    },
+  },
+  draft_select = {
+    volume = 0.21,
+    cooldown = 0.05,
+    sequence = {
+      { wave = "triangle", frequency = 520, duration = 0.042, attack = 0.002, release = 0.014, glide = 90 },
+      { wave = "sine", frequency = 780, duration = 0.058, attack = 0.002, release = 0.020, amplitude = 0.75 },
+    },
+  },
   batch_match = {
     volume = 0.22,
     cooldown = 0.04,

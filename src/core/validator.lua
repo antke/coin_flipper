@@ -74,6 +74,7 @@ local VALID_RUN_RECORD_STAGE_KEYS = {
   stageLabel = true,
   stageType = true,
   variantName = true,
+  opponentName = true,
   status = true,
   stageScore = true,
   targetScore = true,

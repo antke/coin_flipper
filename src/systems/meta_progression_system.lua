@@ -1,4 +1,5 @@
 local EffectiveValueSystem = require("src.systems.effective_value_system")
+local MetaProgressionContent = require("src.content.meta_progression")
 local MetaUpgrades = require("src.content.meta_upgrades")
 local Utils = require("src.core.utils")
 
@@ -79,21 +80,7 @@ function MetaProgressionSystem.purchase(metaState, metaUpgradeId)
 end
 
 function MetaProgressionSystem.calculateRunReward(runState, stageRecord)
-  local reward = 1
-
-  if runState then
-    reward = reward + math.floor((runState.runTotalScore or 0) / 12)
-  end
-
-  if stageRecord and stageRecord.stageType == "boss" and stageRecord.status == "cleared" then
-    reward = reward + 1
-  end
-
-  if stageRecord and stageRecord.runStatus == "won" then
-    reward = reward + 1
-  end
-
-  return math.max(1, reward)
+  return MetaProgressionContent.calculateRunReward(runState, stageRecord)
 end
 
 function MetaProgressionSystem.grantRunCompletionReward(metaState, runState, stageRecord)

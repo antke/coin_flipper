@@ -379,7 +379,7 @@ Examples of values that should support this pattern:
 
 - flips per stage
 - max active coin slots
-- shop point gain multiplier
+- Chip gain multiplier
 - per-coin base weights
 - shop offer count
 - round count / boss placement rules
@@ -617,7 +617,7 @@ Example schema:
 {
   id = "meta_shop_efficiency_1",
   name = "Merchant's Favor I",
-  description = "+10% shop point gain in runs.",
+  description = "+10% Chip gain in runs.",
   tags = { "meta", "economy" },
   runModifiers = {
     shopPointMultiplier = 1.10
@@ -757,7 +757,7 @@ Purpose:
 Typical effects:
 
 - add score on match
-- add shop points on miss
+- add Chips on miss
 - convert result into secondary flags
 
 ### `before_scoring`
@@ -781,7 +781,7 @@ Purpose:
 
 Typical effects:
 
-- if score exceeded X, gain shop points
+- if score exceeded X, gain Chips
 - if all coins matched, queue a bonus flag
 
 ### `before_stage_end_check`
@@ -907,7 +907,7 @@ Recommended scoring order:
 3. score conversions / replacements
 4. multiplicative effects
 5. caps/floors if needed
-6. side rewards (shop points, flags, etc.)
+6. side rewards (Chips, flags, etc.)
 
 ## 11.3 RNG order
 
@@ -1383,8 +1383,8 @@ Even if the first playable prototype only uses a very small meta layer, the arch
 
 ## 19.1 Meta upgrade examples
 
-- `+10% shop point generation`
-- `+1 starting shop point`
+- `+10% Chip generation`
+- `+1 starting Chip`
 - `+1 max active coin slot`
 - `+1 starting coin choice`
 - improved rarity odds in shops
@@ -1503,7 +1503,7 @@ The stage screen should show at minimum:
 - target score
 - current stage score
 - flips remaining
-- shop points
+- Chips
 - equipped coins
 - active upgrades
 - active boss/stage modifiers
@@ -1795,7 +1795,7 @@ Success criteria:
 
 - player receives offers after clear
 - purchases persist into the next stage
-- shop points are spent correctly
+- Chips are spent correctly
 
 ## Phase 8 — boss rules
 
@@ -1874,7 +1874,7 @@ Required manual tests:
 Development controls should include:
 
 - force next coin result to heads/tails
-- grant shop points
+- grant Chips
 - grant upgrade
 - jump to boss round
 - simulate multiple flips quickly

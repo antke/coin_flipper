@@ -124,7 +124,7 @@ function SummaryState:draw(app)
   local summaryLines = {
     string.format("Run Status: %s", summary.runStatus),
     string.format("Final Round Reached: %d", summary.roundIndex),
-    string.format("Run Total Score: %d", summary.runTotalScore),
+    string.format("Run Total Damage: %d", summary.runTotalScore),
     string.format("Meta Reward Earned: %d", summary.metaRewardEarned or 0),
     string.format("Final Stage: %s", summary.finalStageLabel),
     string.format("Final Stage Status: %s", summary.finalStageStatus),
@@ -136,7 +136,12 @@ function SummaryState:draw(app)
 
   local stageHistoryLines = {}
   for _, stageRecord in ipairs(summary.stageHistory or {}) do
-    local line = string.format("- R%d %s => %s (%d/%d)", stageRecord.roundIndex, stageRecord.stageLabel, stageRecord.status, stageRecord.stageScore, stageRecord.targetScore)
+    local line = string.format("- R%d %s => %s damage %d/%d", stageRecord.roundIndex, stageRecord.opponentName or stageRecord.stageLabel, stageRecord.status, stageRecord.stageScore, stageRecord.targetScore)
+    local victoryChipReward = stageRecord.victoryShopPointReward
+
+    if victoryChipReward and (victoryChipReward.total or 0) > 0 then
+      line = string.format("%s | Chips +%d", line, victoryChipReward.total or 0)
+    end
 
     if stageRecord.rewardChoice then
       line = string.format("%s | Reward: %s", line, stageRecord.rewardChoice.name or stageRecord.rewardChoice.contentId or "n/a")

@@ -2,7 +2,7 @@ local definitions = {
   {
     id = "meta_shop_efficiency_1",
     name = "Merchant's Favor I",
-    description = "+10% shop point gain in runs.",
+    description = "+10% Chip gain in runs.",
     cost = 2,
     tags = { "meta", "economy" },
     effectiveValues = {
@@ -22,7 +22,7 @@ local definitions = {
   {
     id = "meta_bonus_points_1",
     name = "Traveler's Change",
-    description = "+2 starting shop points in runs.",
+    description = "+2 starting Chips in runs.",
     cost = 2,
     tags = { "meta", "economy" },
     effectiveValues = {

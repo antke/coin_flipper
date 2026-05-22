@@ -6,6 +6,11 @@ local StageState = {}
 function StageState.new(stageDefinition, runState, options)
   options = options or {}
   local activeBossModifierIds = {}
+  local opponent = Utils.clone(stageDefinition.opponent or {})
+  opponent.id = opponent.id or (stageDefinition.id .. "_opponent")
+  opponent.name = opponent.name or stageDefinition.name or stageDefinition.label or "Opponent"
+  opponent.description = opponent.description or "Defeat this opponent with your coin flips."
+  opponent.hp = opponent.hp or stageDefinition.targetScore or 0
 
   if stageDefinition.bossModifierIds then
     for _, modifierId in ipairs(stageDefinition.bossModifierIds) do
@@ -21,7 +26,8 @@ function StageState.new(stageDefinition, runState, options)
     stageType = stageDefinition.stageType or "normal",
     variantId = stageDefinition.variantId,
     variantName = stageDefinition.variantName,
-    targetScore = stageDefinition.targetScore or 0,
+    opponent = opponent,
+    targetScore = opponent.hp,
     stageScore = 0,
     flipsRemaining = math.max(1, tonumber(options.flipsPerStage) or runState.baseFlipsPerStage),
     stageStatus = "active",

@@ -64,11 +64,17 @@ function PostStageAnalyticsState:draw(app)
   local content = Panel.getContentArea(padding, panelY, width - (padding * 2), panelHeight, "Stage")
   local lines = {
     string.format("Stage: %s", stageRecord.stageLabel or stageRecord.stageId or "n/a"),
+    string.format("Opponent: %s", stageRecord.opponentName or "n/a"),
     string.format("Status: %s", tostring(stageRecord.status or "n/a")),
-    string.format("Score: %d / %d", stageRecord.stageScore or 0, stageRecord.targetScore or 0),
-    string.format("Run Total Score: %d", stageRecord.runTotalScore or (app.runState and app.runState.runTotalScore or 0)),
+    string.format("Damage: %d / %d", stageRecord.stageScore or 0, stageRecord.targetScore or 0),
+    string.format("Run Total Damage: %d", stageRecord.runTotalScore or (app.runState and app.runState.runTotalScore or 0)),
     app:getPostStageReviewFollowupLine(),
   }
+
+  local victoryChipLine = app:formatVictoryChipRewardLine(stageRecord)
+  if victoryChipLine then
+    table.insert(lines, 6, victoryChipLine)
+  end
 
   love.graphics.setFont(app.fonts.body)
   Layout.drawWrappedLines(lines, content.x, content.y, content.width, Theme.colors.text, Theme.spacing.lineHeight, content.height)

@@ -1263,7 +1263,7 @@ function Game:getRunRecordProgressLines()
     string.format("Stored Runs: %d/%d", #records, SummarySystem.MAX_RUN_RECORDS or #records),
     string.format("Wins / Losses / Abandoned: %d / %d / %d", wins, losses, abandoned),
     string.format("Meta Points: %d", self.metaState and (self.metaState.metaPoints or 0) or 0),
-    "Browse saved runs to compare score, stage progress, and rewards.",
+    "Browse saved runs to compare damage, stage progress, and rewards.",
   }
 end
 
@@ -1278,7 +1278,7 @@ function Game:getRunRecordDetailLines(record)
     string.format("Final Round: %s", tostring(record.finalRound or "n/a")),
     string.format("Final Stage: %s", tostring(record.finalStageLabel or "n/a")),
     string.format("Final Stage Status: %s", tostring(record.finalStageStatus or "n/a")),
-    string.format("Run Total Score: %s", tostring(record.runTotalScore or 0)),
+    string.format("Run Total Damage: %s", tostring(record.runTotalScore or 0)),
     string.format("Meta Reward Earned: %s", tostring(record.metaRewardEarned or 0)),
     string.format("Shop Visits / Rerolls: %s / %s", tostring(record.shopVisitCount or 0), tostring(record.totalRerollsUsed or 0)),
     string.format("Collection Size: %s", tostring(record.collectionSize or 0)),
@@ -1292,7 +1292,7 @@ function Game:getRunRecordDetailLines(record)
   end
 
   for _, stageRecord in ipairs(record.stageHistory or {}) do
-    local line = string.format("- R%s %s => %s (%s/%s)", tostring(stageRecord.roundIndex or "?"), tostring(stageRecord.stageLabel or "n/a"), tostring(stageRecord.status or "n/a"), tostring(stageRecord.stageScore or 0), tostring(stageRecord.targetScore or 0))
+    local line = string.format("- R%s %s => %s damage %s/%s", tostring(stageRecord.roundIndex or "?"), tostring(stageRecord.opponentName or stageRecord.stageLabel or "n/a"), tostring(stageRecord.status or "n/a"), tostring(stageRecord.stageScore or 0), tostring(stageRecord.targetScore or 0))
 
     if stageRecord.rewardChoice then
       line = string.format("%s | Reward: %s", line, tostring(stageRecord.rewardChoice.name or stageRecord.rewardChoice.contentId or "n/a"))
@@ -1432,12 +1432,15 @@ function Game:buildStagePreviewData(stageDefinition, options)
     or self:getStageModifierCards(stageDefinition.activeStageModifierIds or {})
   local lines = {}
 
+  local opponent = stageDefinition.opponent or {}
+
   if not options.hideStageIdentity then
     table.insert(lines, string.format("Stage: %s", stageDefinition.label or stageDefinition.name or stageDefinition.id))
+    table.insert(lines, string.format("Opponent: %s", opponent.name or stageDefinition.name or stageDefinition.id))
     table.insert(lines, string.format("Type: %s", isBoss and "Boss" or "Standard"))
   end
 
-  table.insert(lines, string.format("Target Score: %d", stageDefinition.targetScore or 0))
+  table.insert(lines, string.format("Opponent HP: %d", opponent.hp or stageDefinition.targetScore or 0))
   table.insert(lines, string.format("Flips Available: %d", flipsPerStage or 0))
 
   if #cards > 0 then
@@ -1688,7 +1691,27 @@ function Game:sleightHandSlot(slotIndex)
   return true, result
 end
 
-function Game:moveHandSlot(slotIndex, direction)
+function Game:applyHandReorderHook(reorderResult)
+  if not reorderResult then
+    return nil
+  end
+
+  local movedCoin = PurseHookSystem.buildCoinState(self.runState, nil, reorderResult.toIndex, {
+    instanceId = reorderResult.movedInstanceId,
+    definitionId = reorderResult.movedDefinitionId,
+    slotIndex = reorderResult.toIndex,
+  })
+
+  if movedCoin then
+    return PurseHookSystem.runImmediatePhase(self.runState, self.stageState, self.metaProjection, "after_hand_reorder", { movedCoin }, { call = self.selectedCall })
+  end
+
+  return nil
+end
+
+function Game:moveHandSlot(slotIndex, direction, options)
+  options = options or {}
+
   if not self.stageState then
     return false, "stage_not_initialized"
   end
@@ -1699,14 +1722,8 @@ function Game:moveHandSlot(slotIndex, direction)
     return false, result
   end
 
-  local movedCoin = PurseHookSystem.buildCoinState(self.runState, nil, result.toIndex, {
-    instanceId = result.movedInstanceId,
-    definitionId = result.movedDefinitionId,
-    slotIndex = result.toIndex,
-  })
-
-  if movedCoin then
-    PurseHookSystem.runImmediatePhase(self.runState, self.stageState, self.metaProjection, "after_hand_reorder", { movedCoin }, { call = self.selectedCall })
+  if not options.suppressReorderHook then
+    self:applyHandReorderHook(result)
   end
 
   self:assertRuntimeInvariants("game.moveHandSlot", { history = true })
@@ -1868,7 +1885,7 @@ function Game:debugGrantShopPoints(amount)
   amount = amount or self.config.get("debug.grantShopPointsAmount", 5)
   self.runState.shopPoints = self.runState.shopPoints + amount
   self:assertRuntimeInvariants("game.debugGrantShopPoints", { history = true })
-  self.logger:info("Dev control granted shop points", { amount = amount, total = self.runState.shopPoints })
+    self.logger:info("Dev control granted Chips", { amount = amount, total = self.runState.shopPoints })
   return true, amount
 end
 
@@ -2023,8 +2040,8 @@ function Game:getStageEndEvaluationLines()
     local flipsRemainingAfter = batchResult.trace.flipsRemainingAfter
     local statusAfter = batchResult.trace.stageStatusAfter or batchResult.status or "n/a"
     local lines = {
-      string.format("Stage end evaluation: %s", tostring(statusAfter)),
-      string.format("Score check: %s/%s", tostring(stageScoreAfter or "n/a"), tostring(targetScore or "n/a")),
+      string.format("Opponent evaluation: %s", tostring(statusAfter == "cleared" and "defeated" or statusAfter)),
+      string.format("Damage check: %s/%s", tostring(stageScoreAfter or "n/a"), tostring(targetScore or "n/a")),
       string.format("Flips after %s: %s", Terminology.getTermLower("flip"), tostring(flipsRemainingAfter or "n/a")),
     }
 
@@ -2043,14 +2060,14 @@ function Game:getStageEndEvaluationLines()
 
   if self.stageState and self.stageState.stageStatus ~= "active" then
     return {
-      string.format("Stage end evaluation: %s", tostring(self.stageState.stageStatus)),
-      string.format("Score check: %s/%s", tostring(self.stageState.stageScore or "n/a"), tostring(self.stageState.targetScore or "n/a")),
+      string.format("Opponent evaluation: %s", tostring(self.stageState.stageStatus == "cleared" and "defeated" or self.stageState.stageStatus)),
+      string.format("Damage check: %s/%s", tostring(self.stageState.stageScore or "n/a"), tostring(self.stageState.targetScore or "n/a")),
       string.format("Flips after %s: %s", Terminology.getTermLower("flip"), tostring(self.stageState.flipsRemaining or "n/a")),
       "Source: dev-forced or no flip trace",
     }
   end
 
-  return { "Stage end evaluation: n/a" }
+  return { "Opponent evaluation: n/a" }
 end
 
 function Game:finalizeCurrentStage()
@@ -2487,7 +2504,7 @@ function Game:getMetaStatusLines()
     string.format("Unlocked Upgrades: %d/%d", unlockedUpgradeCount, #(Upgrades.getAll() or {})),
     string.format("Runs Started: %d", self.metaState.stats.runsStarted or 0),
     string.format("Runs Won: %d", self.metaState.stats.runsWon or 0),
-    string.format("Best Run Score: %d", self.metaState.stats.bestRunScore or 0),
+    string.format("Best Run Damage: %d", self.metaState.stats.bestRunScore or 0),
     string.format("Bosses Defeated: %d", self.metaState.stats.bossesDefeated or 0),
   }
 end
@@ -2934,10 +2951,12 @@ function Game:shouldShowBossWarning()
 end
 
 function Game:getBossWarningLines()
+  local opponent = self.stageState and self.stageState.opponent or {}
   local lines = {
     "You are about to enter a boss encounter.",
     "",
-    string.format("Target Score: %d", self.stageState and self.stageState.targetScore or 0),
+    string.format("Opponent: %s", opponent.name or "Boss"),
+    string.format("Opponent HP: %d", self.stageState and self.stageState.targetScore or 0),
     string.format("Flips Available: %d", self.stageState and self.stageState.flipsRemaining or 0),
     string.format("Current Build: %s", self:getCurrentLoadoutKey()),
   }
@@ -2967,13 +2986,18 @@ end
 function Game:getRewardPreviewLines()
   local result = self.lastStageResult or {}
   local lines = {
-    string.format("Stage Cleared: %s", result.stageLabel or "n/a"),
-    string.format("Run Total Score: %d", result.runTotalScore or (self.runState and self.runState.runTotalScore or 0)),
-    string.format("Shop Points Ready: %d", result.shopPoints or (self.runState and self.runState.shopPoints or 0)),
+    string.format("Opponent Defeated: %s", result.opponentName or result.stageLabel or "n/a"),
+    string.format("Run Total Damage: %d", result.runTotalScore or (self.runState and self.runState.runTotalScore or 0)),
+    string.format("Chips Ready: %d", result.shopPoints or (self.runState and self.runState.shopPoints or 0)),
     string.format("Free Shop Rerolls: %d", result.shopRerollsRemaining or (self.runState and self.runState.shopRerollsRemaining or 0)),
     string.format("Loadout Key: %s", result.loadoutKey or self:getCurrentLoadoutKey()),
     string.format("Owned Upgrades: %d", #(self.runState and self.runState.ownedUpgradeIds or {})),
   }
+
+  local victoryChipLine = self:formatVictoryChipRewardLine(result)
+  if victoryChipLine then
+    table.insert(lines, 4, victoryChipLine)
+  end
 
   if (result.metaRewardEarned or 0) > 0 then
     table.insert(lines, string.format("Meta Reward Banked: %d", result.metaRewardEarned))
@@ -3000,6 +3024,23 @@ function Game:getRewardPreviewLines()
   end
 
   return lines
+end
+
+function Game:formatVictoryChipRewardLine(stageRecord)
+  local reward = stageRecord and stageRecord.victoryShopPointReward or nil
+  local total = reward and reward.total or 0
+
+  if total <= 0 then
+    return nil
+  end
+
+  return string.format(
+    "Victory Chips: +%d (base +%d, overkill +%d, flips +%d)",
+    total,
+    reward.base or 0,
+    reward.overkill or 0,
+    reward.remainingFlipReward or 0
+  )
 end
 
 function Game:shouldUseEncounterEvent()
@@ -3172,7 +3213,7 @@ function Game:getProjectedEncounterImpactLines(projected)
 
   if projectedOutcome.shopPointsAfter ~= projectedOutcome.shopPointsBefore then
     table.insert(lines, string.format(
-      "Shop Points: %d → %d (%+d)",
+      "Chips: %d → %d (%+d)",
       projectedOutcome.shopPointsBefore,
       projectedOutcome.shopPointsAfter,
       projectedOutcome.shopPointsAfter - projectedOutcome.shopPointsBefore
@@ -3315,13 +3356,15 @@ function Game:buildStagePreviewDataForRun(runState, stageDefinition, options)
     stageDefinition = stageDefinition,
   })
   local isBoss = stageDefinition.stageType == "boss"
+  local opponent = stageDefinition.opponent or {}
   local cards = isBoss
     and self:getBossModifierCards(stageDefinition.bossModifierIds or {})
     or self:getStageModifierCards(stageDefinition.activeStageModifierIds or {})
   local lines = {
     string.format("Stage: %s", stageDefinition.label or stageDefinition.name or stageDefinition.id),
+    string.format("Opponent: %s", opponent.name or stageDefinition.name or stageDefinition.id),
     string.format("Type: %s", isBoss and "Boss" or "Standard"),
-    string.format("Target Score: %d", stageDefinition.targetScore or 0),
+    string.format("Opponent HP: %d", opponent.hp or stageDefinition.targetScore or 0),
     string.format("Flips Available: %d", flipsPerStage or 0),
   }
 
@@ -3386,7 +3429,7 @@ function Game:getProjectedRewardImpactLines(options, projected)
 
   if projectedOutcome.shopPointsAfter ~= projectedOutcome.shopPointsBefore then
     table.insert(lines, string.format(
-      "Shop Points: %d → %d (%+d)",
+      "Chips: %d → %d (%+d)",
       projectedOutcome.shopPointsBefore,
       projectedOutcome.shopPointsAfter,
       projectedOutcome.shopPointsAfter - projectedOutcome.shopPointsBefore
@@ -3671,10 +3714,15 @@ function Game:getBossRewardLines()
   local result = self.lastStageResult or {}
   local session = self:getRewardSession()
   local lines = {
-    string.format("Boss Cleared: %s", result.stageLabel or "n/a"),
-    string.format("Final Run Score: %d", result.runTotalScore or (self.runState and self.runState.runTotalScore or 0)),
+    string.format("Boss Defeated: %s", result.opponentName or result.stageLabel or "n/a"),
+    string.format("Final Run Damage: %d", result.runTotalScore or (self.runState and self.runState.runTotalScore or 0)),
     string.format("Final Loadout: %s", result.loadoutKey or self:getCurrentLoadoutKey()),
   }
+
+  local victoryChipLine = self:formatVictoryChipRewardLine(result)
+  if victoryChipLine then
+    table.insert(lines, 3, victoryChipLine)
+  end
 
   if (result.metaRewardEarned or 0) > 0 then
     table.insert(lines, string.format("Meta Reward Banked: %d", result.metaRewardEarned))
@@ -3697,10 +3745,15 @@ end
 function Game:getBossRewardSummaryLines()
   local result = self.lastStageResult or {}
   local lines = {
-    string.format("Boss Cleared: %s", result.stageLabel or "n/a"),
-    string.format("Final Run Score: %d", result.runTotalScore or (self.runState and self.runState.runTotalScore or 0)),
+    string.format("Boss Defeated: %s", result.opponentName or result.stageLabel or "n/a"),
+    string.format("Final Run Damage: %d", result.runTotalScore or (self.runState and self.runState.runTotalScore or 0)),
     string.format("Final Loadout: %s", result.loadoutKey or self:getCurrentLoadoutKey()),
   }
+
+  local victoryChipLine = self:formatVictoryChipRewardLine(result)
+  if victoryChipLine then
+    table.insert(lines, 3, victoryChipLine)
+  end
 
   if (result.metaRewardEarned or 0) > 0 then
     table.insert(lines, string.format("Meta Reward Banked: %d", result.metaRewardEarned))
@@ -3874,7 +3927,7 @@ function Game:formatBatchLogLine(batchResult)
   end
 
   return string.format(
-    "R%d B%d | call=%s | %s | stage %d/%d | run %d | shop %d | status=%s",
+    "R%d B%d | call=%s | %s | damage %d/%d | run %d | chips %d | status=%s",
     self.runState and self.runState.roundIndex or 0,
     batchResult.batchId,
     string.upper(batchResult.call or "?"),
@@ -4016,7 +4069,7 @@ function Game:getFlipLogLines(limit)
     end
 
     table.insert(lines, string.format(
-      "   base score: %s | final score: %s | outcome: %s %s%s",
+      "   base damage: %s | final damage: %s | outcome: %s %s%s",
       formatScoreValue(scoreEntry.baseScoreContribution),
       formatScoreValue(scoreEntry.finalScoreContribution),
       outcome,
@@ -4041,7 +4094,7 @@ function Game:getScoreBreakdownLines(limit)
   local breakdown = self.lastBatchResult and self.lastBatchResult.scoreBreakdown or nil
 
   if not breakdown then
-    return { "No score breakdown yet." }
+    return { "No damage breakdown yet." }
   end
 
   local stageBonusDelta = 0
@@ -4055,11 +4108,11 @@ function Game:getScoreBreakdownLines(limit)
     end
   end
 
-  table.insert(lines, string.format("Base score: %d", breakdown.baseScore or 0))
+  table.insert(lines, string.format("Base damage: %d", breakdown.baseScore or 0))
   table.insert(lines, string.format("After multipliers: %d", breakdown.finalBaseScore or breakdown.baseScore or 0))
-  table.insert(lines, string.format("Stage bonus delta: %+d", stageBonusDelta))
+  table.insert(lines, string.format("Damage bonus delta: %+d", stageBonusDelta))
   table.insert(lines, string.format("Run bonus delta: %+d", runBonusDelta))
-  table.insert(lines, string.format("Stage total gained: %+d", breakdown.totalStageScoreDelta or 0))
+  table.insert(lines, string.format("Damage total gained: %+d", breakdown.totalStageScoreDelta or 0))
   table.insert(lines, string.format("Run total gained: %+d", breakdown.totalRunScoreDelta or 0))
   table.insert(lines, string.format("Triggered sources: %d", #(self.lastBatchResult.trace and self.lastBatchResult.trace.triggeredSources or {})))
   table.insert(lines, string.format("Emitted actions: %d", #(self.lastBatchResult.trace and self.lastBatchResult.trace.actions or {})))

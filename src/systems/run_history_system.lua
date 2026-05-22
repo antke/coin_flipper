@@ -1,5 +1,5 @@
 local MetaProgressionSystem = require("src.systems.meta_progression_system")
-local GameConfig = require("src.app.config")
+local EconomyContent = require("src.content.economy")
 local Loadout = require("src.domain.loadout")
 local ProgressionSystem = require("src.systems.progression_system")
 local Utils = require("src.core.utils")
@@ -219,12 +219,16 @@ function RunHistorySystem.recordReroll(shopSession, mode)
 end
 
 function RunHistorySystem.finalizeStage(runState, stageState, metaState)
-  local stageClearShopPoints = GameConfig.get("economy.stageClearShopPoints", 3)
+  local victoryShopPointReward = stageState.victoryShopPointReward or EconomyContent.calculateVictoryShopPointReward(stageState)
 
-  if stageState.stageStatus == "cleared" and stageState.stageClearShopPointsGranted ~= true and stageClearShopPoints > 0 then
-    runState.shopPoints = runState.shopPoints + stageClearShopPoints
+  if stageState.stageStatus == "cleared" and stageState.stageClearShopPointsGranted ~= true then
+    victoryShopPointReward = EconomyContent.calculateVictoryShopPointReward(stageState)
+    runState.shopPoints = runState.shopPoints + (victoryShopPointReward.total or 0)
     stageState.stageClearShopPointsGranted = true
+    stageState.victoryShopPointReward = victoryShopPointReward
   end
+
+  victoryShopPointReward = stageState.victoryShopPointReward or victoryShopPointReward
 
   local stageRecord = {
     roundIndex = runState.roundIndex,
@@ -233,13 +237,17 @@ function RunHistorySystem.finalizeStage(runState, stageState, metaState)
     stageType = stageState.stageType,
     variantId = stageState.variantId,
     variantName = stageState.variantName,
+    opponentId = stageState.opponent and stageState.opponent.id or nil,
+    opponentName = stageState.opponent and stageState.opponent.name or nil,
+    opponentHp = stageState.targetScore,
     status = stageState.stageStatus,
     stageScore = stageState.stageScore,
     targetScore = stageState.targetScore,
     bossModifierIds = Utils.copyArray(stageState.activeBossModifierIds or {}),
     runTotalScore = runState.runTotalScore,
     shopPoints = runState.shopPoints,
-    stageClearShopPoints = stageState.stageClearShopPointsGranted and stageClearShopPoints or 0,
+    stageClearShopPoints = stageState.stageClearShopPointsGranted and (victoryShopPointReward.total or 0) or 0,
+    victoryShopPointReward = Utils.clone(victoryShopPointReward),
     shopRerollsRemaining = runState.shopRerollsRemaining,
     loadoutKey = Loadout.toCanonicalKey(runState.equippedCoinSlots, runState.maxActiveCoinSlots),
   }

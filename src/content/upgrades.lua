@@ -18,7 +18,7 @@ local definitions = {
     id = "merchant_notebook",
     name = "Merchant Notebook",
     rarity = "common",
-    description = "+1 shop point after scoring each batch.",
+    description = "+1 Chip after scoring each batch.",
     tags = { "economy" },
     triggers = {
       {
@@ -58,7 +58,7 @@ local definitions = {
     id = "starter_grant",
     name = "Starter Grant",
     rarity = "common",
-    description = "+2 shop points on acquire.",
+    description = "+2 Chips on acquire.",
     tags = { "economy" },
     onAcquire = {
       { op = "add_shop_points", amount = 2 },
@@ -148,7 +148,7 @@ local definitions = {
     rarity = "common",
     unlockedByDefault = false,
     rewardEligible = false,
-    description = "Buying upgrades refunds 1 shop point in future shops.",
+    description = "Buying upgrades refunds 1 Chip in future shops.",
     tags = { "shop", "economy" },
     triggers = {
       {
@@ -156,7 +156,7 @@ local definitions = {
         condition = { purchase_type = "upgrade" },
         effects = {
           { op = "add_shop_points", amount = 1 },
-          { op = "add_shop_message", message = "Cashback Badge refunded 1 shop point." },
+          { op = "add_shop_message", message = "Cashback Badge refunded 1 Chip." },
         },
       },
     },
@@ -166,7 +166,7 @@ local definitions = {
     name = "Echo Cache",
     rarity = "uncommon",
     unlockedByDefault = false,
-    description = "At batch start, create a temporary echo for this batch: if every equipped coin matches, gain +1 shop point.",
+    description = "At batch start, create a temporary echo for this batch: if every equipped coin matches, gain +1 Chip.",
     tags = { "temporary", "shop", "all_match" },
     triggers = {
       {
@@ -177,7 +177,7 @@ local definitions = {
             effect = {
               id = "echo_cache_echo",
               name = "Echo Cache Echo",
-              description = "This batch only: if every equipped coin matches, gain +1 shop point.",
+              description = "This batch only: if every equipped coin matches, gain +1 Chip.",
               triggers = {
                 {
                   hook = "after_scoring",
@@ -220,7 +220,7 @@ local definitions = {
     id = "heads_notebook",
     name = "Heads Notebook",
     rarity = "common",
-    description = "+1 shop point after scoring a Heads call batch.",
+    description = "+1 Chip after scoring a Heads call batch.",
     tags = { "heads", "economy" },
     triggers = {
       {
@@ -267,7 +267,7 @@ local definitions = {
     id = "insurance_ledger",
     name = "Insurance Ledger",
     rarity = "common",
-    description = "If no coins match this batch, gain +2 shop points.",
+    description = "If no coins match this batch, gain +2 Chips.",
     tags = { "economy", "safety" },
     triggers = {
       {
@@ -320,7 +320,7 @@ local definitions = {
     name = "Reserve Fuse",
     rarity = "rare",
     unlockedByDefault = false,
-    description = "If every equipped coin matches, queue +1 stage score and +1 run score before the stage-end check.",
+    description = "If every equipped coin matches, queue +1 damage and +1 run score before the stage-end check.",
     tags = { "chain", "threshold", "all_match" },
     triggers = {
       {
@@ -344,7 +344,7 @@ local definitions = {
     id = "streak_credit",
     name = "Streak Credit",
     rarity = "common",
-    description = "+1 shop point when a coin matches on a repeated call batch.",
+    description = "+1 Chip when a coin matches on a repeated call batch.",
     tags = { "economy", "streak" },
     triggers = {
       {
@@ -376,7 +376,7 @@ local definitions = {
     id = "pressure_valve",
     name = "Pressure Valve",
     rarity = "common",
-    description = "+1 shop point after any repeated-call batch.",
+    description = "+1 Chip after any repeated-call batch.",
     tags = { "streak", "economy" },
     triggers = {
       {

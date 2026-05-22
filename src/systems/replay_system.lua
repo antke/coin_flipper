@@ -108,22 +108,29 @@ local function chooseDraftOffer(offers)
   return bestCoinId
 end
 
-local function isRegularDollarStarterPurse(starterPurse)
+local function isDefaultStarterPurse(starterPurse)
   if #(starterPurse or {}) ~= 10 then
     return false
   end
 
+  local counts = {
+    heads_loaded_penny = 0,
+    tails_loaded_penny = 0,
+  }
+
   for _, coinId in ipairs(starterPurse) do
-    if coinId ~= "regular_dollar" then
+    if counts[coinId] == nil then
       return false
     end
+
+    counts[coinId] = counts[coinId] + 1
   end
 
-  return true
+  return counts.heads_loaded_penny == 5 and counts.tails_loaded_penny == 5
 end
 
 local function replayInitialDraftIfNeeded(runState, bootstrap, rng)
-  if not isRegularDollarStarterPurse(bootstrap and bootstrap.starterPurse) then
+  if not isDefaultStarterPurse(bootstrap and bootstrap.starterPurse) then
     return
   end
 

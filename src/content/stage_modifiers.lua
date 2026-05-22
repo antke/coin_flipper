@@ -47,7 +47,7 @@ local definitions = {
   {
     id = "side_pot",
     name = "Side Pot",
-    description = "+1 shop point after each scored batch in this stage.",
+    description = "+1 Chip after each scored batch in this stage.",
     tags = { "stage", "economy" },
     triggers = {
       {

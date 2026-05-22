@@ -143,12 +143,18 @@ function ResultState:draw(app)
 
   local lines = {
     string.format("Stage: %s", result.stageLabel or "n/a"),
-    string.format("Score: %s / %s", tostring(result.stageScore or 0), tostring(result.targetScore or 0)),
-    string.format("Run Total Score: %s", tostring(result.runTotalScore or (app.runState and app.runState.runTotalScore or 0))),
+    string.format("Opponent: %s", result.opponentName or "n/a"),
+    string.format("Damage: %s / %s", tostring(result.stageScore or 0), tostring(result.targetScore or 0)),
+    string.format("Run Total Damage: %s", tostring(result.runTotalScore or (app.runState and app.runState.runTotalScore or 0))),
     string.format("Run Status: %s", tostring(result.runStatus or "active")),
     string.format("Chips: %s", tostring(result.shopPoints or (app.runState and app.runState.shopPoints or 0))),
     string.format("Next step: %s", destination),
   }
+
+  local victoryChipLine = app:formatVictoryChipRewardLine(result)
+  if victoryChipLine then
+    table.insert(lines, 6, victoryChipLine)
+  end
 
   if (result.metaRewardEarned or 0) > 0 then
     table.insert(lines, 7, string.format("Meta Reward Banked: %d", result.metaRewardEarned))

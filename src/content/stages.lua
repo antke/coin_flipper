@@ -7,7 +7,13 @@ local definitions = {
     roundIndex = 1,
     label = "Round 1 — Opening Toss",
     stageType = "normal",
-    targetScore = 8,
+    targetScore = 6,
+    opponent = {
+      id = "bright_lights_dealer",
+      name = "Bright-Lights Dealer",
+      description = "A house dealer trying to rattle your opening call.",
+      hp = 6,
+    },
     activeStageModifierIds = { "bright_lights" },
   },
   {
@@ -16,25 +22,46 @@ local definitions = {
     roundIndex = 2,
     label = "Round 2 — Mid Table",
     stageType = "normal",
-    targetScore = 11,
+    targetScore = 8,
+    opponent = {
+      id = "mid_table_sharp",
+      name = "Mid-Table Sharp",
+      description = "A patient gambler with just enough tricks to test your purse.",
+      hp = 8,
+    },
     activeStageModifierIds = { "crosswind_table" },
     variants = {
       {
         id = "round_2_crosswind",
         name = "Crosswind Table",
         label = "Round 2 — Crosswind Table",
+        opponent = {
+          id = "crosswind_sharp",
+          name = "Crosswind Sharp",
+          description = "A sideways-smiling gambler leaning on the table draft.",
+        },
         activeStageModifierIds = { "crosswind_table" },
       },
       {
         id = "round_2_side_pot",
         name = "Side Pot",
         label = "Round 2 — Side Pot",
+        opponent = {
+          id = "side_pot_bruiser",
+          name = "Side-Pot Bruiser",
+          description = "A loud bettor who turns every good hit into more heat.",
+        },
         activeStageModifierIds = { "side_pot" },
       },
       {
         id = "round_2_crowd_favorite",
         name = "Crowd Favorite",
         label = "Round 2 — Crowd Favorite",
+        opponent = {
+          id = "crowd_favorite",
+          name = "Crowd Favorite",
+          description = "A smiling regular with the room on their side.",
+        },
         activeStageModifierIds = { "crowd_favorite" },
       },
     },
@@ -45,25 +72,46 @@ local definitions = {
     roundIndex = 3,
     label = "Round 3 — Build Check",
     stageType = "normal",
-    targetScore = 15,
+    targetScore = 11,
+    opponent = {
+      id = "build_check_hustler",
+      name = "Build-Check Hustler",
+      description = "A harder mark who punishes loose coin choices.",
+      hp = 11,
+    },
     activeStageModifierIds = { "echo_chamber", "side_pot" },
     variants = {
       {
         id = "round_3_echo",
         name = "Echo Chamber",
         label = "Round 3 — Echo Chamber",
+        opponent = {
+          id = "echo_chamber_hustler",
+          name = "Echo-Chamber Hustler",
+          description = "A gambler who rewards repeated nerve until it breaks.",
+        },
         activeStageModifierIds = { "echo_chamber", "side_pot" },
       },
       {
         id = "round_3_house_lights",
         name = "House Lights",
         label = "Round 3 — House Lights",
+        opponent = {
+          id = "house_lights_hustler",
+          name = "House-Lights Hustler",
+          description = "A polished opponent who thrives under bright pressure.",
+        },
         activeStageModifierIds = { "bright_lights", "echo_chamber" },
       },
       {
         id = "round_3_long_game",
         name = "Long Game",
         label = "Round 3 — Long Game",
+        opponent = {
+          id = "long_game_grinder",
+          name = "Long-Game Grinder",
+          description = "A stubborn table fixture built to survive one more flip.",
+        },
         activeStageModifierIds = { "long_game", "side_pot" },
       },
     },
@@ -74,25 +122,46 @@ local definitions = {
     roundIndex = 4,
     label = "Boss — Final Table",
     stageType = "boss",
-    targetScore = 19,
+    targetScore = 14,
+    opponent = {
+      id = "final_table_boss",
+      name = "The Final Table",
+      description = "The house's last obstacle: no attacks, just a chip wall to break.",
+      hp = 14,
+    },
     bossModifierIds = { "anti_streak_warden", "loaded_ledger" },
     bossVariants = {
       {
         id = "boss_variant_warden",
         name = "Anti-Streak Warden",
         label = "Boss — Anti-Streak Warden",
+        opponent = {
+          id = "anti_streak_warden",
+          name = "Anti-Streak Warden",
+          description = "A boss who hates repeated calls and steady nerve.",
+        },
         bossModifierIds = { "anti_streak_warden", "loaded_ledger" },
       },
       {
         id = "boss_variant_embargo",
         name = "Heads Embargo",
         label = "Boss — Heads Embargo",
+        opponent = {
+          id = "heads_embargo_boss",
+          name = "Heads Embargo",
+          description = "A boss who taxes every Heads-heavy plan.",
+        },
         bossModifierIds = { "heads_embargo", "loaded_ledger" },
       },
       {
         id = "boss_variant_tails_embargo",
         name = "Tails Embargo",
         label = "Boss — Tails Embargo",
+        opponent = {
+          id = "tails_embargo_boss",
+          name = "Tails Embargo",
+          description = "A boss who taxes every Tails-heavy plan.",
+        },
         bossModifierIds = { "tails_embargo", "stacked_deck" },
       },
     },
@@ -178,6 +247,11 @@ local function resolveVariant(definition, variants, source)
   resolved.name = variant.name or resolved.name
   resolved.label = variant.label or resolved.label
   resolved.targetScore = variant.targetScore or resolved.targetScore
+  resolved.opponent = Utils.clone(resolved.opponent or {})
+  for key, value in pairs(variant.opponent or {}) do
+    resolved.opponent[key] = Utils.clone(value)
+  end
+  resolved.opponent.hp = resolved.opponent.hp or resolved.targetScore
   resolved.activeStageModifierIds = Utils.copyArray(variant.activeStageModifierIds or resolved.activeStageModifierIds or {})
   resolved.bossModifierIds = Utils.copyArray(variant.bossModifierIds or resolved.bossModifierIds or {})
 

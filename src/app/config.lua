@@ -60,7 +60,6 @@ local GameConfig = {
     startingShopPoints = 0,
     startingShopRerolls = 0,
     shopPointMultiplier = 1.0,
-    stageClearShopPoints = 3,
   },
 
   flip = {

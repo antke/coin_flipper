@@ -50,12 +50,12 @@ return {
     A.truthy(secondPurchase.ok, "steady hand should purchase successfully")
     A.equal(firstPurchase.result.finalPrice, 4, "cashback badge final price")
     A.equal(secondPurchase.result.finalPrice, 4, "steady hand final price")
-    A.equal(env.runState.shopPoints, 13, "shop points after cashback sequence")
+    A.equal(env.runState.shopPoints, 13, "Chips after cashback sequence")
     A.notContains(firstPurchase.result.trace.messages or {}, function(message)
-      return tostring(message):find("Cashback Badge refunded 1 shop point.", 1, true) ~= nil
+      return tostring(message):find("Cashback Badge refunded 1 Chip.", 1, true) ~= nil
     end, "cashback badge should not refund its own purchase")
     A.contains(secondPurchase.result.trace.messages or {}, function(message)
-      return tostring(message):find("Cashback Badge refunded 1 shop point.", 1, true) ~= nil
+      return tostring(message):find("Cashback Badge refunded 1 Chip.", 1, true) ~= nil
     end, "steady hand purchase should receive cashback refund")
     A.equal(#(env.runState.history.purchases or {}), 2, "global purchase history count")
     A.equal(#(env.shopSession.actions or {}), 2, "shop session action count")

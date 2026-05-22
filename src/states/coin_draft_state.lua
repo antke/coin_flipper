@@ -98,6 +98,10 @@ function CoinDraftState:chooseOffer(app, coinId)
     return false
   end
 
+  if app.audioSystem then
+    app.audioSystem:playCue("draft_select")
+  end
+
   if doneOrError == true then
     return app.stateGraph:request("draft_complete")
   end
@@ -265,7 +269,7 @@ function CoinDraftState:draw(app)
   love.graphics.setFont(app.fonts.body)
   local lines = {
     string.format("Draft picks remaining: %d/%d", session.picksRemaining or 0, session.totalPicks or 0),
-    "Your purse starts with 10 plain $ Coins. Each draft pick adds one special coin instance.",
+    "Your purse starts with 5 Heads-Loaded Pennies and 5 Tails-Loaded Pennies. Each draft pick adds one special coin instance.",
     self.statusMessage,
   }
   Layout.drawWrappedLines(lines, layout.padding, layout.infoY, layout.width - (layout.padding * 2), Theme.colors.text, Theme.spacing.lineHeight, layout.infoHeight)

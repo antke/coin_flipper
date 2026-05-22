@@ -9,10 +9,42 @@ local definitions = {
     triggers = {},
   },
   {
+    id = "heads_loaded_penny",
+    name = "Heads-Loaded Penny",
+    rarity = "common",
+    description = "A crooked coin rigged for Heads. 75% Heads chance.",
+    tags = { "starter", "cheat", "heads" },
+    isStarter = true,
+    triggers = {
+      {
+        hook = "before_coin_roll",
+        effects = {
+          { op = "modify_coin_weight", side = "heads", amount = 1.0 },
+        },
+      },
+    },
+  },
+  {
+    id = "tails_loaded_penny",
+    name = "Tails-Loaded Penny",
+    rarity = "common",
+    description = "A crooked coin rigged for Tails. 75% Tails chance.",
+    tags = { "starter", "cheat", "tails" },
+    isStarter = true,
+    triggers = {
+      {
+        hook = "before_coin_roll",
+        effects = {
+          { op = "modify_coin_weight", side = "tails", amount = 1.0 },
+        },
+      },
+    },
+  },
+  {
     id = "match_spark",
     name = "Match Spark",
     rarity = "common",
-    description = "+1 stage score and +1 run score when this coin matches your call.",
+    description = "+1 damage and +1 run score when this coin matches your call.",
     tags = { "starter", "match", "score" },
     isStarter = true,
     triggers = {
@@ -30,7 +62,7 @@ local definitions = {
     id = "heads_hunter",
     name = "Heads Hunter",
     rarity = "common",
-    description = "+2 stage score and +2 run score when this coin matches a Heads call.",
+    description = "+2 damage and +2 run score when this coin matches a Heads call.",
     tags = { "starter", "heads", "match" },
     isStarter = true,
     triggers = {
@@ -48,7 +80,7 @@ local definitions = {
     id = "tails_chaser",
     name = "Tails Chaser",
     rarity = "common",
-    description = "+2 stage score and +2 run score when this coin matches a Tails call.",
+    description = "+2 damage and +2 run score when this coin matches a Tails call.",
     tags = { "starter", "tails", "match" },
     isStarter = true,
     triggers = {
@@ -66,7 +98,7 @@ local definitions = {
     id = "lucky_miss",
     name = "Lucky Miss",
     rarity = "common",
-    description = "+1 shop point when this coin misses your call.",
+    description = "+1 Chip when this coin misses your call.",
     tags = { "starter", "economy", "miss" },
     isStarter = true,
     triggers = {
@@ -116,7 +148,7 @@ local definitions = {
     id = "boss_biter",
     name = "Boss Biter",
     rarity = "uncommon",
-    description = "+2 stage score and +2 run score during boss stages.",
+    description = "+2 damage and +2 run score during boss stages.",
     tags = { "boss", "score" },
     triggers = {
       {
@@ -133,7 +165,7 @@ local definitions = {
     id = "cross_catch",
     name = "Cross Catch",
     rarity = "common",
-    description = "On a Heads call, if this coin lands Tails, gain +2 shop points.",
+    description = "On a Heads call, if this coin lands Tails, gain +2 Chips.",
     tags = { "economy", "heads", "counter" },
     triggers = {
       {
@@ -149,7 +181,7 @@ local definitions = {
     id = "heads_banker",
     name = "Heads Banker",
     rarity = "common",
-    description = "+1 stage score and +1 shop point when this coin matches a Heads call.",
+    description = "+1 damage and +1 Chip when this coin matches a Heads call.",
     tags = { "heads", "economy", "match" },
     triggers = {
       {
@@ -166,7 +198,7 @@ local definitions = {
     id = "tails_banker",
     name = "Tails Banker",
     rarity = "common",
-    description = "+1 stage score and +1 shop point when this coin matches a Tails call.",
+    description = "+1 damage and +1 Chip when this coin matches a Tails call.",
     tags = { "tails", "economy", "match" },
     triggers = {
       {
@@ -184,7 +216,7 @@ local definitions = {
     name = "Safety Net",
     rarity = "uncommon",
     unlockedByDefault = false,
-    description = "If no equipped coin matches this batch, gain +1 shop point and +1 run score.",
+    description = "If no equipped coin matches this batch, gain +1 Chip and +1 run score.",
     tags = { "economy", "safety" },
     triggers = {
       {
@@ -234,7 +266,7 @@ local definitions = {
     id = "parachute_pin",
     name = "Parachute Pin",
     rarity = "common",
-    description = "+1 stage score before the stage-end check if no equipped coin matches this batch.",
+    description = "+1 damage before the stage-end check if no equipped coin matches this batch.",
     tags = { "safety", "miss", "score" },
     triggers = {
       {
@@ -250,7 +282,7 @@ local definitions = {
     id = "tails_echo",
     name = "Tails Echo",
     rarity = "common",
-    description = "+1 run score and +1 shop point when this coin matches on a repeated Tails call.",
+    description = "+1 run score and +1 Chip when this coin matches on a repeated Tails call.",
     tags = { "tails", "streak", "economy" },
     triggers = {
       {
@@ -267,7 +299,7 @@ local definitions = {
     id = "heads_cache",
     name = "Heads Cache",
     rarity = "common",
-    description = "+2 shop points when this coin matches a Heads call.",
+    description = "+2 Chips when this coin matches a Heads call.",
     tags = { "heads", "economy", "match" },
     triggers = {
       {
@@ -283,7 +315,7 @@ local definitions = {
     id = "tails_cache",
     name = "Tails Cache",
     rarity = "common",
-    description = "+2 shop points when this coin matches a Tails call.",
+    description = "+2 Chips when this coin matches a Tails call.",
     tags = { "tails", "economy", "match" },
     triggers = {
       {
@@ -315,7 +347,7 @@ local definitions = {
     id = "perfect_penny",
     name = "Perfect Penny",
     rarity = "common",
-    description = "+2 stage score and +2 run score if every equipped coin matches this batch.",
+    description = "+2 damage and +2 run score if every equipped coin matches this batch.",
     tags = { "perfect", "score", "match" },
     triggers = {
       {
@@ -332,7 +364,7 @@ local definitions = {
     id = "comeback_cent",
     name = "Comeback Cent",
     rarity = "common",
-    description = "If no equipped coin matches this batch, gain +2 shop points.",
+    description = "If no equipped coin matches this batch, gain +2 Chips.",
     tags = { "miss", "safety", "economy" },
     triggers = {
       {
@@ -380,7 +412,7 @@ local definitions = {
     id = "banked_spark",
     name = "Banked Spark",
     rarity = "common",
-    description = "+1 shop point after scoring each batch.",
+    description = "+1 Chip after scoring each batch.",
     tags = { "economy", "score" },
     triggers = {
       {
@@ -395,7 +427,7 @@ local definitions = {
     id = "pocket_refund",
     name = "Pocket Refund",
     rarity = "common",
-    description = "When this coin is returned to the purse by Sleight, gain +1 shop point.",
+    description = "When this coin is returned to the purse by Sleight, gain +1 Chip.",
     tags = { "sleight", "economy" },
     triggers = {
       {
@@ -410,7 +442,7 @@ local definitions = {
     id = "fresh_mint",
     name = "Fresh Mint",
     rarity = "common",
-    description = "When this coin enters your hand as a Sleight replacement, gain +1 stage score.",
+    description = "When this coin enters your hand as a Sleight replacement, deal +1 damage.",
     tags = { "sleight", "score" },
     triggers = {
       {
@@ -425,7 +457,7 @@ local definitions = {
     id = "opening_penny",
     name = "Opening Penny",
     rarity = "common",
-    description = "When this coin is drawn into a new hand, gain +1 shop point.",
+    description = "When this coin is drawn into a new hand, gain +1 Chip.",
     tags = { "draw", "economy" },
     triggers = {
       {
@@ -440,7 +472,7 @@ local definitions = {
     id = "slider_cent",
     name = "Slider Cent",
     rarity = "uncommon",
-    description = "When this coin is moved by hand reordering, gain +1 shop point.",
+    description = "When this coin is moved by hand reordering, gain +1 Chip.",
     tags = { "reorder", "economy" },
     triggers = {
       {
@@ -497,6 +529,36 @@ local definitions = {
     },
   },
   {
+    id = "right_hand_charm",
+    name = "Right-Hand Charm",
+    rarity = "uncommon",
+    description = "If this coin and the coin to its right both match your call, deal +1 damage and gain +1 run score.",
+    tags = { "neighbor", "match", "score" },
+    customResolver = "src.systems.neighbor_resolver",
+    neighbor = {
+      kind = "right_match_bonus",
+      stageScore = 1,
+      runScore = 1,
+      label = "Right-Hand Charm",
+    },
+    triggers = {},
+  },
+  {
+    id = "edge_bet",
+    name = "Edge Bet",
+    rarity = "common",
+    description = "If this coin is leftmost or rightmost and matches your call, deal +2 damage and gain +2 run score.",
+    tags = { "neighbor", "edge", "match", "score" },
+    customResolver = "src.systems.neighbor_resolver",
+    neighbor = {
+      kind = "edge_match_bonus",
+      stageScore = 2,
+      runScore = 2,
+      label = "Edge Bet",
+    },
+    triggers = {},
+  },
+  {
     id = "glass_nickel",
     name = "Glass Nickel",
     rarity = "rare",
@@ -516,7 +578,7 @@ local definitions = {
     id = "moon_mint",
     name = "Moon Mint",
     rarity = "uncommon",
-    description = "This coin gains +0.15 Tails weight. On a Tails match, gain +1 shop point.",
+    description = "This coin gains +0.15 Tails weight. On a Tails match, gain +1 Chip.",
     tags = { "tails", "weight", "economy" },
     triggers = {
       {
@@ -538,7 +600,7 @@ local definitions = {
     id = "sun_stamp",
     name = "Sun Stamp",
     rarity = "uncommon",
-    description = "If every equipped coin matches this batch, add +3 stage score and +3 run score at batch end.",
+    description = "If every equipped coin matches this batch, deal +3 damage and gain +3 run score at batch end.",
     tags = { "perfect", "score", "match" },
     triggers = {
       {
@@ -555,7 +617,7 @@ local definitions = {
     id = "black_cat_cent",
     name = "Black Cat Cent",
     rarity = "rare",
-    description = "If no equipped coin matches this batch, gain +2 shop points and +1 run score.",
+    description = "If no equipped coin matches this batch, gain +2 Chips and +1 run score.",
     tags = { "miss", "safety", "economy" },
     triggers = {
       {
@@ -573,7 +635,7 @@ local definitions = {
     name = "Grave Taler",
     rarity = "cursed",
     price = 14,
-    description = "Cursed. Cannot be Sleighted or reordered. When it matches your call, gain +5 stage score and +5 run score.",
+    description = "Cursed. Cannot be Sleighted or reordered. When it matches your call, deal +5 damage and gain +5 run score.",
     tags = { "cursed", "locked", "match", "score" },
     cannotSleight = true,
     cannotReorder = true,
@@ -593,7 +655,7 @@ local definitions = {
     name = "Blood Oracle",
     rarity = "cursed",
     price = 16,
-    description = "Cursed. Cannot be Sleighted or reordered. Gains +0.25 Heads weight before rolling. On a Heads match, gain +6 stage score.",
+    description = "Cursed. Cannot be Sleighted or reordered. Gains +0.25 Heads weight before rolling. On a Heads match, deal +6 damage.",
     tags = { "cursed", "locked", "heads", "weight", "score" },
     cannotSleight = true,
     cannotReorder = true,
@@ -617,7 +679,7 @@ local definitions = {
     id = "triple_crown",
     name = "Triple Crown",
     rarity = "uncommon",
-    description = "COMBO: If any three adjacent coins land Heads, gain +4 stage score and +4 run score.",
+    description = "COMBO: If any three adjacent coins land Heads, deal +4 damage and gain +4 run score.",
     tags = { "combo", "pattern", "heads", "score" },
     customResolver = "src.systems.combo_resolver",
     combo = {
@@ -633,7 +695,7 @@ local definitions = {
     id = "switchback_cent",
     name = "Switchback Cent",
     rarity = "uncommon",
-    description = "COMBO: If any three adjacent coins land Heads-Tails-Heads, gain +3 stage score and +2 shop points.",
+    description = "COMBO: If any three adjacent coins land Heads-Tails-Heads, deal +3 damage and gain +2 Chips.",
     tags = { "combo", "pattern", "economy", "score" },
     customResolver = "src.systems.combo_resolver",
     combo = {
@@ -646,10 +708,106 @@ local definitions = {
     triggers = {},
   },
   {
+    id = "tails_triad",
+    name = "Tails Triad",
+    rarity = "uncommon",
+    description = "COMBO: If any three adjacent coins land Tails, deal +4 damage and gain +4 run score.",
+    tags = { "combo", "pattern", "tails", "score" },
+    customResolver = "src.systems.combo_resolver",
+    combo = {
+      kind = "adjacent_results",
+      results = { "tails", "tails", "tails" },
+      stageScore = 4,
+      runScore = 4,
+      label = "Triple Tails Combo",
+    },
+    triggers = {},
+  },
+  {
+    id = "turnabout_token",
+    name = "Turnabout Token",
+    rarity = "uncommon",
+    description = "COMBO: If any three adjacent coins land Tails-Heads-Tails, deal +3 damage and gain +2 Chips.",
+    tags = { "combo", "pattern", "economy", "score" },
+    customResolver = "src.systems.combo_resolver",
+    combo = {
+      kind = "adjacent_results",
+      results = { "tails", "heads", "tails" },
+      stageScore = 3,
+      shopPoints = 2,
+      label = "Turnabout Combo",
+    },
+    triggers = {},
+  },
+  {
+    id = "rising_run",
+    name = "Rising Run",
+    rarity = "common",
+    description = "COMBO: If any three adjacent coins land Heads-Heads-Tails, deal +2 damage and gain +2 run score.",
+    tags = { "combo", "pattern", "score" },
+    customResolver = "src.systems.combo_resolver",
+    combo = {
+      kind = "adjacent_results",
+      results = { "heads", "heads", "tails" },
+      stageScore = 2,
+      runScore = 2,
+      label = "Rising Run Combo",
+    },
+    triggers = {},
+  },
+  {
+    id = "falling_run",
+    name = "Falling Run",
+    rarity = "common",
+    description = "COMBO: If any three adjacent coins land Tails-Tails-Heads, deal +2 damage and gain +2 run score.",
+    tags = { "combo", "pattern", "score" },
+    customResolver = "src.systems.combo_resolver",
+    combo = {
+      kind = "adjacent_results",
+      results = { "tails", "tails", "heads" },
+      stageScore = 2,
+      runScore = 2,
+      label = "Falling Run Combo",
+    },
+    triggers = {},
+  },
+  {
+    id = "heads_tail_gate",
+    name = "Heads-Tail Gate",
+    rarity = "common",
+    description = "COMBO: If any three adjacent coins land Heads-Tails-Tails, deal +2 damage and gain +2 Chips.",
+    tags = { "combo", "pattern", "economy", "score" },
+    customResolver = "src.systems.combo_resolver",
+    combo = {
+      kind = "adjacent_results",
+      results = { "heads", "tails", "tails" },
+      stageScore = 2,
+      shopPoints = 2,
+      label = "Heads-Tail Gate Combo",
+    },
+    triggers = {},
+  },
+  {
+    id = "tails_head_gate",
+    name = "Tails-Head Gate",
+    rarity = "common",
+    description = "COMBO: If any three adjacent coins land Tails-Heads-Heads, deal +2 damage and gain +2 Chips.",
+    tags = { "combo", "pattern", "economy", "score" },
+    customResolver = "src.systems.combo_resolver",
+    combo = {
+      kind = "adjacent_results",
+      results = { "tails", "heads", "heads" },
+      stageScore = 2,
+      shopPoints = 2,
+      label = "Tails-Head Gate Combo",
+    },
+    triggers = {},
+  },
+  {
     id = "edge_echo",
     name = "Edge Echo",
     rarity = "common",
-    description = "COMBO: If the leftmost and rightmost coins land the same side, gain +2 stage score and +2 run score.",
+    description = "COMBO: If the leftmost and rightmost coins land the same side, deal +2 damage and gain +2 run score.",
     tags = { "combo", "pattern", "score" },
     customResolver = "src.systems.combo_resolver",
     combo = {
@@ -664,6 +822,8 @@ local definitions = {
 
 local visualIdentities = {
   regular_dollar = { face = "regular_dollar", rim = "score" },
+  heads_loaded_penny = { face = "heads", rim = "weight" },
+  tails_loaded_penny = { face = "tails", rim = "weight" },
   match_spark = { face = "match_spark", rim = "score" },
   heads_hunter = { face = "heads_hunter", rim = "score" },
   tails_chaser = { face = "tails_chaser", rim = "score" },
@@ -694,6 +854,8 @@ local visualIdentities = {
   commitment_chip = { face = "commitment_chip", rim = "motion" },
   left_lift = { face = "left_lift", rim = "motion" },
   right_drift = { face = "right_drift", rim = "motion" },
+  right_hand_charm = { face = "right_hand_charm", rim = "motion" },
+  edge_bet = { face = "edge_bet", rim = "motion" },
   glass_nickel = { face = "glass_nickel", rim = "combo" },
   moon_mint = { face = "moon_mint", rim = "weight" },
   sun_stamp = { face = "sun_stamp", rim = "combo" },
@@ -702,6 +864,12 @@ local visualIdentities = {
   blood_oracle = { face = "blood_oracle", rim = "cursed" },
   triple_crown = { face = "triple_crown", rim = "combo" },
   switchback_cent = { face = "switchback_cent", rim = "combo" },
+  tails_triad = { face = "tails_triad", rim = "combo" },
+  turnabout_token = { face = "turnabout_token", rim = "combo" },
+  rising_run = { face = "rising_run", rim = "combo" },
+  falling_run = { face = "falling_run", rim = "combo" },
+  heads_tail_gate = { face = "heads_tail_gate", rim = "combo" },
+  tails_head_gate = { face = "tails_head_gate", rim = "combo" },
   edge_echo = { face = "edge_echo", rim = "combo" },
 }
 

@@ -9,12 +9,14 @@ local Utils = require("src.core.utils")
 local Validator = require("src.core.validator")
 
 local RunInitializer = {}
+local DEFAULT_STARTER_COLLECTION = { "heads_loaded_penny", "tails_loaded_penny" }
 
 local function buildStarterPurse()
   local starterPurse = {}
 
-  for _ = 1, 10 do
-    table.insert(starterPurse, "regular_dollar")
+  for _ = 1, 5 do
+    table.insert(starterPurse, "heads_loaded_penny")
+    table.insert(starterPurse, "tails_loaded_penny")
   end
 
   return starterPurse
@@ -55,7 +57,7 @@ function RunInitializer.createNewRun(metaState, options)
 
   local metaProjection = RunInitializer.createMetaProjection(metaState)
   local resolvedValues = EffectiveValueSystem.resolveRunBootstrapValues(metaProjection, options)
-  local starterCollection = Utils.copyArray(options.starterCollection or { "regular_dollar" })
+  local starterCollection = Utils.copyArray(options.starterCollection or DEFAULT_STARTER_COLLECTION)
   local starterPurse = nil
 
   if options.starterPurse then

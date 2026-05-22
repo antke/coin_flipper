@@ -86,14 +86,26 @@ function AnalyticsSystem.buildPostStageReport(runState, stageRecord, lastBatchRe
 
   report.stageLines = {
     string.format("Stage: %s", stageRecord.stageLabel or stageRecord.stageId or "n/a"),
+    string.format("Opponent: %s", stageRecord.opponentName or "n/a"),
     string.format("Status: %s", tostring(stageRecord.status or "n/a")),
-    string.format("Score: %d / %d", stageRecord.stageScore or 0, stageRecord.targetScore or 0),
-    string.format("Run Total Score: %d", stageRecord.runTotalScore or runState.runTotalScore or 0),
-    string.format("Shop Points: %d", stageRecord.shopPoints or runState.shopPoints or 0),
+    string.format("Damage: %d / %d", stageRecord.stageScore or 0, stageRecord.targetScore or 0),
+    string.format("Run Total Damage: %d", stageRecord.runTotalScore or runState.runTotalScore or 0),
+    string.format("Chips: %d", stageRecord.shopPoints or runState.shopPoints or 0),
     string.format("Shop Rerolls Ready: %d", stageRecord.shopRerollsRemaining or runState.shopRerollsRemaining or 0),
     string.format("Loadout: %s", loadoutKey),
     string.format("Batches Resolved: %d", #stageBatches),
   }
+
+  local victoryReward = stageRecord.victoryShopPointReward
+  if victoryReward and (victoryReward.total or 0) > 0 then
+    table.insert(report.stageLines, 7, string.format(
+      "Victory Chips: +%d (base +%d, overkill +%d, flips +%d)",
+      victoryReward.total or 0,
+      victoryReward.base or 0,
+      victoryReward.overkill or 0,
+      victoryReward.remainingFlipReward or 0
+    ))
+  end
 
   if stageRecord.metaRewardEarned and stageRecord.metaRewardEarned > 0 then
     table.insert(report.stageLines, string.format("Meta Reward: %d", stageRecord.metaRewardEarned))
@@ -294,7 +306,7 @@ function AnalyticsSystem.formatSimulationReport(report)
 
   table.insert(lines, "Simulation Report")
   table.insert(lines, string.format("Runs: %d | Wins: %d | Losses: %d | Win rate: %.1f%%", report.runCount or 0, report.winCount or 0, report.lossCount or 0, (report.winRate or 0) * 100))
-  table.insert(lines, string.format("Avg run score: %.2f | Avg meta reward: %.2f | Avg stage score per batch: %.2f", report.averageRunScore or 0, report.averageMetaReward or 0, report.averageStageScorePerBatch or 0))
+  table.insert(lines, string.format("Avg run damage: %.2f | Avg meta reward: %.2f | Avg damage per batch: %.2f", report.averageRunScore or 0, report.averageMetaReward or 0, report.averageStageScorePerBatch or 0))
   table.insert(lines, string.format("Calls: H=%d T=%d | Outcomes: H=%d T=%d", (report.callDistribution or {}).heads or 0, (report.callDistribution or {}).tails or 0, (report.outcomeDistribution or {}).heads or 0, (report.outcomeDistribution or {}).tails or 0))
 
   table.insert(lines, "")
@@ -302,8 +314,8 @@ function AnalyticsSystem.formatSimulationReport(report)
   for _, entry in ipairs(report.sortedStageStats or {}) do
     local stageData = entry.data
     local clearRate = stageData.attempts > 0 and ((stageData.clears / stageData.attempts) * 100) or 0
-    local averageScore = stageData.attempts > 0 and (stageData.totalStageScore / stageData.attempts) or 0
-    table.insert(lines, string.format("- %s: clear %.1f%% (%d/%d), avg score %.2f", stageData.stageLabel or stageData.stageId, clearRate, stageData.clears, stageData.attempts, averageScore))
+    local averageDamage = stageData.attempts > 0 and (stageData.totalStageScore / stageData.attempts) or 0
+    table.insert(lines, string.format("- %s: clear %.1f%% (%d/%d), avg damage %.2f", stageData.stageLabel or stageData.stageId, clearRate, stageData.clears, stageData.attempts, averageDamage))
   end
 
   local function appendTopSection(title, items, formatter)

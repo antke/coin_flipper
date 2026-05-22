@@ -12,7 +12,7 @@ local EncounterDefinitions = {
         type = "shop_points",
         amount = 3,
         label = "Take the purse",
-        description = "+3 shop points for the next stop.",
+        description = "+3 Chips for the next stop.",
       },
       {
         id = "voucher_roll",
@@ -173,7 +173,7 @@ local EncounterDefinitions = {
         type = "shop_points",
         amount = 4,
         label = "Take the mirrored purse",
-        description = "+4 shop points for the next stop.",
+        description = "+4 Chips for the next stop.",
       },
     },
   },

@@ -70,6 +70,10 @@ local function easeOutCubic(progress)
   return 1 - (inverse * inverse * inverse)
 end
 
+local function clamp(value, minimum, maximum)
+  return math.max(minimum, math.min(maximum, value))
+end
+
 local function getUiRect(app)
   local metrics = app:getUiMetrics()
   return metrics.rect, metrics.spacing, metrics.metrics, metrics.window
@@ -171,8 +175,21 @@ function StageState.new()
     sleightAnimations = {},
     reveal = nil,
     handCardRects = {},
+    coinRowVisuals = {},
+    lastDt = 1 / 60,
     draggingHandSlotIndex = nil,
     draggingHandCoinId = nil,
+    draggingHandVisualKey = nil,
+    dragInsertSlotIndex = nil,
+    dragPointerX = nil,
+    dragPointerY = nil,
+    dragGrabOffsetX = 0,
+    dragGrabOffsetY = 0,
+    dragVisualX = nil,
+    dragVisualY = nil,
+    dragBaseSize = nil,
+    dragLiftProgress = 0,
+    dragTilt = 0,
   }, StageState)
 end
 
@@ -302,11 +319,14 @@ function StageState:tryResolveBatch(app)
     return false, errorMessage
   end
 
+  if app.audioSystem then
+    app.audioSystem:playCue("coin_flip")
+  end
+
   self.statusMessage = string.format(
-    "Resolved %s %d. %s %d/%d. Flips remaining: %d.",
+    "Resolved %s %d. Damage %d/%d. Flips remaining: %d.",
     Terminology.getTermLower("flip"),
     batchResult.batchId,
-    Terminology.getTermLabel("stage_score"),
     app.stageState.stageScore,
     app.stageState.targetScore,
     app.stageState.flipsRemaining
@@ -379,6 +399,11 @@ function StageState:tryMoveSlot(app, slotIndex, direction)
 
   local ok, result = app:moveHandSlot(slotIndex, direction)
   self.statusMessage = ok and "Reordered hand." or tostring(result)
+
+  if ok and app.audioSystem then
+    app.audioSystem:playCue("coin_whoosh")
+  end
+
   return ok, result
 end
 
@@ -394,16 +419,28 @@ function StageState:tryMoveSlotTo(app, fromSlotIndex, toSlotIndex)
 
   local direction = toSlotIndex > fromSlotIndex and 1 or -1
   local currentSlotIndex = fromSlotIndex
+  local finalResult = nil
 
   while currentSlotIndex ~= toSlotIndex do
-    local ok, result = app:moveHandSlot(currentSlotIndex, direction)
+    local ok, result = app:moveHandSlot(currentSlotIndex, direction, { suppressReorderHook = true })
 
     if not ok then
       self.statusMessage = tostring(result)
       return false, result
     end
 
+    finalResult = result
     currentSlotIndex = currentSlotIndex + direction
+  end
+
+  if finalResult then
+    app:applyHandReorderHook(finalResult)
+    app:assertRuntimeInvariants("stage_state.tryMoveSlotTo", { history = true })
+    app:saveActiveRun("move_hand_slot", "stage")
+
+    if app.audioSystem then
+      app.audioSystem:playCue("coin_whoosh")
+    end
   end
 
   self.statusMessage = "Reordered hand."
@@ -636,9 +673,9 @@ end
 
 function StageState:getHelpDialogLines(app)
   local lines = {
-    "You are trying to hit the target score before flips run out.",
+    "You are trying to defeat the opponent before flips run out.",
     "Review the drawn hand, pick HEADS or TAILS, then flip the hand in order.",
-    string.format("%s also becomes %s for the shop.", Terminology.getTermLabel("stage_score"), Terminology.getTermPlural("chip")),
+    string.format("Matches and effects deal %s. %s come from coins and victory rewards.", Terminology.getTermLower("stage_score"), Terminology.getTermPlural("chip")),
     "",
     "Current Breakdown:",
   }
@@ -846,18 +883,21 @@ end
 
 function StageState:drawScorePanel(app, area)
   local stage = app.stageState
+  local opponentName = stage.opponent and stage.opponent.name or "Opponent"
+  local hpRemaining = math.max(0, (stage.targetScore or 0) - (stage.stageScore or 0))
   local scoreColor = stage.stageScore >= stage.targetScore and Theme.colors.success or Theme.colors.text
-  local contentArea = Panel.getContentArea(area.x, area.y, area.width, area.height, "Score")
+  local contentArea = Panel.getContentArea(area.x, area.y, area.width, area.height, "Opponent")
 
-  Panel.draw(area.x, area.y, area.width, area.height, "Score")
+  Panel.draw(area.x, area.y, area.width, area.height, "Opponent")
 
   love.graphics.setFont(app.fonts.title)
   Theme.applyColor(scoreColor)
-  love.graphics.printf(tostring(stage.stageScore), contentArea.x, contentArea.y + 6, math.max(1, contentArea.width), "center")
+  love.graphics.printf(tostring(hpRemaining), contentArea.x, contentArea.y + 6, math.max(1, contentArea.width), "center")
 
   love.graphics.setFont(app.fonts.small)
   Theme.applyColor(Theme.colors.mutedText)
-  love.graphics.printf(string.format("Target %d", stage.targetScore), contentArea.x, contentArea.y + app.fonts.title:getHeight() + 12, math.max(1, contentArea.width), "center")
+  love.graphics.printf(opponentName, contentArea.x, contentArea.y + app.fonts.title:getHeight() + 8, math.max(1, contentArea.width), "center")
+  love.graphics.printf(string.format("HP left • dealt %d/%d", stage.stageScore, stage.targetScore), contentArea.x, contentArea.y + app.fonts.title:getHeight() + 25, math.max(1, contentArea.width), "center")
 end
 
 function StageState:drawStageSummary(app, area)
@@ -947,15 +987,124 @@ function StageState:getVisibleCoinStates(app)
   return coins, nil, nil
 end
 
+function StageState:getCoinRowLayout(app, x, y, width, height, coinCount, titleHeight)
+  local _, _, componentMetrics = getUiRect(app)
+  local count = math.max(1, coinCount or 1)
+  local cardGap = Theme.spacing.itemGap
+  local maxCardHeight = math.max(132, height - (titleHeight or 0) - 18)
+  local cardHeight = math.min(230, maxCardHeight)
+  local availableCardWidth = math.floor((width - (cardGap * (count - 1))) / count)
+  local cardWidth = math.min(componentMetrics.cardMaxWidth, availableCardWidth, math.floor(cardHeight * 0.92))
+  cardWidth = math.max(componentMetrics.cardMinWidth, cardWidth)
+  cardHeight = math.max(132, cardHeight)
+
+  local totalWidth = (cardWidth * count) + (cardGap * (count - 1))
+
+  return {
+    cardGap = cardGap,
+    cardWidth = cardWidth,
+    cardHeight = cardHeight,
+    totalWidth = totalWidth,
+    startX = x + math.floor((width - totalWidth) / 2),
+    centerLineY = y + math.floor(height / 2),
+  }
+end
+
+function StageState:getDragInsertSlotIndex(pointerX, layout, slotCount)
+  if not pointerX or not layout or (slotCount or 0) <= 0 then
+    return nil
+  end
+
+  local step = layout.cardWidth + layout.cardGap
+  local firstCenterX = layout.startX + math.floor(layout.cardWidth / 2)
+  local insertSlotIndex = math.floor(((pointerX - firstCenterX) / math.max(1, step)) + 1.5)
+
+  return clamp(insertSlotIndex, 1, slotCount)
+end
+
+function StageState:getDragGhostCenter(layout, insertSlotIndex, remainingCount, pushDistance)
+  if not layout or not insertSlotIndex then
+    return nil, nil
+  end
+
+  local count = math.max(1, remainingCount or 0)
+  local step = layout.cardWidth + layout.cardGap
+  local firstCenterX = layout.startX + math.floor(layout.cardWidth / 2)
+  local centerY = layout.centerLineY
+
+  if remainingCount == 0 then
+    return firstCenterX, centerY
+  end
+
+  if insertSlotIndex <= 1 then
+    return firstCenterX - pushDistance, centerY
+  end
+
+  if insertSlotIndex > remainingCount then
+    return firstCenterX + ((count - 1) * step) + pushDistance, centerY
+  end
+
+  local leftCenterX = firstCenterX + ((insertSlotIndex - 2) * step)
+  local rightCenterX = firstCenterX + ((insertSlotIndex - 1) * step)
+
+  return math.floor((leftCenterX + rightCenterX) / 2), centerY
+end
+
+function StageState:getDragPushOffset(displayIndex, insertSlotIndex, pushDistance)
+  if not insertSlotIndex then
+    return 0
+  end
+
+  local distance = displayIndex < insertSlotIndex and (insertSlotIndex - displayIndex) or (displayIndex - insertSlotIndex + 1)
+  local weight = math.max(0, 1 - ((distance - 1) * 0.45))
+
+  if displayIndex < insertSlotIndex then
+    return -math.floor(pushDistance * weight)
+  end
+
+  return math.floor(pushDistance * weight)
+end
+
+function StageState:getCoinRowVisualKey(coin, index, batchId)
+  if coin.instanceId then
+    return string.format("hand:%s", tostring(coin.instanceId))
+  end
+
+  return string.format("%s:%d:%s", tostring(batchId or "hand"), index, tostring(coin.coinId or "coin"))
+end
+
+function StageState:updateCoinRowVisual(key, targetX, targetY, targetSize, animate)
+  self.coinRowVisuals = self.coinRowVisuals or {}
+
+  local visual = self.coinRowVisuals[key]
+
+  if not visual or not animate then
+    visual = {
+      x = targetX,
+      y = targetY,
+      size = targetSize,
+    }
+    self.coinRowVisuals[key] = visual
+    return visual
+  end
+
+  local follow = 1 - math.exp(-(self.lastDt or (1 / 60)) * 14)
+  visual.x = visual.x + ((targetX - visual.x) * follow)
+  visual.y = visual.y + ((targetY - visual.y) * follow)
+  visual.size = visual.size + ((targetSize - visual.size) * follow)
+
+  return visual
+end
+
 function StageState:drawCoinRow(app, x, y, width, height)
   local coins, call, batchId = self:getVisibleCoinStates(app)
-  local _, _, componentMetrics = getUiRect(app)
 
   if #coins == 0 then
     love.graphics.setFont(app.fonts.body)
     Theme.applyColor(Theme.colors.mutedText)
     love.graphics.printf("No hand drawn.", x, y + math.floor(height / 2) - 10, width, "center")
     self.handCardRects = {}
+    self.coinRowVisuals = {}
     return
   end
 
@@ -966,16 +1115,8 @@ function StageState:drawCoinRow(app, x, y, width, height)
   local titleHeight = 20
   love.graphics.printf(title, x, y, width, "center")
 
-  local cardGap = Theme.spacing.itemGap
-  local maxCardHeight = math.max(132, height - titleHeight - 18)
-  local cardHeight = math.min(230, maxCardHeight)
-  local availableCardWidth = math.floor((width - (cardGap * (#coins - 1))) / #coins)
-  local cardWidth = math.min(componentMetrics.cardMaxWidth, availableCardWidth, math.floor(cardHeight * 0.92))
-  cardWidth = math.max(componentMetrics.cardMinWidth, cardWidth)
-  cardHeight = math.max(132, cardHeight)
-  local totalWidth = (cardWidth * #coins) + (cardGap * (#coins - 1))
-  local startX = x + math.floor((width - totalWidth) / 2)
-  local centerLineY = y + math.floor(height / 2)
+  local layout = self:getCoinRowLayout(app, x, y, width, height, #coins, titleHeight)
+  local cardWidth = layout.cardWidth
   local reveal = self.coinRowReveal
   local visibleCount = #coins
   local rowRevealActive = reveal and reveal.batchId == batchId
@@ -997,31 +1138,88 @@ function StageState:drawCoinRow(app, x, y, width, height)
   local hoveredCoinId = nil
   local isDraggingHandCoin = self.draggingHandSlotIndex ~= nil
   local handHoverEnabled = not self.purseDialogOpen
+  local drawCoins = coins
+  local dragLayout = nil
+  local dragPushDistance = 0
+  local dragGhostX = nil
+  local dragGhostY = nil
+  local dragGhostSize = nil
+  local dragTargetX = mouseX and (mouseX - (self.dragGrabOffsetX or 0)) or nil
 
-  for index, coin in ipairs(coins) do
-    local cardX = startX + ((index - 1) * (cardWidth + cardGap))
+  if isDraggingHandCoin and not rowRevealActive then
+    drawCoins = {}
+
+    for _, coin in ipairs(coins) do
+      if (coin.slotIndex or #drawCoins + 1) ~= self.draggingHandSlotIndex then
+        table.insert(drawCoins, coin)
+      end
+    end
+
+    dragLayout = self:getCoinRowLayout(app, x, y, width, height, math.max(1, #drawCoins), titleHeight)
+    dragPushDistance = math.floor(dragLayout.cardWidth * 0.32)
+    self.dragInsertSlotIndex = self:getDragInsertSlotIndex(dragTargetX, dragLayout, #coins)
+    dragGhostX, dragGhostY = self:getDragGhostCenter(dragLayout, self.dragInsertSlotIndex, #drawCoins, dragPushDistance)
+    dragGhostSize = math.min(96, math.max(62, math.floor(dragLayout.cardWidth * 0.54)))
+  else
+    self.dragInsertSlotIndex = nil
+  end
+
+  if dragGhostX and dragGhostY and dragGhostSize then
+    setColorWithAlpha(Theme.colors.shadow, 0.28)
+    love.graphics.ellipse("fill", dragGhostX, dragGhostY + math.floor(dragGhostSize * 0.58), math.floor(dragGhostSize * 0.48), 9)
+    setColorWithAlpha(Theme.colors.accent, 0.13)
+    love.graphics.circle("fill", dragGhostX, dragGhostY, math.floor(dragGhostSize * 0.56))
+    setColorWithAlpha(Theme.colors.accent, 0.42)
+    love.graphics.setLineWidth(2)
+    love.graphics.circle("line", dragGhostX, dragGhostY, math.floor(dragGhostSize * 0.56))
+    love.graphics.setLineWidth(1)
+    CoinArt.draw(self.draggingHandCoinId, dragGhostX - math.floor(dragGhostSize / 2), dragGhostY - math.floor(dragGhostSize / 2), dragGhostSize, {
+      alpha = 0.18,
+      tilt = -0.05,
+    })
+  end
+
+  local activeVisualKeys = {}
+
+  for index, coin in ipairs(drawCoins) do
+    local activeLayout = dragLayout or layout
+    local activeCardWidth = activeLayout.cardWidth
+    local activeCardGap = activeLayout.cardGap
+    local activeCardHeight = activeLayout.cardHeight
+    local activeStartX = activeLayout.startX
+    local activeCenterLineY = activeLayout.centerLineY
+    local pushOffset = isDraggingHandCoin and self:getDragPushOffset(index, self.dragInsertSlotIndex, dragPushDistance) or 0
+    local cardX = activeStartX + ((index - 1) * (activeCardWidth + activeCardGap)) + pushOffset
     local hasResult = coin.result ~= nil and index <= visibleCount
     local artSide = nil
     local artSelected = false
     local revealAge = rowRevealActive and reveal.elapsed - getCoinRevealTime(reveal, index) or nil
     local liftProgress = revealAge and revealAge >= 0 and math.min(1, revealAge / math.max(0.001, reveal.coinMotionDuration or 0.46)) or nil
-    local liftOffset, motionTilt, motionScale, motionScaleX, motionScaleY, spinSide, resultSettled = getRetroCoinMotion(liftProgress, cardHeight)
+    local liftOffset, motionTilt, motionScale, motionScaleX, motionScaleY, spinSide, resultSettled = getRetroCoinMotion(liftProgress, activeCardHeight)
     local impactAge = revealAge and revealAge >= 0 and revealAge - ((reveal.coinMotionDuration or 0.46) * 0.78) or nil
     local impactPunch = impactAge and impactAge >= 0 and math.max(0, 1 - (impactAge / 0.26)) or 0
     local sleightAnimation = not hasResult and not rowRevealActive and self.sleightAnimations and self.sleightAnimations[coin.slotIndex or index] or nil
     local cardDrawX = cardX
-    local coinSize = math.min(96, math.max(62, math.floor(cardWidth * 0.54)))
+    local coinSize = math.min(96, math.max(62, math.floor(activeCardWidth * 0.54)))
     local animatedCoinSize = math.floor(coinSize * (motionScale + (impactPunch * 0.08)))
-    local coinCenterX = cardDrawX + math.floor(cardWidth / 2)
+    local coinCenterX = cardDrawX + math.floor(activeCardWidth / 2)
     local staggerOffset = (index % 2 == 0) and 16 or -16
-    local coinCenterY = centerLineY + staggerOffset + liftOffset
+    local coinCenterY = activeCenterLineY + staggerOffset + liftOffset
+    local visualKey = self:getCoinRowVisualKey(coin, index, batchId)
+    local rowVisual = self:updateCoinRowVisual(visualKey, coinCenterX, coinCenterY, animatedCoinSize, not rowRevealActive and not hasResult)
+    activeVisualKeys[visualKey] = true
+
+    coinCenterX = rowVisual.x
+    coinCenterY = rowVisual.y
+    animatedCoinSize = math.floor(rowVisual.size)
+    cardDrawX = coinCenterX - math.floor(activeCardWidth / 2)
     local coinDrawX = coinCenterX - math.floor(animatedCoinSize / 2)
     local coinDrawY = coinCenterY - math.floor(animatedCoinSize / 2)
     local labelY = coinDrawY + animatedCoinSize + 12
     local badgeRadius = 16
     local badgeCenterX = coinDrawX + animatedCoinSize - 7
     local badgeCenterY = coinDrawY + animatedCoinSize - 7
-    local hitWidth = math.max(animatedCoinSize + 34, math.min(cardWidth, 112))
+    local hitWidth = math.max(animatedCoinSize + 34, math.min(activeCardWidth, 112))
     local hitX = coinCenterX - math.floor(hitWidth / 2)
     local hitY = coinDrawY - 14
     local hitHeight = (labelY + app.fonts.small:getHeight() + 10) - hitY
@@ -1048,6 +1246,10 @@ function StageState:drawCoinRow(app, x, y, width, height)
       height = hitHeight,
       slotIndex = coin.slotIndex or index,
       coinId = coin.coinId,
+      visualKey = visualKey,
+      coinCenterX = coinCenterX,
+      coinCenterY = coinCenterY,
+      coinSize = animatedCoinSize,
       movable = not rowRevealActive and not hasResult and not coin.cannotReorder and self:isStageActive(app) and not self:isRevealActive(),
     })
 
@@ -1074,7 +1276,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
 
     love.graphics.setFont(app.fonts.small)
     Theme.applyColor(Theme.colors.mutedText)
-    love.graphics.printf(app:getCoinName(coin.coinId), cardDrawX + 4, labelY, cardWidth - 8, "center")
+    love.graphics.printf(app:getCoinName(coin.coinId), cardDrawX + 4, labelY, activeCardWidth - 8, "center")
 
     CoinArt.draw(coin.coinId, coinDrawX, coinDrawY, animatedCoinSize, {
       side = artSide,
@@ -1086,7 +1288,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
     })
 
     if sleightAnimation then
-      self:drawSleightSwitchAnimation(cardDrawX, coinDrawY, cardWidth, cardHeight, coinSize, sleightAnimation)
+      self:drawSleightSwitchAnimation(cardDrawX, coinDrawY, activeCardWidth, activeCardHeight, coinSize, sleightAnimation)
     end
 
     if hasResult and impactAge and impactAge >= 0 and impactAge <= 0.60 then
@@ -1096,11 +1298,11 @@ function StageState:drawCoinRow(app, x, y, width, height)
     if hasResult then
       if resultSettled then
         Theme.applyColor(coin.didMatch and Theme.colors.success or Theme.colors.mutedText)
-        love.graphics.printf(coin.didMatch and string.upper(Terminology.getOutcomeLabel("match")) or string.upper(Terminology.getOutcomeLabel("miss")), cardDrawX + 8, labelY + 18, cardWidth - 16, "center")
+        love.graphics.printf(coin.didMatch and string.upper(Terminology.getOutcomeLabel("match")) or string.upper(Terminology.getOutcomeLabel("miss")), cardDrawX + 8, labelY + 18, activeCardWidth - 16, "center")
 
         if coin.forcedResult then
           Theme.applyColor(Theme.colors.warning)
-          love.graphics.printf("FORCED", cardDrawX + 8, labelY + 36, cardWidth - 16, "center")
+          love.graphics.printf("FORCED", cardDrawX + 8, labelY + 36, activeCardWidth - 16, "center")
         end
       end
     else
@@ -1135,14 +1337,35 @@ function StageState:drawCoinRow(app, x, y, width, height)
 
       if coin.cannotReorder then
         Theme.applyColor(Theme.colors.warning)
-        love.graphics.printf("LOCKED", cardDrawX + 8, labelY + 18, cardWidth - 16, "center")
+        love.graphics.printf("LOCKED", cardDrawX + 8, labelY + 18, activeCardWidth - 16, "center")
       end
     end
 
   end
 
+  for key in pairs(self.coinRowVisuals or {}) do
+    if not activeVisualKeys[key] and key ~= self.draggingHandVisualKey then
+      self.coinRowVisuals[key] = nil
+    end
+  end
+
   if self.draggingHandCoinId then
-    CoinArt.draw(self.draggingHandCoinId, mouseX - 32, mouseY - 32, 64, { selected = true, alpha = 0.86, tilt = -0.08 })
+    local baseSize = self.dragBaseSize or dragGhostSize or math.min(96, math.max(62, math.floor(cardWidth * 0.54)))
+    local targetDraggedSize = (dragGhostSize or baseSize) * 1.15
+    local lift = easeOutCubic(clamp(self.dragLiftProgress or 1, 0, 1))
+    local draggedSize = math.floor(baseSize + ((targetDraggedSize - baseSize) * lift))
+    local drawCenterX = self.dragVisualX or (mouseX and (mouseX - (self.dragGrabOffsetX or 0))) or mouseX
+    local drawCenterY = self.dragVisualY or (mouseY and (mouseY - (self.dragGrabOffsetY or 0))) or mouseY
+
+    if drawCenterX and drawCenterY then
+      setColorWithAlpha(Theme.colors.shadow, 0.20 + (0.12 * lift))
+      love.graphics.ellipse("fill", drawCenterX, drawCenterY + math.floor(draggedSize * 0.55), math.floor(draggedSize * 0.46), 9)
+      CoinArt.draw(self.draggingHandCoinId, drawCenterX - math.floor(draggedSize / 2), drawCenterY - math.floor(draggedSize / 2), draggedSize, {
+        selected = true,
+        alpha = 0.78 + (0.14 * lift),
+        tilt = self.dragTilt or 0,
+      })
+    end
   elseif hoveredCoinId then
     self:drawCoinDetailOverlay(app, hoveredCoinId, mouseX, mouseY)
   end
@@ -1291,8 +1514,21 @@ function StageState:enter(app)
   self.reveal = nil
   self.coinRowReveal = nil
   self.sleightAnimations = {}
+  self.coinRowVisuals = {}
+  self.lastDt = 1 / 60
   self.draggingHandSlotIndex = nil
   self.draggingHandCoinId = nil
+  self.draggingHandVisualKey = nil
+  self.dragInsertSlotIndex = nil
+  self.dragPointerX = nil
+  self.dragPointerY = nil
+  self.dragGrabOffsetX = 0
+  self.dragGrabOffsetY = 0
+  self.dragVisualX = nil
+  self.dragVisualY = nil
+  self.dragBaseSize = nil
+  self.dragLiftProgress = 0
+  self.dragTilt = 0
   self.helpDialogOpen = false
   self.purseDialogOpen = false
   self.purseDialogScrollOffset = 0
@@ -1305,7 +1541,39 @@ function StageState:enter(app)
   end
 end
 
+function StageState:updateDragVisual(dt)
+  if not self.draggingHandSlotIndex then
+    return
+  end
+
+  self.dragLiftProgress = math.min(1, (self.dragLiftProgress or 0) + ((dt or 0) / 0.16))
+
+  local mouseX, mouseY = love.mouse.getPosition()
+  self.dragPointerX = mouseX
+  self.dragPointerY = mouseY
+
+  local targetX = mouseX - (self.dragGrabOffsetX or 0)
+  local targetY = mouseY - (self.dragGrabOffsetY or 0)
+
+  self.dragVisualX = self.dragVisualX or targetX
+  self.dragVisualY = self.dragVisualY or targetY
+
+  local pullX = targetX - self.dragVisualX
+  local pullY = targetY - self.dragVisualY
+  local follow = 1 - math.exp(-(dt or 0) * 18)
+
+  self.dragVisualX = self.dragVisualX + (pullX * follow)
+  self.dragVisualY = self.dragVisualY + (pullY * follow)
+
+  local targetTilt = clamp(pullX * 0.006, -0.30, 0.30)
+  local tiltFollow = math.min(1, (dt or 0) * 16)
+  self.dragTilt = (self.dragTilt or 0) + ((targetTilt - (self.dragTilt or 0)) * tiltFollow)
+end
+
 function StageState:update(app, dt)
+  self.lastDt = dt or self.lastDt or (1 / 60)
+  self:updateDragVisual(dt)
+
   for slotIndex, animation in pairs(self.sleightAnimations or {}) do
     animation.elapsed = animation.elapsed + dt
 
@@ -1388,15 +1656,17 @@ function StageState:drawRevealOverlay(app)
   love.graphics.printf(string.format("%s %d", Terminology.getTermLabel("flip"), reveal.batchId), contentArea.x + 14, contentArea.y + 10, contentArea.width - 28, "right")
 
   local statsY = contentArea.y + 56
+  local hpRemaining = math.max(0, (reveal.targetScore or 0) - (reveal.stageScore or 0))
   local statsLines = {
-    string.format("%s delta: %+d", Terminology.getTermLabel("stage"), reveal.stageDelta),
-    string.format("%s: %d/%d", Terminology.getTermLabel("stage_score"), reveal.stageScore, reveal.targetScore),
+    string.format("Damage dealt this flip: %+d", reveal.stageDelta),
+    string.format("Opponent HP: %d/%d", hpRemaining, reveal.targetScore),
     string.format("%s: %d", Terminology.getTermPlural("chip"), reveal.shopPoints or 0),
     string.format("Flips remaining: %d", reveal.flipsRemaining),
   }
 
   if reveal.stageStatus ~= "active" then
-    table.insert(statsLines, string.format("Outcome: %s", string.upper(reveal.stageStatus)))
+    local outcome = reveal.stageStatus == "cleared" and "DEFEATED" or string.upper(reveal.stageStatus)
+    table.insert(statsLines, string.format("Outcome: %s", outcome))
   end
 
   Layout.drawWrappedLines(statsLines, contentArea.x, statsY, contentArea.width, Theme.colors.text, Theme.spacing.lineHeight, 92)
@@ -1758,6 +2028,17 @@ function StageState:mousepressed(app, x, y, button)
   if handCard and handCard.movable then
     self.draggingHandSlotIndex = handCard.slotIndex
     self.draggingHandCoinId = handCard.coinId
+    self.draggingHandVisualKey = handCard.visualKey
+    self.dragInsertSlotIndex = handCard.slotIndex
+    self.dragPointerX = x
+    self.dragPointerY = y
+    self.dragVisualX = handCard.coinCenterX or x
+    self.dragVisualY = handCard.coinCenterY or y
+    self.dragGrabOffsetX = x - self.dragVisualX
+    self.dragGrabOffsetY = y - self.dragVisualY
+    self.dragBaseSize = handCard.coinSize or 64
+    self.dragLiftProgress = 0
+    self.dragTilt = 0
     return
   end
 
@@ -1771,8 +2052,36 @@ function StageState:mousereleased(app, x, y, button)
   end
 
   local fromSlotIndex = self.draggingHandSlotIndex
+  local toSlotIndex = self.dragInsertSlotIndex
+  local visualKey = self.draggingHandVisualKey
+
+  if visualKey and self.dragVisualX and self.dragVisualY then
+    self.coinRowVisuals = self.coinRowVisuals or {}
+    self.coinRowVisuals[visualKey] = {
+      x = self.dragVisualX,
+      y = self.dragVisualY,
+      size = (self.dragBaseSize or 64) * 1.15,
+    }
+  end
+
   self.draggingHandSlotIndex = nil
   self.draggingHandCoinId = nil
+  self.draggingHandVisualKey = nil
+  self.dragInsertSlotIndex = nil
+  self.dragPointerX = nil
+  self.dragPointerY = nil
+  self.dragGrabOffsetX = 0
+  self.dragGrabOffsetY = 0
+  self.dragVisualX = nil
+  self.dragVisualY = nil
+  self.dragBaseSize = nil
+  self.dragLiftProgress = 0
+  self.dragTilt = 0
+
+  if toSlotIndex and toSlotIndex ~= fromSlotIndex then
+    self:tryMoveSlotTo(app, fromSlotIndex, toSlotIndex)
+    return
+  end
 
   local targetCard = self:getHandCardAtPoint(x, y)
 
