@@ -3,10 +3,10 @@ local Theme = require("src.ui.theme")
 local Layout = {}
 
 local TARGETS = {
-  { tier = "compact", width = 960, height = 540 },
-  { tier = "standard", width = 1280, height = 720 },
-  { tier = "large", width = 1440, height = 810 },
-  { tier = "max", width = 1600, height = 900 },
+  { id = "compact", label = "Compact", tier = "compact", width = 1280, height = 720 },
+  { id = "standard", label = "Standard", tier = "standard", width = 1600, height = 900 },
+  { id = "large", label = "Large", tier = "large", width = 1920, height = 1080 },
+  { id = "max", label = "Max", tier = "max", width = 2560, height = 1440 },
 }
 
 local MIN_TARGET = TARGETS[1]
@@ -67,12 +67,35 @@ local function copyTable(source)
   return result
 end
 
+function Layout.getDisplayTargets()
+  local targets = {}
+
+  for _, target in ipairs(TARGETS) do
+    table.insert(targets, copyTable(target))
+  end
+
+  return targets
+end
+
+function Layout.getDefaultDisplayTargetId()
+  return "compact"
+end
+
+function Layout.getDisplayTargetById(targetId)
+  for _, target in ipairs(TARGETS) do
+    if target.id == targetId then
+      return copyTable(target)
+    end
+  end
+
+  return nil
+end
+
 function Layout.resolveViewport(windowWidth, windowHeight)
-  local width = math.floor(windowWidth or love.graphics.getWidth())
-  local height = math.floor(windowHeight or love.graphics.getHeight())
-  local rectWidth = math.max(1, math.min(width, MAX_TARGET.width))
-  local rectHeight = math.max(1, math.min(height, MAX_TARGET.height))
-  local tier = resolveTier(rectWidth, rectHeight)
+  local width = math.floor(windowWidth or MIN_TARGET.width)
+  local height = math.floor(windowHeight or MIN_TARGET.height)
+  local tier = resolveTier(width, height)
+  local scale = math.min(width / MIN_TARGET.width, height / MIN_TARGET.height)
 
   return {
     window = {
@@ -80,10 +103,10 @@ function Layout.resolveViewport(windowWidth, windowHeight)
       height = height,
     },
     rect = {
-      x = math.floor((width - rectWidth) / 2),
-      y = math.floor((height - rectHeight) / 2),
-      width = rectWidth,
-      height = rectHeight,
+      x = 0,
+      y = 0,
+      width = width,
+      height = height,
     },
     target = {
       minWidth = MIN_TARGET.width,
@@ -92,6 +115,7 @@ function Layout.resolveViewport(windowWidth, windowHeight)
       maxHeight = MAX_TARGET.height,
     },
     tier = tier,
+    scale = scale,
     spacing = copyTable(Theme.spacingTiers[tier]),
     fontSizes = copyTable(Theme.fontSizeTiers[tier]),
     metrics = copyTable(Theme.componentMetricTiers[tier]),
@@ -300,7 +324,7 @@ end
 function Layout.getFooterMetrics(totalHeight, options)
   options = options or {}
 
-  local buttonHeight = options.buttonHeight or 46
+  local buttonHeight = options.buttonHeight or Theme.componentMetrics.buttonHeight or 46
   local buttonRows = math.max(0, options.buttonRows or 1)
   local rowGap = options.rowGap or Theme.spacing.itemGap
   local statusHeight = math.max(0, options.statusHeight or 0)

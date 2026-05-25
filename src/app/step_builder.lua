@@ -91,6 +91,15 @@ local RULES = {
     end,
   },
   {
+    from = "menu",
+    event = "open_settings",
+    build = function()
+      return {
+        { type = "state", state = "settings", payload = { returnState = "menu" } },
+      }
+    end,
+  },
+  {
     from = "run_setup",
     event = "back_to_menu",
     build = function()
@@ -196,6 +205,16 @@ local RULES = {
     build = function()
       return {
         { type = "state", state = "menu" },
+      }
+    end,
+  },
+  {
+    from = "settings",
+    event = "back",
+    build = function(context)
+      local payload = context.payload or {}
+      return {
+        { type = "state", state = payload.returnState or "menu" },
       }
     end,
   },
@@ -583,6 +602,15 @@ local RULES = {
       return {
         { type = "action", action = "abandon_run" },
         { type = "state", state = "menu" },
+      }
+    end,
+  },
+  {
+    from = "pause",
+    event = "open_settings",
+    build = function()
+      return {
+        { type = "state", state = "settings", payload = { returnState = "pause" } },
       }
     end,
   },

@@ -1,4 +1,5 @@
 local Button = require("src.ui.button")
+local CoinDetailOverlay = require("src.ui.coin_detail_overlay")
 local CoinArt = require("src.ui.coin_art")
 local Coins = require("src.content.coins")
 local Layout = require("src.ui.layout")
@@ -41,17 +42,17 @@ function CoinDraftState:getLayout(app)
   local gap = Theme.spacing.blockGap
   local width = love.graphics.getWidth()
   local height = love.graphics.getHeight()
-  local infoY = 118
-  local infoHeight = 84
+  local infoY = Theme.scale(118)
+  local infoHeight = Theme.scale(84)
   local offerPanelY = infoY + infoHeight + gap
   local footerMetrics = Layout.getFooterMetrics(height, {
-    statusHeight = 54,
+    statusHeight = Theme.scale(54),
   })
-  local selectedSummaryHeight = 118
+  local selectedSummaryHeight = Theme.scale(118)
   local offerCount = math.max(1, #cards)
   local columns = math.min(3, offerCount)
   local panelWidth = math.floor((width - (padding * 2) - (gap * (columns - 1))) / columns)
-  local panelHeight = math.max(230, footerMetrics.contentBottomY - offerPanelY - selectedSummaryHeight - gap)
+  local panelHeight = math.max(Theme.scale(230), footerMetrics.contentBottomY - offerPanelY - selectedSummaryHeight - gap)
   local selectedSummaryY = offerPanelY + panelHeight + gap
   local panelLayout = {}
 
@@ -115,9 +116,9 @@ function CoinDraftState:buildButtons(app)
   local buttons = {}
 
   table.insert(buttons, {
-    x = layout.width - Theme.spacing.screenPadding - 150,
+    x = layout.width - Theme.spacing.screenPadding - Theme.scale(150),
     y = layout.footerMetrics.buttonY,
-    width = 150,
+    width = Theme.scale(150),
     height = layout.footerMetrics.buttonHeight,
     label = "Pause",
     variant = "default",
@@ -139,7 +140,7 @@ function CoinDraftState:drawOfferCards(app, panelLayout)
 
     Panel.draw(entry.x, entry.y, entry.width, entry.height)
     local contentArea = Panel.getContentArea(entry.x, entry.y, entry.width, entry.height)
-    local artSize = math.min(86, math.max(54, math.floor(contentArea.width * 0.30)))
+    local artSize = math.min(Theme.scale(86), math.max(Theme.scale(54), math.floor(contentArea.width * 0.30)))
     local textX = contentArea.x + artSize + Theme.spacing.itemGap
     local textY = contentArea.y
     local textWidth = contentArea.width - artSize - Theme.spacing.itemGap
@@ -169,39 +170,7 @@ end
 
 function CoinDraftState:drawCoinDetailOverlay(app, coinId, x, y)
   local coin = coinId and Coins.getById(coinId) or nil
-
-  if not coin then
-    return
-  end
-
-  local width = 330
-  local height = 150
-  local screenWidth = love.graphics.getWidth()
-  local screenHeight = love.graphics.getHeight()
-  local overlayX = math.min(x + 18, screenWidth - width - Theme.spacing.screenPadding)
-  local overlayY = math.min(y + 18, screenHeight - height - Theme.spacing.screenPadding)
-
-  overlayX = math.max(Theme.spacing.screenPadding, overlayX)
-  overlayY = math.max(Theme.spacing.screenPadding, overlayY)
-
-  love.graphics.setColor(0.03, 0.04, 0.07, 0.96)
-  love.graphics.rectangle("fill", overlayX + 4, overlayY + 4, width, height)
-  love.graphics.setColor(0.08, 0.10, 0.15, 0.98)
-  love.graphics.rectangle("fill", overlayX, overlayY, width, height)
-  Theme.applyColor(Theme.colors.accent)
-  love.graphics.setLineWidth(2)
-  love.graphics.rectangle("line", overlayX, overlayY, width, height)
-  love.graphics.setLineWidth(1)
-
-  CoinArt.draw(coin, overlayX + 14, overlayY + 18, 62, { selected = true, tilt = -0.04 })
-  love.graphics.setFont(app.fonts.body)
-  Theme.applyColor(Theme.colors.text)
-  love.graphics.print(string.format("%s (%s)", coin.name, coin.rarity), overlayX + 90, overlayY + 16)
-  love.graphics.setFont(app.fonts.small)
-  Theme.applyColor(Theme.colors.mutedText)
-  Layout.drawRichWrappedText(Terminology.getMechanicRichText(coin.description or ""), overlayX + 90, overlayY + 42, width - 106, Theme.colors.mutedText, app.fonts.small:getHeight() + 2, 68)
-  Theme.applyColor(Theme.colors.warning)
-  love.graphics.printf(string.format("Tags: %s", Terminology.formatTagList(coin.tags)), overlayX + 14, overlayY + 118, width - 28, "left")
+  CoinDetailOverlay.draw(app, coin, x, y)
 end
 
 function CoinDraftState:drawSelectedCoinSummary(app, area, session)
@@ -220,7 +189,7 @@ function CoinDraftState:drawSelectedCoinSummary(app, area, session)
 
   local mouseX, mouseY = love.mouse.getPosition()
   local gap = Theme.spacing.itemGap
-  local itemHeight = math.min(58, contentArea.height)
+  local itemHeight = math.min(Theme.scale(58), contentArea.height)
   local itemWidth = math.floor((contentArea.width - (gap * (slotCount - 1))) / slotCount)
   local hoveredCoinId = nil
 
@@ -250,9 +219,9 @@ function CoinDraftState:drawSelectedCoinSummary(app, area, session)
     love.graphics.setFont(app.fonts.small)
 
     if filled then
-      CoinArt.draw(coinId, itemX + 9, itemY + 10, 38, { selected = hovered, glow = hovered })
+      CoinArt.draw(coinId, itemX + Theme.scale(9), itemY + Theme.scale(10), Theme.scale(38), { selected = hovered, glow = hovered })
       Theme.applyColor(Theme.colors.text)
-      love.graphics.printf(coin and coin.name or coinId, itemX + 56, itemY + 20, math.max(1, itemWidth - 64), "left")
+      love.graphics.printf(coin and coin.name or coinId, itemX + Theme.scale(56), itemY + Theme.scale(20), math.max(1, itemWidth - Theme.scale(64)), "left")
     end
   end
 
@@ -264,7 +233,7 @@ function CoinDraftState:draw(app)
   local layout = self:getLayout(app)
 
   love.graphics.setFont(app.fonts.title)
-  Layout.centeredText("Coin Draft", 64, app.fonts.title, Theme.colors.text)
+  Layout.centeredText("Coin Draft", Theme.scale(64), app.fonts.title, Theme.colors.text)
 
   love.graphics.setFont(app.fonts.body)
   local lines = {

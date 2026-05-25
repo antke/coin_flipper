@@ -3,6 +3,7 @@ local Theme = require("src.ui.theme")
 local Button = {}
 
 local soundPlayer = nil
+local defaultFont = nil
 local pressEffects = {}
 local PRESS_EFFECT_DURATION = 0.18
 
@@ -83,12 +84,23 @@ function Button.setSoundPlayer(player)
   soundPlayer = player
 end
 
+function Button.setDefaultFont(font)
+  defaultFont = font
+end
+
 function Button.drawTextButton(x, y, width, height, label, options)
   if type(options) == "boolean" then
     options = { focused = options }
   end
 
   options = options or {}
+  local previousFont = love.graphics.getFont()
+  local buttonFont = options.font or defaultFont or previousFont
+
+  if buttonFont and buttonFont ~= previousFont then
+    love.graphics.setFont(buttonFont)
+  end
+
   local fill, border, textColor = resolveButtonColors(options)
   local font = love.graphics.getFont()
   local textY = y + math.floor((height - font:getHeight()) / 2)
@@ -102,6 +114,10 @@ function Button.drawTextButton(x, y, width, height, label, options)
 
   Theme.applyColor(textColor)
   love.graphics.printf(label, x + 6, textY, width - 12, options.align or "center")
+
+  if buttonFont and buttonFont ~= previousFont then
+    love.graphics.setFont(previousFont)
+  end
 end
 
 function Button.drawButtons(buttons, mouseX, mouseY)
@@ -116,6 +132,7 @@ function Button.drawButtons(buttons, mouseX, mouseY)
       disabled = button.disabled,
       variant = button.variant,
       align = button.align,
+      font = button.font,
     })
   end
 

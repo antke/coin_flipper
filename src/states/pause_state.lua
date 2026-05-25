@@ -59,7 +59,7 @@ function PauseState:buildButtons(app)
   local buttonWidth = 240
   local buttonHeight = metrics.buttonHeight
   local gap = Theme.spacing.itemGap
-  local totalWidth = (buttonWidth * 3) + (gap * 2)
+  local totalWidth = (buttonWidth * 4) + (gap * 3)
   local startX = math.floor((width - totalWidth) * 0.5)
 
   self.buttons = {
@@ -96,6 +96,17 @@ function PauseState:buildButtons(app)
         return self:tryAbandon(app)
       end,
     },
+    {
+      x = startX + ((buttonWidth + gap) * 3),
+      y = metrics.buttonY,
+      width = buttonWidth,
+      height = buttonHeight,
+      label = "Settings",
+      variant = "default",
+      onClick = function()
+        return app.stateGraph:request("open_settings")
+      end,
+    },
   }
 
   return self.buttons
@@ -119,6 +130,11 @@ function PauseState:keypressed(app, key)
 
   if key == "s" then
     self:trySaveQuit(app)
+    return
+  end
+
+  if key == "o" then
+    app.stateGraph:request("open_settings")
     return
   end
 

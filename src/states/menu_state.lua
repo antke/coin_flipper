@@ -18,7 +18,7 @@ function MenuState:buildButtons(app)
   local buttonHeight = footerMetrics.buttonHeight
   local gap = Theme.spacing.itemGap
   local hasContinue = app:hasActiveRunSave()
-  local buttonCount = hasContinue and 6 or 5
+  local buttonCount = hasContinue and 7 or 6
   local buttonWidth = math.min(240, math.floor((width - (Theme.spacing.screenPadding * 2) - (gap * math.max(0, buttonCount - 1))) / buttonCount))
   local totalWidth = (buttonWidth * buttonCount) + (gap * (buttonCount - 1))
   local startX = math.floor((width - totalWidth) / 2)
@@ -98,6 +98,18 @@ function MenuState:buildButtons(app)
         return app.stateGraph:request("open_meta")
       end,
     })
+
+    table.insert(self.buttons, {
+      x = startX + ((buttonWidth + gap) * 6),
+      y = buttonY,
+      width = buttonWidth,
+      height = buttonHeight,
+      label = "Settings",
+      variant = "default",
+      onClick = function()
+        return app.stateGraph:request("open_settings")
+      end,
+    })
   else
     table.insert(self.buttons, {
       x = startX,
@@ -158,6 +170,18 @@ function MenuState:buildButtons(app)
         return app.stateGraph:request("open_meta")
       end,
     })
+
+    table.insert(self.buttons, {
+      x = startX + ((buttonWidth + gap) * 5),
+      y = buttonY,
+      width = buttonWidth,
+      height = buttonHeight,
+      label = "Settings",
+      variant = "default",
+      onClick = function()
+        return app.stateGraph:request("open_settings")
+      end,
+    })
   end
 
   return self.buttons
@@ -195,6 +219,11 @@ function MenuState:keypressed(app, key)
 
   if key == "m" then
     app.stateGraph:request("open_meta")
+    return
+  end
+
+  if key == "s" then
+    app.stateGraph:request("open_settings")
     return
   end
 

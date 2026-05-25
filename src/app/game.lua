@@ -134,6 +134,11 @@ function Game.new()
     },
     activeRunArtifact = nil,
     activeRunSaveAvailable = false,
+    displayTargetId = Layout.getDefaultDisplayTargetId(),
+    displaySettingsStatus = {
+      level = "info",
+      message = "Display settings not loaded yet.",
+    },
     uiMetrics = nil,
   }, Game)
 
@@ -144,7 +149,8 @@ function Game.new()
 end
 
 function Game:refreshUiMetrics(width, height)
-  local nextMetrics = Layout.resolveViewport(width, height)
+  local target = Layout.getDisplayTargetById(self.displayTargetId) or Layout.getDisplayTargetById(Layout.getDefaultDisplayTargetId())
+  local nextMetrics = Layout.resolveViewport(width or target.width, height or target.height)
   local previousTier = self.uiMetrics and self.uiMetrics.tier or nil
 
   self.uiMetrics = nextMetrics
@@ -152,6 +158,7 @@ function Game:refreshUiMetrics(width, height)
 
   if not self.fonts or previousTier ~= nextMetrics.tier then
     self.fonts = createFonts(nextMetrics.fontSizes)
+    Button.setDefaultFont(self.fonts.body)
     love.graphics.setFont(self.fonts.body)
   end
 
@@ -162,9 +169,79 @@ function Game:getUiMetrics()
   return self.uiMetrics or self:refreshUiMetrics()
 end
 
+function Game:getDisplayTargets()
+  return Layout.getDisplayTargets()
+end
+
+function Game:getDisplayTarget()
+  return Layout.getDisplayTargetById(self.displayTargetId) or Layout.getDisplayTargetById(Layout.getDefaultDisplayTargetId())
+end
+
+function Game:getDisplayTargetId()
+  return self.displayTargetId
+end
+
+function Game:getDisplayTransform()
+  local target = self:getDisplayTarget()
+  local physicalWidth, physicalHeight = love.graphics.getDimensions()
+  local scale = math.min(physicalWidth / target.width, physicalHeight / target.height)
+
+  if scale <= 0 then
+    scale = 1
+  end
+
+  local scaledWidth = target.width * scale
+  local scaledHeight = target.height * scale
+
+  return {
+    x = math.floor((physicalWidth - scaledWidth) * 0.5),
+    y = math.floor((physicalHeight - scaledHeight) * 0.5),
+    scale = scale,
+    width = target.width,
+    height = target.height,
+  }
+end
+
+function Game:toLogicalPoint(x, y)
+  local transform = self:getDisplayTransform()
+
+  return (x - transform.x) / transform.scale, (y - transform.y) / transform.scale
+end
+
+function Game:getLogicalMousePosition()
+  local x, y = love.mouse.getPosition()
+
+  return self:toLogicalPoint(x, y)
+end
+
+function Game:pushDisplayTargetContext()
+  local target = self:getDisplayTarget()
+  local originalGetWidth = love.graphics.getWidth
+  local originalGetHeight = love.graphics.getHeight
+  local originalMouseGetPosition = love.mouse.getPosition
+
+  love.graphics.getWidth = function()
+    return target.width
+  end
+  love.graphics.getHeight = function()
+    return target.height
+  end
+  love.mouse.getPosition = function()
+    local x, y = originalMouseGetPosition()
+    return self:toLogicalPoint(x, y)
+  end
+
+  return function()
+    love.graphics.getWidth = originalGetWidth
+    love.graphics.getHeight = originalGetHeight
+    love.mouse.getPosition = originalMouseGetPosition
+  end
+end
+
 function Game:registerStates()
   self.stateGraph:register("boot", require("src.states.boot_state").new())
   self.stateGraph:register("menu", require("src.states.menu_state").new())
+  self.stateGraph:register("settings", require("src.states.settings_state").new())
   self.stateGraph:register("run_setup", require("src.states.run_setup_state").new())
   self.stateGraph:register("help", require("src.states.help_state").new())
   self.stateGraph:register("collection", require("src.states.collection_state").new())
@@ -182,6 +259,83 @@ function Game:registerStates()
   self.stateGraph:register("shop", require("src.states.shop_state").new())
   self.stateGraph:register("summary", require("src.states.summary_state").new())
   self.stateGraph:register("meta", require("src.states.meta_state").new())
+end
+
+function Game:applyDisplayTargetWindow()
+  local target = self:getDisplayTarget()
+  local _, _, flags = love.window.getMode()
+  local desktopWidth, desktopHeight = love.window.getDesktopDimensions()
+  local windowWidth = math.min(target.width, desktopWidth)
+  local windowHeight = math.min(target.height, desktopHeight)
+  local ok, errorMessage = love.window.setMode(windowWidth, windowHeight, {
+    resizable = true,
+    vsync = flags and flags.vsync or 1,
+    msaa = flags and flags.msaa or 0,
+  })
+
+  if ok == false then
+    return false, errorMessage or "set_mode_failed"
+  end
+
+  return true
+end
+
+function Game:loadDisplaySettings()
+  local settings, errorMessage = SaveSystem.loadDisplaySettings()
+
+  if settings then
+    if Layout.getDisplayTargetById(settings.targetResolutionId) then
+      self.displayTargetId = settings.targetResolutionId
+      self.displaySettingsStatus = {
+        level = "success",
+        message = "Display settings loaded.",
+      }
+      return true
+    end
+
+    errorMessage = "unknown_display_target"
+  end
+
+  self.displaySettingsStatus = {
+    level = errorMessage == "not_found" and "info" or "warning",
+    message = errorMessage == "not_found" and "Using default display settings." or string.format("Display settings not loaded: %s", tostring(errorMessage)),
+  }
+  return false, errorMessage
+end
+
+function Game:saveDisplaySettings(reason)
+  local ok, errorMessage = SaveSystem.saveDisplaySettings({
+    targetResolutionId = self.displayTargetId,
+  })
+
+  self.displaySettingsStatus = {
+    level = ok and "success" or "warning",
+    message = ok and string.format("Display settings saved (%s).", reason or "manual") or string.format("Display settings save failed: %s", tostring(errorMessage)),
+  }
+
+  return ok, errorMessage
+end
+
+function Game:setDisplayTarget(targetId)
+  local target = Layout.getDisplayTargetById(targetId)
+
+  if not target then
+    return false, "unknown_display_target"
+  end
+
+  local previousTargetId = self.displayTargetId
+  self.displayTargetId = target.id
+  self:refreshUiMetrics(target.width, target.height)
+
+  local ok, errorMessage = self:applyDisplayTargetWindow()
+  if ok == false then
+    self.displayTargetId = previousTargetId
+    self:refreshUiMetrics()
+    return false, errorMessage
+  end
+
+  self:saveDisplaySettings("settings")
+  return true
 end
 
 function Game:validateContentRegistries()
@@ -519,6 +673,8 @@ function Game:abandonRun()
 end
 
 function Game:load()
+  self:loadDisplaySettings()
+  self:applyDisplayTargetWindow()
   self:refreshUiMetrics()
   love.graphics.setFont(self.fonts.body)
   Button.setSoundPlayer(function(cueName)
@@ -546,10 +702,30 @@ end
 function Game:draw()
   self:refreshUiMetrics()
   Theme.clearColor(Theme.colors.background)
-  self.stateGraph:draw()
-  self:drawFeedbackOverlay()
-  self:drawOutcomeBurst()
-  self.debugOverlay:draw()
+  local transform = self:getDisplayTransform()
+  local restoreDisplayTargetContext = self:pushDisplayTargetContext()
+
+  local pushed = false
+  local ok, errorMessage = xpcall(function()
+    love.graphics.push()
+    pushed = true
+    love.graphics.translate(transform.x, transform.y)
+    love.graphics.scale(transform.scale, transform.scale)
+    self.stateGraph:draw()
+    self:drawFeedbackOverlay()
+    self:drawOutcomeBurst()
+    self.debugOverlay:draw()
+  end, debug.traceback)
+
+  if pushed then
+    love.graphics.pop()
+  end
+
+  restoreDisplayTargetContext()
+
+  if not ok then
+    error(errorMessage, 0)
+  end
 end
 
 function Game:keypressed(key, scancode, isRepeat)
@@ -580,11 +756,31 @@ function Game:keypressed(key, scancode, isRepeat)
 end
 
 function Game:mousepressed(x, y, button, istouch, presses)
-  self.stateGraph:mousepressed(x, y, button, istouch, presses)
+  local logicalX, logicalY = self:toLogicalPoint(x, y)
+  local restoreDisplayTargetContext = self:pushDisplayTargetContext()
+  local ok, errorMessage = xpcall(function()
+    self.stateGraph:mousepressed(logicalX, logicalY, button, istouch, presses)
+  end, debug.traceback)
+
+  restoreDisplayTargetContext()
+
+  if not ok then
+    error(errorMessage, 0)
+  end
 end
 
 function Game:mousereleased(x, y, button, istouch, presses)
-  self.stateGraph:mousereleased(x, y, button, istouch, presses)
+  local logicalX, logicalY = self:toLogicalPoint(x, y)
+  local restoreDisplayTargetContext = self:pushDisplayTargetContext()
+  local ok, errorMessage = xpcall(function()
+    self.stateGraph:mousereleased(logicalX, logicalY, button, istouch, presses)
+  end, debug.traceback)
+
+  restoreDisplayTargetContext()
+
+  if not ok then
+    error(errorMessage, 0)
+  end
 end
 
 function Game:textinput(text)
@@ -592,11 +788,20 @@ function Game:textinput(text)
 end
 
 function Game:wheelmoved(x, y)
-  self.stateGraph:wheelmoved(x, y)
+  local restoreDisplayTargetContext = self:pushDisplayTargetContext()
+  local ok, errorMessage = xpcall(function()
+    self.stateGraph:wheelmoved(x, y)
+  end, debug.traceback)
+
+  restoreDisplayTargetContext()
+
+  if not ok then
+    error(errorMessage, 0)
+  end
 end
 
 function Game:resize(width, height)
-  self:refreshUiMetrics(width, height)
+  self:refreshUiMetrics()
   self.stateGraph:resize(width, height)
 end
 
@@ -610,6 +815,7 @@ function Game:quit()
   end
 
   self:saveMetaState("quit")
+  self:saveDisplaySettings("quit")
 end
 
 function Game:getUiPulse(speed, minValue, maxValue, phase)

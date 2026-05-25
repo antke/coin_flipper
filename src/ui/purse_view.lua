@@ -5,12 +5,13 @@ local PurseView = {}
 
 local function getGridMetrics(area, cardCount, options)
   local gap = Theme.spacing.itemGap
-  local gridY = area.y + 30
-  local gridHeight = math.max(0, area.height - 30)
-  local minCardWidth = options.minCardWidth or 190
+  local headerHeight = Theme.scale(30)
+  local gridY = area.y + headerHeight
+  local gridHeight = math.max(0, area.height - headerHeight)
+  local minCardWidth = options.minCardWidth or Theme.scale(190)
   local columnCount = math.max(1, math.floor((area.width + gap) / (minCardWidth + gap)))
   local cardWidth = math.floor((area.width - (gap * (columnCount - 1))) / columnCount)
-  local cardHeight = math.min(options.cardHeight or 148, math.max(118, gridHeight))
+  local cardHeight = math.min(options.cardHeight or Theme.scale(148), math.max(Theme.scale(118), gridHeight))
   local visibleRows = math.max(1, math.floor((gridHeight + gap) / (cardHeight + gap)))
   local rowCount = math.max(1, math.ceil(cardCount / columnCount))
 
@@ -35,10 +36,10 @@ function PurseView.getMaxScrollOffset(app, area, stageState, options)
 end
 
 function PurseView.getScrollButtons(area, scrollOffset, maxScrollOffset, onPrevious, onNext)
-  local buttonWidth = 30
-  local buttonHeight = 22
-  local gap = 6
-  local y = area.y - 1
+  local buttonWidth = Theme.scale(30)
+  local buttonHeight = Theme.scale(22)
+  local gap = Theme.scale(6)
+  local y = area.y - Theme.scale(1)
   local nextX = area.x + area.width - buttonWidth
 
   if maxScrollOffset <= 0 then
@@ -94,7 +95,7 @@ function PurseView.draw(app, area, stageState, options)
   if #cards == 0 then
     love.graphics.setFont(app.fonts.body)
     Theme.applyColor(Theme.colors.mutedText)
-    love.graphics.printf("No coins in purse.", area.x, area.y + 46, area.width, "center")
+    love.graphics.printf("No coins in purse.", area.x, area.y + Theme.scale(46), area.width, "center")
     return
   end
 

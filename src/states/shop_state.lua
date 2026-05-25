@@ -216,8 +216,8 @@ function ShopState:getPurseDialogLayout()
   local width = love.graphics.getWidth()
   local height = love.graphics.getHeight()
   local padding = Theme.spacing.screenPadding
-  local dialogWidth = math.min(700, math.max(280, width - (padding * 4)))
-  local dialogHeight = math.min(460, math.max(260, height - (padding * 4)))
+  local dialogWidth = math.min(Theme.scale(700), math.max(Theme.scale(280), width - (padding * 4)))
+  local dialogHeight = math.min(Theme.scale(460), math.max(Theme.scale(260), height - (padding * 4)))
 
   return {
     x = math.floor((width - dialogWidth) / 2),
@@ -228,11 +228,11 @@ function ShopState:getPurseDialogLayout()
 end
 
 function ShopState:getPurseCloseButton(dialog)
-  local size = 32
+  local size = Theme.scale(32)
 
   return {
     x = dialog.x + dialog.width - Theme.spacing.panelPadding - size,
-    y = dialog.y + Theme.spacing.panelPadding - 4,
+    y = dialog.y + Theme.spacing.panelPadding - Theme.scale(4),
     width = size,
     height = size,
     label = "X",

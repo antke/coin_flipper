@@ -22,10 +22,10 @@ local Theme = {
   },
 
   fontSizeTiers = {
-    compact = { title = 26, heading = 18, body = 14, small = 11, outcomeBurst = 88 },
-    standard = { title = 30, heading = 20, body = 15, small = 12, outcomeBurst = 112 },
-    large = { title = 34, heading = 22, body = 16, small = 13, outcomeBurst = 124 },
-    max = { title = 38, heading = 24, body = 18, small = 14, outcomeBurst = 136 },
+    compact = { title = 30, heading = 20, body = 15, small = 12, outcomeBurst = 112 },
+    standard = { title = 38, heading = 25, body = 19, small = 15, outcomeBurst = 140 },
+    large = { title = 45, heading = 30, body = 23, small = 18, outcomeBurst = 168 },
+    max = { title = 60, heading = 40, body = 30, small = 24, outcomeBurst = 224 },
   },
 
   fontPaths = {
@@ -62,24 +62,38 @@ local Theme = {
   },
 
   spacingTiers = {
-    compact = { screenPadding = 20, blockGap = 16, itemGap = 10, lineHeight = 22, panelPadding = 14, panelTitleHeight = 24, statusPadding = 12 },
-    standard = { screenPadding = 28, blockGap = 20, itemGap = 12, lineHeight = 24, panelPadding = 18, panelTitleHeight = 28, statusPadding = 16 },
-    large = { screenPadding = 32, blockGap = 22, itemGap = 14, lineHeight = 26, panelPadding = 20, panelTitleHeight = 30, statusPadding = 18 },
-    max = { screenPadding = 36, blockGap = 24, itemGap = 16, lineHeight = 28, panelPadding = 22, panelTitleHeight = 32, statusPadding = 20 },
+    compact = { screenPadding = 28, blockGap = 20, itemGap = 12, lineHeight = 24, panelPadding = 18, panelTitleHeight = 28, statusPadding = 16 },
+    standard = { screenPadding = 35, blockGap = 25, itemGap = 15, lineHeight = 30, panelPadding = 23, panelTitleHeight = 35, statusPadding = 20 },
+    large = { screenPadding = 42, blockGap = 30, itemGap = 18, lineHeight = 36, panelPadding = 27, panelTitleHeight = 42, statusPadding = 24 },
+    max = { screenPadding = 56, blockGap = 40, itemGap = 24, lineHeight = 48, panelPadding = 36, panelTitleHeight = 56, statusPadding = 32 },
   },
 
   componentMetricTiers = {
-    compact = { buttonHeight = 42, cardMinWidth = 76, cardMaxWidth = 170 },
-    standard = { buttonHeight = 42, cardMinWidth = 82, cardMaxWidth = 190 },
-    large = { buttonHeight = 48, cardMinWidth = 90, cardMaxWidth = 205 },
-    max = { buttonHeight = 54, cardMinWidth = 96, cardMaxWidth = 220 },
+    compact = { buttonHeight = 42, cardMinWidth = 82, cardMaxWidth = 190 },
+    standard = { buttonHeight = 53, cardMinWidth = 103, cardMaxWidth = 238 },
+    large = { buttonHeight = 63, cardMinWidth = 123, cardMaxWidth = 285 },
+    max = { buttonHeight = 84, cardMinWidth = 164, cardMaxWidth = 380 },
   },
+
+  componentMetrics = {
+    buttonHeight = 42,
+    cardMinWidth = 82,
+    cardMaxWidth = 190,
+  },
+
+  uiScale = 1,
 }
 
 function Theme.applyViewportMetrics(metrics)
   local tier = metrics and metrics.tier or "standard"
   Theme.fontSizes = Theme.fontSizeTiers[tier]
   Theme.spacing = Theme.spacingTiers[tier]
+  Theme.componentMetrics = Theme.componentMetricTiers[tier]
+  Theme.uiScale = metrics and metrics.scale or 1
+end
+
+function Theme.scale(value)
+  return math.floor((value or 0) * (Theme.uiScale or 1) + 0.5)
 end
 
 function Theme.applyColor(color)

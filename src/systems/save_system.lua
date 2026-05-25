@@ -6,6 +6,9 @@ local SaveSystem = {
   SAVE_VERSION = 2,
   SAVE_ARTIFACT_TYPE = "meta_state",
   META_STATE_PATH = "save/meta_state.lua",
+  DISPLAY_SETTINGS_VERSION = 1,
+  DISPLAY_SETTINGS_ARTIFACT_TYPE = "display_settings",
+  DISPLAY_SETTINGS_PATH = "save/display_settings.lua",
   ACTIVE_RUN_VERSION = 1,
   ACTIVE_RUN_ARTIFACT_TYPE = "active_run",
   ACTIVE_RUN_PATH = "save/active_run.lua",
@@ -509,6 +512,54 @@ function SaveSystem.loadMetaState(providedFilesystem)
   return SaveSystem.decodeMetaStateString(contents)
 end
 
+function SaveSystem.decodeDisplaySettingsString(contents)
+  local payload, parseError = SaveSystem.parseTablePayload(contents)
+
+  if not payload then
+    return nil, parseError
+  end
+
+  if type(payload) ~= "table" then
+    return nil, "display settings payload was not a table"
+  end
+
+  if payload.artifactType ~= SaveSystem.DISPLAY_SETTINGS_ARTIFACT_TYPE then
+    return nil, string.format("unsupported_display_settings_artifact_type:%s", tostring(payload.artifactType))
+  end
+
+  if payload.version ~= SaveSystem.DISPLAY_SETTINGS_VERSION then
+    return nil, string.format("unsupported_display_settings_version:%s", tostring(payload.version))
+  end
+
+  if type(payload.targetResolutionId) ~= "string" or payload.targetResolutionId == "" then
+    return nil, "display settings targetResolutionId must be a non-empty string"
+  end
+
+  return {
+    targetResolutionId = payload.targetResolutionId,
+  }
+end
+
+function SaveSystem.loadDisplaySettings(providedFilesystem)
+  local filesystem = getFilesystem(providedFilesystem)
+
+  if not filesystem then
+    return nil, "filesystem_unavailable"
+  end
+
+  if not filesystem.getInfo(SaveSystem.DISPLAY_SETTINGS_PATH) then
+    return nil, "not_found"
+  end
+
+  local contents, readError = filesystem.read(SaveSystem.DISPLAY_SETTINGS_PATH)
+
+  if not contents then
+    return nil, readError or "read_failed"
+  end
+
+  return SaveSystem.decodeDisplaySettingsString(contents)
+end
+
 function SaveSystem.decodeActiveRunArtifactString(contents)
   local payload, parseError = SaveSystem.parseTablePayload(contents)
 
@@ -588,6 +639,35 @@ function SaveSystem.saveMetaState(metaState, providedFilesystem)
   end
 
   local ok, writeError = filesystem.write(SaveSystem.META_STATE_PATH, "return " .. SaveSystem.serializeValue(artifact))
+
+  if not ok then
+    return false, writeError or "write_failed"
+  end
+
+  return true
+end
+
+function SaveSystem.saveDisplaySettings(settings, providedFilesystem)
+  local filesystem = getFilesystem(providedFilesystem)
+
+  if not filesystem then
+    return false, "filesystem_unavailable"
+  end
+
+  if type(settings) ~= "table" or type(settings.targetResolutionId) ~= "string" or settings.targetResolutionId == "" then
+    return false, "invalid_display_settings"
+  end
+
+  if filesystem.createDirectory then
+    filesystem.createDirectory("save")
+  end
+
+  local artifact = {
+    artifactType = SaveSystem.DISPLAY_SETTINGS_ARTIFACT_TYPE,
+    version = SaveSystem.DISPLAY_SETTINGS_VERSION,
+    targetResolutionId = settings.targetResolutionId,
+  }
+  local ok, writeError = filesystem.write(SaveSystem.DISPLAY_SETTINGS_PATH, "return " .. SaveSystem.serializeValue(artifact))
 
   if not ok then
     return false, writeError or "write_failed"

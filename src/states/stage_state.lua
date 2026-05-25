@@ -1,4 +1,5 @@
 local Button = require("src.ui.button")
+local CoinDetailOverlay = require("src.ui.coin_detail_overlay")
 local CoinArt = require("src.ui.coin_art")
 local Coins = require("src.content.coins")
 local Layout = require("src.ui.layout")
@@ -708,8 +709,8 @@ end
 
 function StageState:getHelpDialogLayout(app)
   local rect, spacing = getUiRect(app)
-  local dialogWidth = math.min(700, math.max(1, rect.width - (spacing.screenPadding * 2)))
-  local dialogHeight = math.min(460, math.max(1, rect.height - (spacing.screenPadding * 2)))
+  local dialogWidth = math.min(Theme.scale(700), math.max(1, rect.width - (spacing.screenPadding * 2)))
+  local dialogHeight = math.min(Theme.scale(460), math.max(1, rect.height - (spacing.screenPadding * 2)))
 
   return {
     x = rect.x + math.floor((rect.width - dialogWidth) / 2),
@@ -830,46 +831,24 @@ end
 
 function StageState:drawCoinDetailOverlay(app, coinId, x, y)
   local coin = coinId and Coins.getById(coinId) or nil
-
-  if not coin then
-    return
-  end
-
   local rect, spacing = getUiRect(app)
-  local width = math.min(330, math.max(1, rect.width - (spacing.screenPadding * 2)))
-  local height = math.min(150, math.max(1, rect.height - (spacing.screenPadding * 2)))
-  local overlayX = math.min(x + 18, rect.x + rect.width - width - spacing.screenPadding)
-  local overlayY = math.min(y + 18, rect.y + rect.height - height - spacing.screenPadding)
-
-  overlayX = math.max(rect.x + spacing.screenPadding, overlayX)
-  overlayY = math.max(rect.y + spacing.screenPadding, overlayY)
-
-  love.graphics.setColor(0.03, 0.04, 0.07, 0.96)
-  love.graphics.rectangle("fill", overlayX + 4, overlayY + 4, width, height)
-  love.graphics.setColor(0.08, 0.10, 0.15, 0.98)
-  love.graphics.rectangle("fill", overlayX, overlayY, width, height)
-  Theme.applyColor(Theme.colors.accent)
-  love.graphics.setLineWidth(2)
-  love.graphics.rectangle("line", overlayX, overlayY, width, height)
-  love.graphics.setLineWidth(1)
-
-  CoinArt.draw(coin, overlayX + 14, overlayY + 18, 62, { selected = true, tilt = -0.04 })
-  love.graphics.setFont(app.fonts.body)
-  Theme.applyColor(Theme.colors.text)
-  love.graphics.print(string.format("%s (%s)", coin.name, coin.rarity), overlayX + 90, overlayY + 16)
-  love.graphics.setFont(app.fonts.small)
-  Theme.applyColor(Theme.colors.mutedText)
-  Layout.drawRichWrappedText(Terminology.getMechanicRichText(coin.description or ""), overlayX + 90, overlayY + 42, width - 106, Theme.colors.mutedText, app.fonts.small:getHeight() + 2, 68)
-  Theme.applyColor(Theme.colors.warning)
-  love.graphics.printf(string.format("Tags: %s", Terminology.formatTagList(coin.tags)), overlayX + 14, overlayY + 118, width - 28, "left")
+  CoinDetailOverlay.draw(app, coin, x, y, {
+    bounds = {
+      x = rect.x,
+      y = rect.y,
+      width = rect.width,
+      height = rect.height,
+      screenPadding = spacing.screenPadding,
+    },
+  })
 end
 
 function StageState:getHelpDialogCloseButton(dialogX, dialogY, dialogWidth)
-  local size = 32
+  local size = Theme.scale(32)
 
   return {
     x = dialogX + dialogWidth - Theme.spacing.panelPadding - size,
-    y = dialogY + Theme.spacing.panelPadding - 4,
+    y = dialogY + Theme.spacing.panelPadding - Theme.scale(4),
     width = size,
     height = size,
     label = "X",
@@ -991,12 +970,12 @@ function StageState:getCoinRowLayout(app, x, y, width, height, coinCount, titleH
   local _, _, componentMetrics = getUiRect(app)
   local count = math.max(1, coinCount or 1)
   local cardGap = Theme.spacing.itemGap
-  local maxCardHeight = math.max(132, height - (titleHeight or 0) - 18)
-  local cardHeight = math.min(230, maxCardHeight)
+  local maxCardHeight = math.max(Theme.scale(132), height - (titleHeight or 0) - Theme.scale(18))
+  local cardHeight = math.min(Theme.scale(230), maxCardHeight)
   local availableCardWidth = math.floor((width - (cardGap * (count - 1))) / count)
   local cardWidth = math.min(componentMetrics.cardMaxWidth, availableCardWidth, math.floor(cardHeight * 0.92))
   cardWidth = math.max(componentMetrics.cardMinWidth, cardWidth)
-  cardHeight = math.max(132, cardHeight)
+  cardHeight = math.max(Theme.scale(132), cardHeight)
 
   local totalWidth = (cardWidth * count) + (cardGap * (count - 1))
 
@@ -1159,7 +1138,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
     dragPushDistance = math.floor(dragLayout.cardWidth * 0.32)
     self.dragInsertSlotIndex = self:getDragInsertSlotIndex(dragTargetX, dragLayout, #coins)
     dragGhostX, dragGhostY = self:getDragGhostCenter(dragLayout, self.dragInsertSlotIndex, #drawCoins, dragPushDistance)
-    dragGhostSize = math.min(96, math.max(62, math.floor(dragLayout.cardWidth * 0.54)))
+    dragGhostSize = math.min(Theme.scale(96), math.max(Theme.scale(62), math.floor(dragLayout.cardWidth * 0.54)))
   else
     self.dragInsertSlotIndex = nil
   end
@@ -1200,7 +1179,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
     local impactPunch = impactAge and impactAge >= 0 and math.max(0, 1 - (impactAge / 0.26)) or 0
     local sleightAnimation = not hasResult and not rowRevealActive and self.sleightAnimations and self.sleightAnimations[coin.slotIndex or index] or nil
     local cardDrawX = cardX
-    local coinSize = math.min(96, math.max(62, math.floor(activeCardWidth * 0.54)))
+    local coinSize = math.min(Theme.scale(96), math.max(Theme.scale(62), math.floor(activeCardWidth * 0.54)))
     local animatedCoinSize = math.floor(coinSize * (motionScale + (impactPunch * 0.08)))
     local coinCenterX = cardDrawX + math.floor(activeCardWidth / 2)
     local staggerOffset = (index % 2 == 0) and 16 or -16
@@ -1366,9 +1345,9 @@ function StageState:drawCoinRow(app, x, y, width, height)
         tilt = self.dragTilt or 0,
       })
     end
-  elseif hoveredCoinId then
-    self:drawCoinDetailOverlay(app, hoveredCoinId, mouseX, mouseY)
   end
+
+  return hoveredCoinId
 end
 
 function StageState:drawMatchParticles(cardX, cardY, cardWidth, cardHeight, age)
@@ -1936,7 +1915,7 @@ function StageState:draw(app)
 
   local coinRowArea = Panel.getContentArea(gameArea.x, gameArea.y, gameArea.width, gameArea.height, "Hand")
 
-  self:drawCoinRow(app, coinRowArea.x, coinRowArea.y, coinRowArea.width, coinRowArea.height)
+  local hoveredCoinId = self:drawCoinRow(app, coinRowArea.x, coinRowArea.y, coinRowArea.width, coinRowArea.height)
 
   Panel.draw(actionsArea.x, actionsArea.y, actionsArea.width, actionsArea.height)
 
@@ -1947,6 +1926,9 @@ function StageState:draw(app)
   Button.drawButtons(self:buildButtons(app, buttonLayout.x, buttonLayout.y, buttonLayout.width, buttonLayout.height), mouseX, mouseY)
 
   Button.drawButtons({ self:getLogButtonLayout(app), self:getPurseButtonLayout(app), self:getHelpButtonLayout(app) }, mouseX, mouseY)
+  if hoveredCoinId and not self.draggingHandCoinId then
+    self:drawCoinDetailOverlay(app, hoveredCoinId, mouseX, mouseY)
+  end
   self:drawHelpDialog(app)
   self:drawPurseDialog(app)
   self:drawLogDialog(app)

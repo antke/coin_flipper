@@ -1,4 +1,5 @@
 local Button = require("src.ui.button")
+local CoinDetailOverlay = require("src.ui.coin_detail_overlay")
 local CoinArt = require("src.ui.coin_art")
 local Coins = require("src.content.coins")
 local GameConfig = require("src.app.config")
@@ -7,7 +8,6 @@ local Loadout = require("src.domain.loadout")
 local LoadoutSystem = require("src.systems.loadout_system")
 local Panel = require("src.ui.panel")
 local PurseView = require("src.ui.purse_view")
-local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
 local Utils = require("src.core.utils")
 local Validator = require("src.core.validator")
@@ -82,16 +82,16 @@ function LoadoutState:getLayout(app)
   local gap = Theme.spacing.blockGap
   local width = love.graphics.getWidth()
   local height = love.graphics.getHeight()
-  local panelY = 82
+  local panelY = Theme.scale(82)
   local footerMetrics = Layout.getFooterMetrics(height, {
-    buttonHeight = 38,
+    buttonHeight = Theme.componentMetrics.buttonHeight,
     buttonRows = 1,
-    statusHeight = 44,
+    statusHeight = Theme.scale(44),
     extraSpacing = Theme.spacing.statusPadding,
   })
-  local availableHeight = math.max(220, footerMetrics.contentBottomY - panelY)
+  local availableHeight = math.max(Theme.scale(220), footerMetrics.contentBottomY - panelY)
   local contentWidth = width - (padding * 2)
-  local topHeight = math.min(160, math.floor(availableHeight * 0.30))
+  local topHeight = math.min(Theme.scale(160), math.floor(availableHeight * 0.30))
   local slotY = panelY + topHeight + gap
   local slotHeight = availableHeight - topHeight - gap
 
@@ -398,39 +398,7 @@ end
 
 function LoadoutState:drawCoinDetailOverlay(app, coinId, x, y)
   local coin = coinId and Coins.getById(coinId) or nil
-
-  if not coin then
-    return
-  end
-
-  local width = 330
-  local height = 150
-  local screenWidth = love.graphics.getWidth()
-  local screenHeight = love.graphics.getHeight()
-  local overlayX = math.min(x + 18, screenWidth - width - Theme.spacing.screenPadding)
-  local overlayY = math.min(y + 18, screenHeight - height - Theme.spacing.screenPadding)
-
-  overlayX = math.max(Theme.spacing.screenPadding, overlayX)
-  overlayY = math.max(Theme.spacing.screenPadding, overlayY)
-
-  love.graphics.setColor(0.03, 0.04, 0.07, 0.96)
-  love.graphics.rectangle("fill", overlayX + 4, overlayY + 4, width, height)
-  love.graphics.setColor(0.08, 0.10, 0.15, 0.98)
-  love.graphics.rectangle("fill", overlayX, overlayY, width, height)
-  Theme.applyColor(Theme.colors.accent)
-  love.graphics.setLineWidth(2)
-  love.graphics.rectangle("line", overlayX, overlayY, width, height)
-  love.graphics.setLineWidth(1)
-
-  CoinArt.draw(coin, overlayX + 14, overlayY + 18, 62, { selected = true, tilt = -0.04 })
-  love.graphics.setFont(app.fonts.body)
-  Theme.applyColor(Theme.colors.text)
-  love.graphics.print(string.format("%s (%s)", coin.name, coin.rarity), overlayX + 90, overlayY + 16)
-  love.graphics.setFont(app.fonts.small)
-  Theme.applyColor(Theme.colors.mutedText)
-  Layout.drawRichWrappedText(Terminology.getMechanicRichText(coin.description), overlayX + 90, overlayY + 42, width - 106, Theme.colors.mutedText, app.fonts.small:getHeight() + 2, 68)
-  Theme.applyColor(Theme.colors.warning)
-  love.graphics.printf(string.format("Tags: %s", Terminology.formatTagList(coin.tags)), overlayX + 14, overlayY + 118, width - 28, "left")
+  CoinDetailOverlay.draw(app, coin, x, y)
 end
 
 function LoadoutState:buildActionButtons(app, layout)
