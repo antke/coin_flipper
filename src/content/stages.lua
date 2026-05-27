@@ -112,7 +112,7 @@ local definitions = {
           name = "Long-Game Grinder",
           description = "A stubborn table fixture built to survive one more flip.",
         },
-        activeStageModifierIds = { "long_game", "side_pot" },
+        activeStageModifierIds = { "crosswind_table", "side_pot" },
       },
     },
   },

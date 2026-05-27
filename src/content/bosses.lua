@@ -19,7 +19,7 @@ local definitions = {
   {
     id = "loaded_ledger",
     name = "Loaded Ledger",
-    description = "Each equipped coin gains +0.06 Tails weight before rolling.",
+    description = "Each equipped coin gains +6% Tails chance before rolling.",
     tags = { "boss", "weight", "tails" },
     triggers = {
       {
@@ -67,7 +67,7 @@ local definitions = {
   {
     id = "stacked_deck",
     name = "Stacked Deck",
-    description = "Each equipped coin gains +0.06 Heads weight before rolling.",
+    description = "Each equipped coin gains +6% Heads chance before rolling.",
     tags = { "boss", "weight", "heads" },
     triggers = {
       {

@@ -10,12 +10,12 @@ return {
     return {
       runOptions = {
         seed = 5,
-        starterCollection = { "tails_chaser", "match_spark", "heads_hunter" },
+        starterCollection = { "tails_loaded_penny", "heads_anchor", "heads_cache" },
       },
       initialLoadout = {
-        [1] = "tails_chaser",
-        [2] = "match_spark",
-        [3] = "heads_hunter",
+        [1] = "tails_loaded_penny",
+        [2] = "heads_anchor",
+        [3] = "heads_cache",
       },
     }
   end,
@@ -35,18 +35,18 @@ return {
     local firstBatch = A.truthy(A.getResult("first_batch"), "missing first batch")
     local resolutionEntries = firstBatch.batch.resolutionEntries or {}
 
-    A.equal(resolutionEntries[1].coinId, "tails_chaser", "first resolution entry coin")
+    A.equal(resolutionEntries[1].coinId, "tails_loaded_penny", "first resolution entry coin")
     A.equal(resolutionEntries[1].slotIndex, 1, "first resolution entry slot")
     A.equal(resolutionEntries[1].resolutionIndex, 1, "first resolution entry index")
-    A.equal(resolutionEntries[2].coinId, "tails_chaser", "second resolution entry coin")
+    A.equal(resolutionEntries[2].coinId, "tails_loaded_penny", "second resolution entry coin")
     A.equal(resolutionEntries[2].slotIndex, 2, "second resolution entry slot")
-    A.equal(resolutionEntries[3].coinId, "match_spark", "third resolution entry coin")
+    A.equal(resolutionEntries[3].coinId, "heads_anchor", "third resolution entry coin")
     A.equal(resolutionEntries[3].slotIndex, 3, "third resolution entry slot")
-    A.equal(resolutionEntries[4].coinId, "heads_hunter", "fourth resolution entry coin")
+    A.equal(resolutionEntries[4].coinId, "heads_cache", "fourth resolution entry coin")
     A.equal(resolutionEntries[4].slotIndex, 4, "fourth resolution entry slot")
-    A.equal(resolutionEntries[5].coinId, "match_spark", "fifth resolution entry coin")
+    A.equal(resolutionEntries[5].coinId, "heads_anchor", "fifth resolution entry coin")
     A.equal(resolutionEntries[5].slotIndex, 5, "fifth resolution entry slot")
-    A.equal(env.runState.history.loadoutCommits[1].canonicalKey, "heads_hunter|match_spark|tails_chaser", "canonical key remains sorted")
+    A.equal(env.runState.history.loadoutCommits[1].canonicalKey, "heads_anchor|heads_cache|tails_loaded_penny", "canonical key remains sorted")
     A.truthy(#(env.transcript.expected.batchSignatures or {}) > 0, "batch signatures should exist")
     A.replayOk(env.replay, "unordered slot replay should succeed")
 

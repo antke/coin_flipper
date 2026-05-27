@@ -17,7 +17,7 @@ return {
       },
       runOptions = {
         seed = 10,
-        ownedUpgradeIds = { "contraband_case", "showcase_rack" },
+        ownedUpgradeIds = { "cashback_badge", "showcase_rack" },
       },
     }
   end,
@@ -37,12 +37,7 @@ return {
     A.equal(env.runState.maxActiveCoinSlots, 4, "max active coin slots")
     A.equal(env.runState.shopPoints, 2 + (env.stageRecord.stageClearShopPoints or 0), "starting shop points plus clear reward")
     A.equal(env.runState.shopRerollsRemaining, 1, "starting shop rerolls")
-    A.equal(#offers, 4, "shop offer count with contraband case")
-
-    local bonusOffer = A.contains(offers, function(offer)
-      return offer.contentId == "boss_biter"
-    end, "bonus boss biter offer expected")
-    A.truthy(bonusOffer.injectedBy ~= nil, "bonus offer should preserve injectedBy")
+    A.equal(#offers, 3, "shop offer count")
 
     for _, offer in ipairs(offers) do
       if offer.type == "upgrade" then
@@ -52,11 +47,8 @@ return {
       end
     end
 
-    A.notContains(offers, { contentId = "contraband_case" }, "owned contraband case should not be re-offered")
+    A.notContains(offers, { contentId = "cashback_badge" }, "owned cashback badge should not be re-offered")
     A.notContains(offers, { contentId = "showcase_rack" }, "owned showcase rack should not be re-offered")
-    A.contains(env.shopFlow.lastGenerationTrace.messages or {}, function(message)
-      return tostring(message):find("Contraband Case smuggled in a bonus coin offer.", 1, true) ~= nil
-    end, "contraband message should be present")
     A.equal(#(env.shopSession.offerSets or {}), 1, "shop offer set history count")
     A.equal(#(env.shopSession.generationTraces or {}), 1, "shop generation trace count")
   end,

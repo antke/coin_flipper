@@ -22,7 +22,7 @@ local definitions = {
   {
     id = "meta_bonus_points_1",
     name = "Traveler's Change",
-    description = "+2 starting Chips in runs.",
+    description = "+2 extra starting Chips in runs.",
     cost = 2,
     tags = { "meta", "economy" },
     effectiveValues = {
@@ -42,26 +42,26 @@ local definitions = {
   {
     id = "meta_unlock_streak_drill",
     name = "Pattern Primer",
-    description = "Unlock Streak Drill, Safety Net, and Reserve Token for future runs and shops.",
+    description = "Unlock Streak Drill for future runs and shops.",
     cost = 3,
     tags = { "meta", "unlock", "coin" },
-    unlockCoinIds = { "streak_drill", "safety_net", "reserve_token" },
+    unlockCoinIds = { "streak_drill" },
   },
   {
     id = "meta_unlock_merchant_tools",
     name = "Merchant Toolbelt",
-    description = "Unlock Cashback Badge, Showcase Rack, Contraband Case, and Recovery Coupon for future shops.",
+    description = "Unlock Cashback Badge, Showcase Rack, and Recovery Coupon for future shops.",
     cost = 4,
     tags = { "meta", "unlock", "shop" },
-    unlockUpgradeIds = { "cashback_badge", "showcase_rack", "contraband_case", "recovery_coupon" },
+    unlockUpgradeIds = { "cashback_badge", "showcase_rack", "recovery_coupon" },
   },
   {
     id = "meta_unlock_tactical_notes",
     name = "Tactical Notes",
-    description = "Unlock Echo Cache, Reserve Fuse, Boss Banner, and Rainy Day Fund for future runs and shops.",
+    description = "Unlock Echo Cache and Rainy Day Fund for future runs and shops.",
     cost = 5,
     tags = { "meta", "unlock", "strategy" },
-    unlockUpgradeIds = { "echo_cache", "reserve_fuse", "boss_banner", "rainy_day_fund" },
+    unlockUpgradeIds = { "echo_cache", "rainy_day_fund" },
   },
   {
     id = "meta_shop_quality_1",

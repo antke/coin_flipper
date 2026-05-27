@@ -2,6 +2,7 @@ local ActionQueue = require("src.core.action_queue")
 local EffectiveValueSystem = require("src.systems.effective_value_system")
 local FlipBatch = require("src.domain.flip_batch")
 local HookRegistry = require("src.core.hook_registry")
+local LuckSystem = require("src.systems.luck_system")
 local PurseHookSystem = require("src.systems.purse_hook_system")
 local PurseSystem = require("src.systems.purse_system")
 local ScoreBreakdown = require("src.domain.score_breakdown")
@@ -13,7 +14,24 @@ local Utils = require("src.core.utils")
 
 local FlipResolver = {}
 
+local function clampChance(value)
+  return math.max(0, math.min(1, value or 0))
+end
+
+local function applyCoinWeightBonuses(headsWeight, tailsWeight, instance)
+  local bonuses = instance and instance.state and instance.state.coinWeightBonuses or nil
+
+  if not bonuses then
+    return headsWeight, tailsWeight
+  end
+
+  local headsChance = clampChance((headsWeight or 0) + (bonuses.heads or 0) - (bonuses.tails or 0))
+  return headsChance, 1 - headsChance
+end
+
 function FlipResolver.buildResolutionContext(runState, stageState, metaProjection, call, rng)
+  LuckSystem.normalize(runState)
+
   local context = ActionQueue.createContext("batch", {
     batchId = stageState.batchIndex + 1,
     call = call,
@@ -31,6 +49,10 @@ function FlipResolver.buildResolutionContext(runState, stageState, metaProjectio
       maxPendingActionDepth = GameConfig.get("engine.maxPendingActionDepth"),
       limitHit = false,
     },
+    luck = {
+      wasFatedFlip = LuckSystem.isFatedFlipActive(runState),
+      fatedFlipGeneratesLuck = LuckSystem.getFatedFlipGeneratesLuck(runState),
+    },
     trace = {
       batchId = stageState.batchIndex + 1,
       call = call,
@@ -47,6 +69,7 @@ function FlipResolver.buildResolutionContext(runState, stageState, metaProjectio
     rng = rng,
   })
 
+  LuckSystem.ensureTrace(context)
   return context
 end
 
@@ -59,16 +82,19 @@ function FlipResolver.prepareCoinRollState(runState, stageState, metaProjection,
   })
 
   for _, resolutionEntry in ipairs(resolutionEntries) do
+    local instance = PurseSystem.getInstance(runState, resolutionEntry.instanceId)
+    local coinHeadsWeight, coinTailsWeight = applyCoinWeightBonuses(headsWeight, tailsWeight, instance)
+
     table.insert(perCoin, {
       coinId = resolutionEntry.coinId,
       instanceId = resolutionEntry.instanceId,
       slotIndex = resolutionEntry.slotIndex,
       originalDrawIndex = resolutionEntry.originalDrawIndex,
       resolutionIndex = resolutionEntry.resolutionIndex,
-      baseHeadsWeight = headsWeight,
-      baseTailsWeight = tailsWeight,
-      headsWeight = headsWeight,
-      tailsWeight = tailsWeight,
+      baseHeadsWeight = coinHeadsWeight,
+      baseTailsWeight = coinTailsWeight,
+      headsWeight = coinHeadsWeight,
+      tailsWeight = coinTailsWeight,
       result = nil,
       rngRoll = nil,
       flags = {},
@@ -79,18 +105,23 @@ function FlipResolver.prepareCoinRollState(runState, stageState, metaProjection,
 end
 
 function FlipResolver.resolveCoinOutcome(coinRollState, context)
-  local totalWeight = math.max(coinRollState.headsWeight + coinRollState.tailsWeight, 0.00001)
   local roll = context.rng:nextFloat()
-  local normalizedHeadsWeight = coinRollState.headsWeight / totalWeight
+  local headsChance = clampChance(coinRollState.headsWeight)
   local forcedResult = nil
+  local forcedReason = nil
 
-  if context.runState and type(context.runState.pendingForcedCoinResults) == "table" and #context.runState.pendingForcedCoinResults > 0 then
+  if context.luck and context.luck.wasFatedFlip == true then
+    forcedResult = context.call
+    forcedReason = "fated_flip"
+  elseif context.runState and type(context.runState.pendingForcedCoinResults) == "table" and #context.runState.pendingForcedCoinResults > 0 then
     forcedResult = table.remove(context.runState.pendingForcedCoinResults, 1)
+    forcedReason = "pending_forced_result"
   end
 
   coinRollState.rngRoll = roll
   coinRollState.forcedResult = forcedResult
-  coinRollState.result = forcedResult or (roll <= normalizedHeadsWeight and "heads" or "tails")
+  coinRollState.forcedReason = forcedReason
+  coinRollState.result = forcedResult or (roll <= headsChance and "heads" or "tails")
 
   table.insert(context.trace.coinRolls, {
     coinId = coinRollState.coinId,
@@ -104,6 +135,7 @@ function FlipResolver.resolveCoinOutcome(coinRollState, context)
     rngRoll = roll,
     result = coinRollState.result,
     forcedResult = forcedResult,
+    forcedReason = forcedReason,
   })
 
   if forcedResult then
@@ -114,6 +146,7 @@ function FlipResolver.resolveCoinOutcome(coinRollState, context)
       slotIndex = coinRollState.slotIndex,
       resolutionIndex = coinRollState.resolutionIndex,
       rngRoll = roll,
+      reason = forcedReason,
     })
   end
 
@@ -328,10 +361,12 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
   FlipResolver.applyPhaseActions(runState, stageState, context, "score_assembly", scoringActions, 0)
 
   FlipResolver.runPhase(runState, stageState, context, "after_scoring")
+  LuckSystem.applyBaseMatchLuck(runState, context)
   FlipResolver.updateCounters(runState, stageState, context)
   FlipResolver.runPhase(runState, stageState, context, "before_stage_end_check")
   FlipResolver.evaluateStageEnd(stageState, context)
   FlipResolver.runPhase(runState, stageState, context, "on_batch_end")
+  LuckSystem.consumeFatedFlip(runState, context)
 
   if GameConfig.get("scoring.clearOnThresholdAtBatchEnd", true) == true and stageState.stageScore >= stageState.targetScore then
     stageState.stageStatus = "cleared"

@@ -51,6 +51,18 @@ local Theme = {
     },
   },
 
+  scoreFloaty = {
+    duration = 1.15,
+    fadeOutDuration = 0.34,
+    distance = 58,
+    damageDistance = 46,
+    popScale = 1.34,
+    outline = 3,
+    fontName = "heading",
+    outlineColor = { 0, 0, 0, 0.88 },
+    shadowColor = { 0, 0, 0, 0.58 },
+  },
+
   spacing = {
     screenPadding = 28,
     blockGap = 20,

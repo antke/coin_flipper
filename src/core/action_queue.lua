@@ -26,6 +26,7 @@ ActionQueue.KNOWN_OPS = {
   add_stage_score = true,
   add_run_score = true,
   add_shop_points = true,
+  add_luck = true,
   modify_coin_weight = true,
   apply_score_multiplier = true,
   set_batch_flag = true,
@@ -237,6 +238,31 @@ local function getCoinWeightTargets(context, action)
   return context.perCoin or {}
 end
 
+local function clampChance(value)
+  return math.max(0, math.min(1, value or 0))
+end
+
+local function applyCoinChanceDelta(coinState, side, amount)
+  local sideField = side .. "Weight"
+  local otherField = side == "heads" and "tailsWeight" or "headsWeight"
+  local sideChance = clampChance((coinState[sideField] or 0) + amount)
+
+  coinState[sideField] = sideChance
+  coinState[otherField] = 1 - sideChance
+end
+
+local function applyPersistentCoinChanceDelta(runState, coinState, side, amount)
+  local instance = coinState and coinState.instanceId and PurseSystem.getInstance(runState, coinState.instanceId) or nil
+
+  if not instance then
+    return
+  end
+
+  instance.state = instance.state or {}
+  instance.state.coinWeightBonuses = instance.state.coinWeightBonuses or { heads = 0, tails = 0 }
+  instance.state.coinWeightBonuses[side] = (instance.state.coinWeightBonuses[side] or 0) + amount
+end
+
 local function validateQueuedActions(actionList)
   if type(actionList) ~= "table" then
     return false, "queue_actions requires actions table"
@@ -419,11 +445,13 @@ function ActionQueue.validateAction(action)
     return false, string.format("unknown op: %s", tostring(action.op))
   end
 
-  if action.op == "add_stage_score" or action.op == "add_run_score" or action.op == "add_shop_points" then
+  if action.op == "add_stage_score" or action.op == "add_run_score" or action.op == "add_shop_points" or action.op == "add_luck" then
     if type(action.amount) ~= "number" then
       return false, string.format("%s requires numeric amount", action.op)
     end
+  end
 
+  if action.op == "add_stage_score" or action.op == "add_run_score" or action.op == "add_shop_points" then
     if action.applyMultiplier ~= nil and type(action.applyMultiplier) ~= "boolean" then
       return false, string.format("%s applyMultiplier must be boolean", action.op)
     end
@@ -436,6 +464,10 @@ function ActionQueue.validateAction(action)
 
     if type(action.amount) ~= "number" then
       return false, "modify_coin_weight requires numeric amount"
+    end
+
+    if action.persistent ~= nil and type(action.persistent) ~= "boolean" then
+      return false, "modify_coin_weight persistent must be boolean"
     end
 
     if action.target ~= nil
@@ -627,7 +659,9 @@ function ActionQueue.apply(runState, stageState, context, action)
     ensureScoreBreakdown(context)
     requireStageState(stageState, action.op)
     stageState.stageScore = stageState.stageScore + action.amount
+    runState.runTotalScore = runState.runTotalScore + action.amount
     context.scoreBreakdown.totalStageScoreDelta = context.scoreBreakdown.totalStageScoreDelta + action.amount
+    context.scoreBreakdown.totalRunScoreDelta = context.scoreBreakdown.totalRunScoreDelta + action.amount
 
     if action.category ~= "base_score" then
       addScoreBreakdownEntry(context.scoreBreakdown.additiveBonuses, action, {
@@ -673,12 +707,24 @@ function ActionQueue.apply(runState, stageState, context, action)
     local appliedAction = Utils.clone(action)
     appliedAction.appliedAmount = scaledAmount
     table.insert(context.scoreBreakdown.shopPointChanges, appliedAction)
+  elseif action.op == "add_luck" then
+    local LuckSystem = require("src.systems.luck_system")
+    LuckSystem.addLuck(runState, context, action.amount, {
+      source = "action",
+      reason = action.reason,
+      action = action,
+      ignoreFatedSuppression = action.ignoreFatedSuppression == true,
+    })
   elseif action.op == "modify_coin_weight" then
     local targets = getCoinWeightTargets(context, action)
 
     for _, coinState in ipairs(targets) do
-      local fieldName = action.side .. "Weight"
-      coinState[fieldName] = math.max(0, coinState[fieldName] + action.amount)
+      if action.persistent == true then
+        applyPersistentCoinChanceDelta(runState, coinState, action.side, action.amount)
+      else
+        applyCoinChanceDelta(coinState, action.side, action.amount)
+      end
+
       coinState.weightChanges = coinState.weightChanges or {}
       table.insert(coinState.weightChanges, cloneActionForTrace(action))
     end

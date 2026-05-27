@@ -2,15 +2,18 @@ local Bosses = require("src.content.bosses")
 local AnalyticsSystem = require("src.systems.analytics_system")
 local AudioSystem = require("src.systems.audio_system")
 local Button = require("src.ui.button")
+local CoinDetailContent = require("src.content.coin_detail_content")
 local Coins = require("src.content.coins")
 local EncounterSystem = require("src.systems.encounter_system")
 local DebugOverlay = require("src.ui.debug_overlay")
 local EffectiveValueSystem = require("src.systems.effective_value_system")
+local FountainSystem = require("src.systems.fountain_system")
 local GameConfig = require("src.app.config")
 local HookRegistry = require("src.core.hook_registry")
 local Layout = require("src.ui.layout")
 local Loadout = require("src.domain.loadout")
 local LoadoutSystem = require("src.systems.loadout_system")
+local LuckSystem = require("src.systems.luck_system")
 local Log = require("src.core.log")
 local MetaProgressionSystem = require("src.systems.meta_progression_system")
 local MetaState = require("src.domain.meta_state")
@@ -113,6 +116,7 @@ function Game.new()
     postResultNextState = nil,
     rewardPreviewSession = nil,
     encounterSession = nil,
+    fountainSession = nil,
     shopOffers = {},
     shopSession = nil,
     draftSession = nil,
@@ -256,6 +260,7 @@ function Game:registerStates()
   self.stateGraph:register("reward_preview", require("src.states.reward_preview_state").new())
   self.stateGraph:register("boss_reward", require("src.states.boss_reward_state").new())
   self.stateGraph:register("encounter", require("src.states.encounter_state").new())
+  self.stateGraph:register("fountain", require("src.states.fountain_state").new())
   self.stateGraph:register("shop", require("src.states.shop_state").new())
   self.stateGraph:register("summary", require("src.states.summary_state").new())
   self.stateGraph:register("meta", require("src.states.meta_state").new())
@@ -485,6 +490,7 @@ function Game:buildActiveRunSnapshot(currentStateName, screenStateOverride)
     reward_preview = true,
     boss_reward = true,
     encounter = true,
+    fountain = true,
     shop = true,
   }
 
@@ -505,6 +511,7 @@ function Game:buildActiveRunSnapshot(currentStateName, screenStateOverride)
     postResultNextState = self.postResultNextState,
     rewardPreviewSession = Utils.clone(self.rewardPreviewSession),
     encounterSession = Utils.clone(self.encounterSession),
+    fountainSession = Utils.clone(self.fountainSession),
     shopOffers = Utils.clone(self.shopOffers or {}),
     shopSession = Utils.clone(self.shopSession),
     draftSession = Utils.clone(self.draftSession),
@@ -596,6 +603,7 @@ function Game:resumeSavedRun()
   self.postResultNextState = artifact.postResultNextState or self:computePostResultNextState()
   self.rewardPreviewSession = Utils.clone(artifact.rewardPreviewSession)
   self.encounterSession = Utils.clone(artifact.encounterSession)
+  self.fountainSession = Utils.clone(artifact.fountainSession)
   self.shopOffers = Utils.clone(artifact.shopOffers or {})
   self.shopSession = Utils.clone(artifact.shopSession)
   self.draftSession = Utils.clone(artifact.draftSession)
@@ -744,6 +752,7 @@ function Game:keypressed(key, scancode, isRepeat)
     reward_preview = true,
     boss_reward = true,
     encounter = true,
+    fountain = true,
     shop = true,
   }
 
@@ -1069,6 +1078,10 @@ function Game:executeMacroAction(actionName, payload)
     return stageRecord ~= nil, errorMessage
   end
 
+  if actionName == "prepare_fountain" then
+    return self:prepareFountain()
+  end
+
   if actionName == "prepare_shop" then
     return self:prepareShopOffers()
   end
@@ -1329,11 +1342,15 @@ function Game:getDraftOfferCards()
     local definition = Coins.getById(coinId)
 
     if definition then
+      local detail = CoinDetailContent.build(definition)
+
       table.insert(cards, {
         coinId = coinId,
-        name = definition.name,
+        name = detail.title,
         rarity = definition.rarity,
-        description = Terminology.formatText(definition.description or ""),
+        chanceText = detail.chanceText,
+        effectDescription = detail.effectText,
+        description = detail.description,
         tags = Terminology.formatTags(definition.tags or {}),
       })
     end
@@ -1400,6 +1417,7 @@ function Game:startNewRun(options)
   self.postResultNextState = nil
   self.rewardPreviewSession = nil
   self.encounterSession = nil
+  self.fountainSession = nil
   self.shopOffers = {}
   self.shopSession = nil
   self.draftSession = nil
@@ -1422,6 +1440,7 @@ function Game:clearRunState()
   self.postResultNextState = nil
   self.rewardPreviewSession = nil
   self.encounterSession = nil
+  self.fountainSession = nil
   self.shopOffers = {}
   self.shopSession = nil
   self.draftSession = nil
@@ -1484,7 +1503,7 @@ function Game:getRunRecordDetailLines(record)
     string.format("Final Round: %s", tostring(record.finalRound or "n/a")),
     string.format("Final Stage: %s", tostring(record.finalStageLabel or "n/a")),
     string.format("Final Stage Status: %s", tostring(record.finalStageStatus or "n/a")),
-    string.format("Run Total Damage: %s", tostring(record.runTotalScore or 0)),
+    string.format("Total Score: %s", tostring(record.runTotalScore or 0)),
     string.format("Meta Reward Earned: %s", tostring(record.metaRewardEarned or 0)),
     string.format("Shop Visits / Rerolls: %s / %s", tostring(record.shopVisitCount or 0), tostring(record.totalRerollsUsed or 0)),
     string.format("Collection Size: %s", tostring(record.collectionSize or 0)),
@@ -1568,6 +1587,7 @@ function Game:onStateChanged(currentStateName, previousName, payload)
     reward_preview = true,
     boss_reward = true,
     encounter = true,
+    fountain = true,
     shop = true,
   }
 
@@ -1988,11 +2008,14 @@ function Game:getPurseCardData(stageState)
   for _, definitionId in ipairs(ids) do
     local count = counts[definitionId]
     local definition = Coins.getById(definitionId)
+    local detail = CoinDetailContent.build(definition)
 
     table.insert(cards, {
       coinId = definitionId,
-      name = definition and definition.name or definitionId,
-      description = Terminology.formatText(definition and definition.description or ""),
+      name = detail and detail.title or definitionId,
+      chanceText = detail and detail.chanceText or "50/50 Heads/Tails",
+      effectDescription = detail and detail.effectText or "",
+      description = detail and detail.description or "",
       rarity = definition and definition.rarity or "common",
       count = count.total,
       available = count.available,
@@ -2383,6 +2406,73 @@ function Game:prepareShopOffers()
   return true
 end
 
+function Game:getLuckMeter()
+  return LuckSystem.getMeter(self.runState)
+end
+
+function Game:isFatedFlipActive()
+  return self.runState ~= nil and LuckSystem.isFatedFlipActive(self.runState)
+end
+
+function Game:prepareFountain()
+  if not self.runState then
+    return false, "run_not_initialized"
+  end
+
+  if not self.lastStageResult or self.lastStageResult.status ~= "cleared" then
+    return false, "cleared_stage_required"
+  end
+
+  if self.lastStageResult.stageType == "boss" then
+    return false, "boss_stage_has_no_fountain"
+  end
+
+  if not self.fountainSession
+    or self.fountainSession.sourceStageId ~= self.lastStageResult.stageId
+    or self.fountainSession.roundIndex ~= self.lastStageResult.roundIndex then
+    self.fountainSession = FountainSystem.buildSession(self.runState, self.lastStageResult)
+  end
+
+  self:assertRuntimeInvariants("game.prepareFountain", { history = true })
+  self:saveActiveRun("prepare_fountain", "fountain")
+  return true
+end
+
+function Game:getFountainSession()
+  return self.fountainSession
+end
+
+function Game:getFountainOptions()
+  return FountainSystem.getOptions(self.runState)
+end
+
+function Game:selectFountainCoin(instanceId)
+  if not self.fountainSession then
+    return false, "fountain_not_prepared"
+  end
+
+  self.fountainSession.selectedInstanceId = instanceId
+  self:saveActiveRun("select_fountain_coin", "fountain")
+  return true
+end
+
+function Game:sacrificeFountainCoin(instanceId)
+  local selectedInstanceId = instanceId or (self.fountainSession and self.fountainSession.selectedInstanceId) or nil
+  local ok, result = FountainSystem.sacrifice(self.runState, self.stageState, self.fountainSession, selectedInstanceId)
+
+  if not ok then
+    return false, result
+  end
+
+  self:assertRuntimeInvariants("game.sacrificeFountainCoin", { history = true })
+  self:showFeedback("warning", "Fountain Favor", string.format("%s became +%d Luck generation.", result.name, result.favorGained), {
+    duration = 1.2,
+    flashAlpha = 0.05,
+  })
+  self:saveActiveRun("sacrifice_fountain_coin", "fountain")
+  return true, result
+end
+
 function Game:recordCurrentShopOfferSet(reason)
   RunHistorySystem.recordShopOfferSet(self.shopSession, self.shopOffers, reason)
 end
@@ -2480,6 +2570,7 @@ function Game:advanceAfterShop()
   self.postResultNextState = nil
   self.rewardPreviewSession = nil
   self.encounterSession = nil
+  self.fountainSession = nil
   self.shopOffers = {}
   self.shopSession = nil
   self.lastShopGenerationTrace = nil
@@ -2656,13 +2747,13 @@ function Game:getEffectiveValueLines(effectiveValues)
     end
 
     if path == "flip.baseHeadsWeight" or path == "flip.baseTailsWeight" then
-      local label = path == "flip.baseHeadsWeight" and "Base Heads weight" or "Base Tails weight"
+      local label = path == "flip.baseHeadsWeight" and "Base Heads chance" or "Base Tails chance"
 
       if mode == "override" then
-        return string.format("%s = %.2f", label, value)
+        return string.format("%s = %.0f%%", label, value * 100)
       end
 
-      return string.format("%s %s", label, formatSignedNumber(value))
+      return string.format("%s %+0.0f%%", label, value * 100)
     end
 
     if mode == "multiply" then
@@ -2710,7 +2801,7 @@ function Game:getMetaStatusLines()
     string.format("Unlocked Upgrades: %d/%d", unlockedUpgradeCount, #(Upgrades.getAll() or {})),
     string.format("Runs Started: %d", self.metaState.stats.runsStarted or 0),
     string.format("Runs Won: %d", self.metaState.stats.runsWon or 0),
-    string.format("Best Run Damage: %d", self.metaState.stats.bestRunScore or 0),
+    string.format("Best Total Score: %d", self.metaState.stats.bestRunScore or 0),
     string.format("Bosses Defeated: %d", self.metaState.stats.bossesDefeated or 0),
   }
 end
@@ -3097,7 +3188,7 @@ function Game:getPostResultDestinationState()
     and self.lastStageResult.status == "cleared"
     and self.runState ~= nil
     and self.runState.runStatus == "active" then
-    return "shop"
+    return "fountain"
   end
 
   return "summary"
@@ -3134,6 +3225,10 @@ function Game:getPostResultDestinationLabel()
     return "victory reward"
   end
 
+  if destination == "fountain" then
+    return "fountain"
+  end
+
   return destination
 end
 
@@ -3146,6 +3241,10 @@ function Game:getPostStageReviewFollowupLine()
 
   if destination == "shop" then
     return "Shop follows."
+  end
+
+  if destination == "fountain" then
+    return "Fountain follows."
   end
 
   return "Run summary follows."
@@ -3193,7 +3292,6 @@ function Game:getRewardPreviewLines()
   local result = self.lastStageResult or {}
   local lines = {
     string.format("Opponent Defeated: %s", result.opponentName or result.stageLabel or "n/a"),
-    string.format("Run Total Damage: %d", result.runTotalScore or (self.runState and self.runState.runTotalScore or 0)),
     string.format("Chips Ready: %d", result.shopPoints or (self.runState and self.runState.shopPoints or 0)),
     string.format("Free Shop Rerolls: %d", result.shopRerollsRemaining or (self.runState and self.runState.shopRerollsRemaining or 0)),
     string.format("Loadout Key: %s", result.loadoutKey or self:getCurrentLoadoutKey()),
@@ -3202,7 +3300,7 @@ function Game:getRewardPreviewLines()
 
   local victoryChipLine = self:formatVictoryChipRewardLine(result)
   if victoryChipLine then
-    table.insert(lines, 4, victoryChipLine)
+    table.insert(lines, 3, victoryChipLine)
   end
 
   if (result.metaRewardEarned or 0) > 0 then
@@ -3921,13 +4019,12 @@ function Game:getBossRewardLines()
   local session = self:getRewardSession()
   local lines = {
     string.format("Boss Defeated: %s", result.opponentName or result.stageLabel or "n/a"),
-    string.format("Final Run Damage: %d", result.runTotalScore or (self.runState and self.runState.runTotalScore or 0)),
     string.format("Final Loadout: %s", result.loadoutKey or self:getCurrentLoadoutKey()),
   }
 
   local victoryChipLine = self:formatVictoryChipRewardLine(result)
   if victoryChipLine then
-    table.insert(lines, 3, victoryChipLine)
+    table.insert(lines, 2, victoryChipLine)
   end
 
   if (result.metaRewardEarned or 0) > 0 then
@@ -3952,13 +4049,12 @@ function Game:getBossRewardSummaryLines()
   local result = self.lastStageResult or {}
   local lines = {
     string.format("Boss Defeated: %s", result.opponentName or result.stageLabel or "n/a"),
-    string.format("Final Run Damage: %d", result.runTotalScore or (self.runState and self.runState.runTotalScore or 0)),
     string.format("Final Loadout: %s", result.loadoutKey or self:getCurrentLoadoutKey()),
   }
 
   local victoryChipLine = self:formatVictoryChipRewardLine(result)
   if victoryChipLine then
-    table.insert(lines, 3, victoryChipLine)
+    table.insert(lines, 2, victoryChipLine)
   end
 
   if (result.metaRewardEarned or 0) > 0 then
@@ -4082,7 +4178,7 @@ function Game:describeAction(action)
   end
 
   if action.op == "modify_coin_weight" then
-    return string.format("%s %s %+0.2f", action.op, action.side, action.amount)
+    return string.format("%s %s %+0.0f%% chance%s", action.op, action.side, (action.amount or 0) * 100, action.persistent and " permanent" or "")
   end
 
   if action.op == "apply_score_multiplier" then
@@ -4119,13 +4215,13 @@ function Game:formatBatchLogLine(batchResult)
     table.insert(
       coinSummaries,
       string.format(
-        "%s@S%d/R%d roll=%.2f H%.2f/T%.2f => %s%s",
+        "%s@S%d/R%d roll=%.2f H%.0f%%/T%.0f%% => %s%s",
         self:getCoinName(coinState.coinId),
         coinState.slotIndex or 0,
         coinState.resolutionIndex or 0,
         coinState.rngRoll or 0,
-        coinState.headsWeight or 0,
-        coinState.tailsWeight or 0,
+        (coinState.headsWeight or 0) * 100,
+        (coinState.tailsWeight or 0) * 100,
         string.upper(coinState.result or "?"),
         coinState.forcedResult and " [FORCED]" or ""
       )
@@ -4160,12 +4256,12 @@ function Game:getLastBatchSummaryLines(limit)
     table.insert(
       lines,
       string.format(
-        "%s @ slot %d / order %d | H%.2f/T%.2f | %.2f => %s%s",
+        "%s @ slot %d / order %d | H%.0f%%/T%.0f%% | %.2f => %s%s",
         self:getCoinName(coinState.coinId),
         coinState.slotIndex or 0,
         coinState.resolutionIndex or 0,
-        coinState.headsWeight,
-        coinState.tailsWeight,
+        (coinState.headsWeight or 0) * 100,
+        (coinState.tailsWeight or 0) * 100,
         coinState.rngRoll or 0,
         string.upper(coinState.result or "?"),
         coinState.forcedResult and " [FORCED]" or ""
@@ -4213,7 +4309,7 @@ function Game:getLastBatchSummaryLines(limit)
 end
 
 local function formatWeightPair(headsWeight, tailsWeight)
-  return string.format("H%.2f / T%.2f", headsWeight or 0, tailsWeight or 0)
+  return string.format("H%.0f%% / T%.0f%%", (headsWeight or 0) * 100, (tailsWeight or 0) * 100)
 end
 
 local function formatScoreValue(value)
@@ -4253,7 +4349,6 @@ function Game:getFlipLogLines(limit)
     local scoreEntry = perCoinScore[coinState.resolutionIndex or index] or {}
     local headsWeight = coinState.headsWeight or 0
     local tailsWeight = coinState.tailsWeight or 0
-    local totalWeight = math.max(headsWeight + tailsWeight, 0.00001)
     local outcome = string.upper(coinState.result or "?")
     local matchLabel = string.upper(Terminology.getOutcomeLabel(coinState.result == batchResult.call and "match" or "miss"))
 
@@ -4265,14 +4360,10 @@ function Game:getFlipLogLines(limit)
       tostring(coinState.resolutionIndex or "?")
     ))
     table.insert(lines, string.format(
-      "   basic weight: %s | final weight: %s",
+      "   basic chance: %s | final chance: %s",
       formatWeightPair(coinState.baseHeadsWeight or scoreEntry.baseHeadsWeight or headsWeight, coinState.baseTailsWeight or scoreEntry.baseTailsWeight or tailsWeight),
       formatWeightPair(headsWeight, tailsWeight)
     ))
-
-    if math.abs(totalWeight - 1.0) > 0.00001 then
-      table.insert(lines, string.format("   probability: HEADS %.1f%% / TAILS %.1f%%", (headsWeight / totalWeight) * 100, (tailsWeight / totalWeight) * 100))
-    end
 
     table.insert(lines, string.format(
       "   base damage: %s | final damage: %s | outcome: %s %s%s",
@@ -4304,22 +4395,17 @@ function Game:getScoreBreakdownLines(limit)
   end
 
   local stageBonusDelta = 0
-  local runBonusDelta = 0
 
   for _, bonus in ipairs(breakdown.additiveBonuses or {}) do
     if bonus.scoreTarget == "stage" then
       stageBonusDelta = stageBonusDelta + (bonus.amount or 0)
-    elseif bonus.scoreTarget == "run" then
-      runBonusDelta = runBonusDelta + (bonus.amount or 0)
     end
   end
 
   table.insert(lines, string.format("Base damage: %d", breakdown.baseScore or 0))
   table.insert(lines, string.format("After multipliers: %d", breakdown.finalBaseScore or breakdown.baseScore or 0))
   table.insert(lines, string.format("Damage bonus delta: %+d", stageBonusDelta))
-  table.insert(lines, string.format("Run bonus delta: %+d", runBonusDelta))
   table.insert(lines, string.format("Damage total gained: %+d", breakdown.totalStageScoreDelta or 0))
-  table.insert(lines, string.format("Run total gained: %+d", breakdown.totalRunScoreDelta or 0))
   table.insert(lines, string.format("Triggered sources: %d", #(self.lastBatchResult.trace and self.lastBatchResult.trace.triggeredSources or {})))
   table.insert(lines, string.format("Emitted actions: %d", #(self.lastBatchResult.trace and self.lastBatchResult.trace.actions or {})))
   table.insert(lines, string.format("Queued follow-ups: %d", #(self.lastBatchResult.trace and self.lastBatchResult.trace.queuedActions or {})))

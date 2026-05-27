@@ -89,7 +89,6 @@ function AnalyticsSystem.buildPostStageReport(runState, stageRecord, lastBatchRe
     string.format("Opponent: %s", stageRecord.opponentName or "n/a"),
     string.format("Status: %s", tostring(stageRecord.status or "n/a")),
     string.format("Damage: %d / %d", stageRecord.stageScore or 0, stageRecord.targetScore or 0),
-    string.format("Run Total Damage: %d", stageRecord.runTotalScore or runState.runTotalScore or 0),
     string.format("Chips: %d", stageRecord.shopPoints or runState.shopPoints or 0),
     string.format("Shop Rerolls Ready: %d", stageRecord.shopRerollsRemaining or runState.shopRerollsRemaining or 0),
     string.format("Loadout: %s", loadoutKey),
@@ -98,7 +97,7 @@ function AnalyticsSystem.buildPostStageReport(runState, stageRecord, lastBatchRe
 
   local victoryReward = stageRecord.victoryShopPointReward
   if victoryReward and (victoryReward.total or 0) > 0 then
-    table.insert(report.stageLines, 7, string.format(
+    table.insert(report.stageLines, 6, string.format(
       "Victory Chips: +%d (base +%d, overkill +%d, flips +%d)",
       victoryReward.total or 0,
       victoryReward.base or 0,
@@ -306,7 +305,7 @@ function AnalyticsSystem.formatSimulationReport(report)
 
   table.insert(lines, "Simulation Report")
   table.insert(lines, string.format("Runs: %d | Wins: %d | Losses: %d | Win rate: %.1f%%", report.runCount or 0, report.winCount or 0, report.lossCount or 0, (report.winRate or 0) * 100))
-  table.insert(lines, string.format("Avg run damage: %.2f | Avg meta reward: %.2f | Avg damage per batch: %.2f", report.averageRunScore or 0, report.averageMetaReward or 0, report.averageStageScorePerBatch or 0))
+  table.insert(lines, string.format("Avg total score: %.2f | Avg meta reward: %.2f | Avg damage per batch: %.2f", report.averageRunScore or 0, report.averageMetaReward or 0, report.averageStageScorePerBatch or 0))
   table.insert(lines, string.format("Calls: H=%d T=%d | Outcomes: H=%d T=%d", (report.callDistribution or {}).heads or 0, (report.callDistribution or {}).tails or 0, (report.outcomeDistribution or {}).heads or 0, (report.outcomeDistribution or {}).tails or 0))
 
   table.insert(lines, "")

@@ -44,6 +44,29 @@ local function buildInsertedFlow(insertedSteps, defaultSteps)
   return steps
 end
 
+local function buildPostWinDefaultSteps(destination)
+  if destination == "shop" then
+    return {
+      { type = "action", action = "prepare_shop" },
+      { type = "state", state = "shop" },
+    }
+  end
+
+  if destination == "fountain" then
+    return {
+      { type = "action", action = "prepare_fountain" },
+      { type = "state", state = "fountain" },
+    }
+  end
+
+  return {
+    {
+      type = "state",
+      state = destination or "summary",
+    },
+  }
+end
+
 local function createMacroContext(currentStateName, transitionPayload, app)
   if app and app.buildMacroContext then
     return app:buildMacroContext(currentStateName, transitionPayload)
@@ -427,19 +450,7 @@ local RULES = {
     from = "result",
     event = "continue",
     build = function(context)
-      local defaultSteps = {
-        {
-          type = "state",
-          state = context.postResultDestinationState or "summary",
-        },
-      }
-
-      if context.postResultDestinationState == "shop" then
-        defaultSteps = {
-          { type = "action", action = "prepare_shop" },
-          { type = "state", state = "shop" },
-        }
-      end
+      local defaultSteps = buildPostWinDefaultSteps(context.postResultDestinationState)
 
       return buildInsertedFlow(context.insertedSteps and context.insertedSteps.post_result, defaultSteps)
     end,
@@ -458,19 +469,7 @@ local RULES = {
     from = "post_stage_analytics",
     event = "continue",
     build = function(context)
-      if context.postResultDestinationState == "shop" then
-        return {
-          { type = "action", action = "prepare_shop" },
-          { type = "state", state = "shop" },
-        }
-      end
-
-      return {
-        {
-          type = "state",
-          state = context.postResultDestinationState or "summary",
-        },
-      }
+      return buildPostWinDefaultSteps(context.postResultDestinationState)
     end,
   },
   {
@@ -491,10 +490,7 @@ local RULES = {
         { type = "action", action = "claim_reward_choice" },
       }
 
-      appendSteps(steps, buildInsertedFlow(context.insertedSteps and context.insertedSteps.pre_shop, {
-        { type = "action", action = "prepare_shop" },
-        { type = "state", state = "shop" },
-      }))
+      appendSteps(steps, buildInsertedFlow(context.insertedSteps and context.insertedSteps.pre_shop, buildPostWinDefaultSteps(context.postResultDestinationState)))
 
       return steps
     end,
@@ -512,12 +508,14 @@ local RULES = {
   {
     from = "encounter",
     event = "continue",
-    build = function()
-      return {
+    build = function(context)
+      local steps = {
         { type = "action", action = "claim_encounter_choice" },
-        { type = "action", action = "prepare_shop" },
-        { type = "state", state = "shop" },
       }
+
+      appendSteps(steps, buildPostWinDefaultSteps(context.postResultDestinationState == "fountain" and "fountain" or "shop"))
+
+      return steps
     end,
   },
   {
@@ -546,6 +544,26 @@ local RULES = {
     build = function()
       return {
         { type = "action", action = "prepare_pause", payload = { returnState = "boss_reward" } },
+        { type = "state", state = "pause" },
+      }
+    end,
+  },
+  {
+    from = "fountain",
+    event = "continue",
+    build = function()
+      return {
+        { type = "action", action = "prepare_shop" },
+        { type = "state", state = "shop" },
+      }
+    end,
+  },
+  {
+    from = "fountain",
+    event = "open_pause",
+    build = function()
+      return {
+        { type = "action", action = "prepare_pause", payload = { returnState = "fountain" } },
         { type = "state", state = "pause" },
       }
     end,

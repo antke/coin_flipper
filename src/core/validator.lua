@@ -129,6 +129,7 @@ local VALID_ACTIVE_RUN_ARTIFACT_KEYS = {
   postResultNextState = true,
   rewardPreviewSession = true,
   encounterSession = true,
+  fountainSession = true,
   shopOffers = true,
   shopSession = true,
   draftSession = true,
@@ -147,6 +148,7 @@ local VALID_ACTIVE_RUN_STATES = {
   reward_preview = true,
   boss_reward = true,
   encounter = true,
+  fountain = true,
   shop = true,
   coin_draft = true,
 }
@@ -155,6 +157,7 @@ local VALID_POST_RESULT_NEXT_STATES = {
   post_stage_analytics = true,
   reward_preview = true,
   boss_reward = true,
+  fountain = true,
   shop = true,
   summary = true,
 }
@@ -252,6 +255,7 @@ local VALID_REPLAY_FORCED_RESULT_KEYS = {
   slotIndex = true,
   resolutionIndex = true,
   rngRoll = true,
+  reason = true,
 }
 
 local VALID_REPLAY_SHOP_KEYS = {
@@ -1557,6 +1561,7 @@ function Validator.validateActiveRunArtifactPayload(artifact)
     reward_preview = true,
     boss_reward = true,
     encounter = true,
+    fountain = true,
     shop = true,
   }
 
@@ -1564,7 +1569,7 @@ function Validator.validateActiveRunArtifactPayload(artifact)
     return false, string.format("active run artifact state %s requires stageState", artifact.currentState)
   end
 
-  if (artifact.currentState == "result" or artifact.currentState == "post_stage_analytics" or artifact.currentState == "reward_preview" or artifact.currentState == "boss_reward" or artifact.currentState == "encounter" or artifact.currentState == "shop")
+  if (artifact.currentState == "result" or artifact.currentState == "post_stage_analytics" or artifact.currentState == "reward_preview" or artifact.currentState == "boss_reward" or artifact.currentState == "encounter" or artifact.currentState == "fountain" or artifact.currentState == "shop")
     and type(artifact.lastStageResult) ~= "table" then
     return false, string.format("active run artifact state %s requires lastStageResult", artifact.currentState)
   end
@@ -1582,6 +1587,10 @@ function Validator.validateActiveRunArtifactPayload(artifact)
 
   if artifact.currentState == "encounter" and type(artifact.encounterSession) ~= "table" then
     return false, "active run artifact encounter state requires encounterSession"
+  end
+
+  if artifact.currentState == "fountain" and type(artifact.fountainSession) ~= "table" then
+    return false, "active run artifact fountain state requires fountainSession"
   end
 
   if artifact.currentState == "shop" and type(artifact.shopSession) ~= "table" then
@@ -1607,6 +1616,10 @@ function Validator.validateActiveRunArtifactPayload(artifact)
 
     if artifact.rewardPreviewSession ~= nil then
       return false, "active run artifact loadout state must not include rewardPreviewSession"
+    end
+
+    if artifact.fountainSession ~= nil then
+      return false, "active run artifact loadout state must not include fountainSession"
     end
 
     if artifact.shopSession ~= nil or (artifact.shopOffers and #artifact.shopOffers > 0) then
@@ -2397,6 +2410,36 @@ function Validator.validateRunState(runState)
 
   if type(runState.runTotalScore) ~= "number" or runState.runTotalScore < 0 then
     return false, "runState.runTotalScore must be a non-negative number"
+  end
+
+  if runState.luck ~= nil then
+    if type(runState.luck) ~= "table" then
+      return false, "runState.luck must be a table"
+    end
+
+    if not isNonNegativeInteger(runState.luck.value) then
+      return false, "runState.luck.value must be a non-negative integer"
+    end
+
+    if not isPositiveInteger(runState.luck.max) then
+      return false, "runState.luck.max must be a positive integer"
+    end
+
+    if runState.luck.value > runState.luck.max then
+      return false, "runState.luck.value cannot exceed runState.luck.max"
+    end
+
+    if type(runState.luck.fatedFlipActive) ~= "boolean" then
+      return false, "runState.luck.fatedFlipActive must be a boolean"
+    end
+
+    if type(runState.luck.fatedFlipGeneratesLuck) ~= "boolean" then
+      return false, "runState.luck.fatedFlipGeneratesLuck must be a boolean"
+    end
+
+    if not isNonNegativeInteger(runState.luck.fountainFavor) then
+      return false, "runState.luck.fountainFavor must be a non-negative integer"
+    end
   end
 
   local Coins = require("src.content.coins")

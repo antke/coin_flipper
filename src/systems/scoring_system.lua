@@ -60,17 +60,6 @@ function ScoringSystem.buildScoreActions(context)
         sourceType = "scoring_system",
       },
     })
-    table.insert(actions, {
-      op = "add_run_score",
-      amount = finalScore,
-      category = "base_score",
-      label = string.format("Matched coin%s", baseScore == 1 and "" or "s"),
-      _trace = {
-        phase = "score_assembly",
-        sourceId = "base_match_score",
-        sourceType = "scoring_system",
-      },
-    })
   end
 
   return actions

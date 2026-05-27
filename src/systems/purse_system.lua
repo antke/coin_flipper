@@ -1,5 +1,6 @@
 local Coins = require("src.content.coins")
 local Utils = require("src.core.utils")
+local Loadout = require("src.domain.loadout")
 
 local PurseSystem = {}
 
@@ -86,6 +87,79 @@ end
 function PurseSystem.getDefinition(runState, instanceId)
   local definitionId = PurseSystem.getDefinitionId(runState, instanceId)
   return definitionId and Coins.getById(definitionId) or nil
+end
+
+local function rebuildCollectionCoinIds(runState)
+  local collection = {}
+
+  for _, instance in ipairs(runState.coinInstances or {}) do
+    if instance.definitionId and not Utils.contains(collection, instance.definitionId) then
+      table.insert(collection, instance.definitionId)
+    end
+  end
+
+  runState.collectionCoinIds = collection
+end
+
+local function removeInstanceFromStagePurse(stageState, instanceId)
+  local purse = stageState and stageState.purse or nil
+
+  if not purse then
+    return
+  end
+
+  while removeValue(purse.availableInstanceIds, instanceId) do end
+  while removeValue(purse.exhaustedInstanceIds, instanceId) do end
+
+  local index = 1
+  while index <= #(purse.handSlots or {}) do
+    local slot = purse.handSlots[index]
+
+    if slot and slot.instanceId == instanceId then
+      table.remove(purse.handSlots, index)
+    else
+      index = index + 1
+    end
+  end
+end
+
+function PurseSystem.removeInstance(runState, stageState, instanceId)
+  if not runState then
+    return false, "run_not_initialized"
+  end
+
+  if type(instanceId) ~= "string" or instanceId == "" then
+    return false, "instance_required"
+  end
+
+  if #(runState.coinInstances or {}) <= 1 then
+    return false, "last_coin_required"
+  end
+
+  local removed = nil
+
+  for index, instance in ipairs(runState.coinInstances or {}) do
+    if instance.instanceId == instanceId then
+      removed = table.remove(runState.coinInstances, index)
+      break
+    end
+  end
+
+  if not removed then
+    return false, "coin_not_found"
+  end
+
+  removeInstanceFromStagePurse(stageState, instanceId)
+  rebuildCollectionCoinIds(runState)
+
+  local maxSlots = runState.maxActiveCoinSlots or 0
+  runState.equippedCoinSlots = Loadout.reconcileSlotsDetailed(runState.equippedCoinSlots, runState.collectionCoinIds, maxSlots).slots
+  runState.persistedLoadoutSlots = Loadout.reconcileSlotsDetailed(runState.persistedLoadoutSlots, runState.collectionCoinIds, maxSlots).slots
+
+  return true, {
+    instanceId = removed.instanceId,
+    definitionId = removed.definitionId,
+  }
 end
 
 function PurseSystem.initializeStagePurse(runState, stageState)

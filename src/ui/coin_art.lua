@@ -110,21 +110,6 @@ local FACE_PATTERNS = {
     "0000100010000",
     "0000000000000",
   },
-  weighted_shell = {
-    "0000011100000",
-    "0001111111000",
-    "0011111111100",
-    "0111011101110",
-    "0111111111110",
-    "0011011101100",
-    "0001111111000",
-    "0000111110000",
-    "0000011100000",
-    "0000111110000",
-    "0001111111000",
-    "0011111111100",
-    "0000000000000",
-  },
   streak_drill = {
     "1000000000000",
     "1100000000000",
@@ -214,21 +199,6 @@ local FACE_PATTERNS = {
     "0010101010100",
     "0011111111100",
     "0000000000000",
-  },
-  reserve_token = {
-    "0000010000000",
-    "0000111000000",
-    "0001111100000",
-    "0011111110000",
-    "0111111111000",
-    "0001111100000",
-    "0001111100000",
-    "0001111100000",
-    "0001111100000",
-    "0011111110000",
-    "0111111111000",
-    "0000000000000",
-    "0000101010000",
   },
   mirror_mark = {
     "0011100011100",
@@ -335,21 +305,6 @@ local FACE_PATTERNS = {
     "0000100010000",
     "0001000001000",
   },
-  comeback_cent = {
-    "0000001111000",
-    "0000010001000",
-    "0000100001000",
-    "0001000010000",
-    "0010000100000",
-    "0010001000000",
-    "0011111111100",
-    "0000001000100",
-    "0000010000100",
-    "0000100001000",
-    "0001000010000",
-    "0011111100000",
-    "0000000000000",
-  },
   heads_anchor = {
     "0000011100000",
     "0000101010000",
@@ -378,21 +333,6 @@ local FACE_PATTERNS = {
     "0100001000010",
     "0010010100100",
     "0001100011000",
-    "0000000000000",
-  },
-  banked_spark = {
-    "0000001000000",
-    "0000011100000",
-    "0000111001000",
-    "0001111110000",
-    "0000111000000",
-    "0000010000000",
-    "0001111110000",
-    "0010000011000",
-    "0010111011000",
-    "0010101011000",
-    "0010111011000",
-    "0001111110000",
     "0000000000000",
   },
   pocket_refund = {
@@ -624,7 +564,15 @@ local function getFaceKey(definition)
   end
 
   if hasTag(definition, "weight") then
-    return "weighted_shell"
+    if hasTag(definition, "tails") then
+      return "tails"
+    end
+
+    if hasTag(definition, "heads") then
+      return "heads"
+    end
+
+    return "regular_dollar"
   end
 
   if hasTag(definition, "streak") then
@@ -864,23 +812,6 @@ local function net(ctx, x, y)
   block(ctx, x, y + 10, 11, 1)
 end
 
-local function shell(ctx, x, y)
-  mask(ctx, {
-    "000111000",
-    "001111100",
-    "011111110",
-    "111111111",
-    "110101011",
-    "111111111",
-    "011111110",
-    "001111100",
-    "000111000",
-  }, x, y)
-  line(ctx, x + 4, y + 1, x + 4, y + 8, 1)
-  line(ctx, x + 1, y + 4, x + 7, y + 8, 1)
-  line(ctx, x + 7, y + 4, x + 1, y + 8, 1)
-end
-
 local function moon(ctx, x, y)
   mask(ctx, {
     "00011110",
@@ -980,7 +911,6 @@ local FACE_DRAWERS = {
     block(ctx, 7, 7, 2, 2)
     block(ctx, 13, 3, 2, 2)
   end,
-  weighted_shell = function(ctx) shell(ctx, 7, 4) end,
   streak_drill = function(ctx)
     line(ctx, 4, 4, 16, 16, 3)
     line(ctx, 6, 2, 18, 14, 1)
@@ -1003,7 +933,6 @@ local FACE_DRAWERS = {
   heads_banker = function(ctx) head(ctx, 3, 3); bag(ctx, 12, 11) end,
   tails_banker = function(ctx) tail(ctx, 4, 3); bag(ctx, 12, 11) end,
   safety_net = function(ctx) net(ctx, 6, 5); block(ctx, 5, 15, 11, 2) end,
-  reserve_token = function(ctx) cache(ctx, 7, 4); star(ctx, 8, 14) end,
   mirror_mark = function(ctx)
     line(ctx, 10, 3, 10, 18, 1)
     head(ctx, 3, 7)
@@ -1030,15 +959,8 @@ local FACE_DRAWERS = {
     cell(ctx, 10, 10)
   end,
   perfect_penny = function(ctx) star(ctx, 8, 4); line(ctx, 6, 13, 9, 16, 2); line(ctx, 9, 16, 16, 8, 2) end,
-  comeback_cent = function(ctx)
-    line(ctx, 15, 5, 5, 5, 2)
-    line(ctx, 5, 5, 5, 15, 2)
-    line(ctx, 5, 15, 16, 15, 2)
-    arrow(ctx, 4, 11, "right")
-  end,
   heads_anchor = function(ctx) head(ctx, 8, 2); anchor(ctx, 6, 11) end,
   tails_anchor = function(ctx) tail(ctx, 8, 2); anchor(ctx, 6, 11) end,
-  banked_spark = function(ctx) spark(ctx, 7, 2); bag(ctx, 8, 13) end,
   pocket_refund = function(ctx) cache(ctx, 5, 5); arrow(ctx, 7, 13, "left") end,
   fresh_mint = function(ctx) star(ctx, 8, 3); line(ctx, 10, 11, 10, 18, 2); line(ctx, 7, 14, 10, 11, 1); line(ctx, 13, 14, 10, 11, 1) end,
   opening_penny = function(ctx) block(ctx, 5, 4, 11, 13); block(ctx, 7, 6, 7, 9); star(ctx, 8, 8) end,

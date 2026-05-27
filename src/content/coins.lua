@@ -3,8 +3,9 @@ local definitions = {
     id = "regular_dollar",
     name = "$ Coin",
     rarity = "common",
-    description = "A plain 50/50 coin with no special effect.",
+    description = "A familiar casino token with two honest faces.",
     tags = { "regular", "filler" },
+    typeTags = { "basic" },
     isStarter = true,
     triggers = {},
   },
@@ -12,14 +13,15 @@ local definitions = {
     id = "heads_loaded_penny",
     name = "Heads-Loaded Penny",
     rarity = "common",
-    description = "A crooked coin rigged for Heads. 75% Heads chance.",
+    description = "A crooked coin coin rigged for Heads.",
     tags = { "starter", "cheat", "heads" },
+    typeTags = { "odds", "heads" },
     isStarter = true,
     triggers = {
       {
         hook = "before_coin_roll",
         effects = {
-          { op = "modify_coin_weight", side = "heads", amount = 1.0 },
+          { op = "modify_coin_weight", side = "heads", amount = 0.35 },
         },
       },
     },
@@ -28,68 +30,15 @@ local definitions = {
     id = "tails_loaded_penny",
     name = "Tails-Loaded Penny",
     rarity = "common",
-    description = "A crooked coin rigged for Tails. 75% Tails chance.",
+    description = "A crooked coin rigged for Tails.",
     tags = { "starter", "cheat", "tails" },
+    typeTags = { "odds", "tails" },
     isStarter = true,
     triggers = {
       {
         hook = "before_coin_roll",
         effects = {
-          { op = "modify_coin_weight", side = "tails", amount = 1.0 },
-        },
-      },
-    },
-  },
-  {
-    id = "match_spark",
-    name = "Match Spark",
-    rarity = "common",
-    description = "+1 damage and +1 run score when this coin matches your call.",
-    tags = { "starter", "match", "score" },
-    isStarter = true,
-    triggers = {
-      {
-        hook = "after_coin_roll",
-        condition = { match = true },
-        effects = {
-          { op = "add_stage_score", amount = 1 },
-          { op = "add_run_score", amount = 1 },
-        },
-      },
-    },
-  },
-  {
-    id = "heads_hunter",
-    name = "Heads Hunter",
-    rarity = "common",
-    description = "+2 damage and +2 run score when this coin matches a Heads call.",
-    tags = { "starter", "heads", "match" },
-    isStarter = true,
-    triggers = {
-      {
-        hook = "after_coin_roll",
-        condition = { call = "heads", result = "heads" },
-        effects = {
-          { op = "add_stage_score", amount = 2 },
-          { op = "add_run_score", amount = 2 },
-        },
-      },
-    },
-  },
-  {
-    id = "tails_chaser",
-    name = "Tails Chaser",
-    rarity = "common",
-    description = "+2 damage and +2 run score when this coin matches a Tails call.",
-    tags = { "starter", "tails", "match" },
-    isStarter = true,
-    triggers = {
-      {
-        hook = "after_coin_roll",
-        condition = { call = "tails", result = "tails" },
-        effects = {
-          { op = "add_stage_score", amount = 2 },
-          { op = "add_run_score", amount = 2 },
+          { op = "modify_coin_weight", side = "tails", amount = 0.35 },
         },
       },
     },
@@ -98,8 +47,10 @@ local definitions = {
     id = "lucky_miss",
     name = "Lucky Miss",
     rarity = "common",
-    description = "+1 Chip when this coin misses your call.",
+    description = "A scuffed fallback piece that pays off bad guesses.",
+    effectDescription = "+1 extra Chip when this coin misses your call.",
     tags = { "starter", "economy", "miss" },
+    typeTags = { "economy", "safety" },
     isStarter = true,
     triggers = {
       {
@@ -112,28 +63,14 @@ local definitions = {
     },
   },
   {
-    id = "weighted_shell",
-    name = "Weighted Shell",
-    rarity = "common",
-    description = "This coin gains +0.10 Heads weight before rolling.",
-    tags = { "starter", "weight", "heads" },
-    isStarter = true,
-    triggers = {
-      {
-        hook = "before_coin_roll",
-        effects = {
-          { op = "modify_coin_weight", side = "heads", amount = 0.10 },
-        },
-      },
-    },
-  },
-  {
     id = "streak_drill",
     name = "Streak Drill",
     rarity = "uncommon",
     unlockedByDefault = false,
-    description = "Applies a 1.25x score multiplier on repeated successful calls.",
+    description = "A grooved coin that bites harder into a steady rhythm.",
+    effectDescription = "Repeated successful calls apply a 1.25x score multiplier.",
     tags = { "streak", "multiplier" },
+    typeTags = { "combo" },
     triggers = {
       {
         hook = "before_scoring",
@@ -145,28 +82,13 @@ local definitions = {
     },
   },
   {
-    id = "boss_biter",
-    name = "Boss Biter",
-    rarity = "uncommon",
-    description = "+2 damage and +2 run score during boss stages.",
-    tags = { "boss", "score" },
-    triggers = {
-      {
-        hook = "before_scoring",
-        condition = { stage_type = "boss" },
-        effects = {
-          { op = "add_stage_score", amount = 2 },
-          { op = "add_run_score", amount = 2 },
-        },
-      },
-    },
-  },
-  {
     id = "cross_catch",
     name = "Cross Catch",
     rarity = "common",
-    description = "On a Heads call, if this coin lands Tails, gain +2 Chips.",
+    description = "A cross-marked catcher's coin for Heads-side gambits.",
+    effectDescription = "On a Heads call, if this coin lands Tails, gain +2 extra Chips.",
     tags = { "economy", "heads", "counter" },
+    typeTags = { "safety", "economy" },
     triggers = {
       {
         hook = "after_coin_roll",
@@ -178,129 +100,13 @@ local definitions = {
     },
   },
   {
-    id = "heads_banker",
-    name = "Heads Banker",
-    rarity = "common",
-    description = "+1 damage and +1 Chip when this coin matches a Heads call.",
-    tags = { "heads", "economy", "match" },
-    triggers = {
-      {
-        hook = "after_coin_roll",
-        condition = { call = "heads", result = "heads" },
-        effects = {
-          { op = "add_stage_score", amount = 1 },
-          { op = "add_shop_points", amount = 1 },
-        },
-      },
-    },
-  },
-  {
-    id = "tails_banker",
-    name = "Tails Banker",
-    rarity = "common",
-    description = "+1 damage and +1 Chip when this coin matches a Tails call.",
-    tags = { "tails", "economy", "match" },
-    triggers = {
-      {
-        hook = "after_coin_roll",
-        condition = { call = "tails", result = "tails" },
-        effects = {
-          { op = "add_stage_score", amount = 1 },
-          { op = "add_shop_points", amount = 1 },
-        },
-      },
-    },
-  },
-  {
-    id = "safety_net",
-    name = "Safety Net",
-    rarity = "uncommon",
-    unlockedByDefault = false,
-    description = "If no equipped coin matches this batch, gain +1 Chip and +1 run score.",
-    tags = { "economy", "safety" },
-    triggers = {
-      {
-        hook = "on_batch_end",
-        condition = { no_matches = true },
-        effects = {
-          { op = "add_shop_points", amount = 1 },
-          { op = "add_run_score", amount = 1 },
-        },
-      },
-    },
-  },
-  {
-    id = "reserve_token",
-    name = "Reserve Token",
-    rarity = "uncommon",
-    unlockedByDefault = false,
-    description = "If every equipped coin matches this batch, gain +1 free shop reroll.",
-    tags = { "economy", "perfect", "shop" },
-    triggers = {
-      {
-        hook = "on_batch_end",
-        condition = { all_matched = true },
-        effects = {
-          { op = "add_shop_rerolls", amount = 1 },
-        },
-      },
-    },
-  },
-  {
-    id = "mirror_mark",
-    name = "Mirror Mark",
-    rarity = "common",
-    description = "+1 run score when this coin matches on a repeated call batch.",
-    tags = { "streak", "score" },
-    triggers = {
-      {
-        hook = "after_coin_roll",
-        condition = { match = true, repeated_call = true },
-        effects = {
-          { op = "add_run_score", amount = 1 },
-        },
-      },
-    },
-  },
-  {
-    id = "parachute_pin",
-    name = "Parachute Pin",
-    rarity = "common",
-    description = "+1 damage before the stage-end check if no equipped coin matches this batch.",
-    tags = { "safety", "miss", "score" },
-    triggers = {
-      {
-        hook = "before_stage_end_check",
-        condition = { no_matches = true },
-        effects = {
-          { op = "add_stage_score", amount = 1 },
-        },
-      },
-    },
-  },
-  {
-    id = "tails_echo",
-    name = "Tails Echo",
-    rarity = "common",
-    description = "+1 run score and +1 Chip when this coin matches on a repeated Tails call.",
-    tags = { "tails", "streak", "economy" },
-    triggers = {
-      {
-        hook = "after_coin_roll",
-        condition = { call = "tails", result = "tails", repeated_call = true },
-        effects = {
-          { op = "add_run_score", amount = 1 },
-          { op = "add_shop_points", amount = 1 },
-        },
-      },
-    },
-  },
-  {
     id = "heads_cache",
     name = "Heads Cache",
     rarity = "common",
-    description = "+2 Chips when this coin matches a Heads call.",
+    description = "A warm pocket cache keyed to Heads.",
+    effectDescription = "+2 extra Chips when this coin matches a Heads call.",
     tags = { "heads", "economy", "match" },
+    typeTags = { "economy", "heads" },
     triggers = {
       {
         hook = "after_coin_roll",
@@ -315,8 +121,10 @@ local definitions = {
     id = "tails_cache",
     name = "Tails Cache",
     rarity = "common",
-    description = "+2 Chips when this coin matches a Tails call.",
+    description = "A cool pocket cache keyed to Tails.",
+    effectDescription = "+2 extra Chips when this coin matches a Tails call.",
     tags = { "tails", "economy", "match" },
+    typeTags = { "economy", "tails" },
     triggers = {
       {
         hook = "after_coin_roll",
@@ -331,8 +139,10 @@ local definitions = {
     id = "echo_penny",
     name = "Echo Penny",
     rarity = "common",
-    description = "Repeated calls are worth 1.10x score.",
+    description = "A resonant penny that favors repeated patterns.",
+    effectDescription = "Repeated calls are worth 1.10x score.",
     tags = { "streak", "multiplier" },
+    typeTags = { "combo" },
     triggers = {
       {
         hook = "before_scoring",
@@ -344,50 +154,19 @@ local definitions = {
     },
   },
   {
-    id = "perfect_penny",
-    name = "Perfect Penny",
-    rarity = "common",
-    description = "+2 damage and +2 run score if every equipped coin matches this batch.",
-    tags = { "perfect", "score", "match" },
-    triggers = {
-      {
-        hook = "on_batch_end",
-        condition = { all_matched = true },
-        effects = {
-          { op = "add_stage_score", amount = 2 },
-          { op = "add_run_score", amount = 2 },
-        },
-      },
-    },
-  },
-  {
-    id = "comeback_cent",
-    name = "Comeback Cent",
-    rarity = "common",
-    description = "If no equipped coin matches this batch, gain +2 Chips.",
-    tags = { "miss", "safety", "economy" },
-    triggers = {
-      {
-        hook = "on_batch_end",
-        condition = { no_matches = true },
-        effects = {
-          { op = "add_shop_points", amount = 2 },
-        },
-      },
-    },
-  },
-  {
     id = "heads_anchor",
     name = "Heads Anchor",
     rarity = "common",
-    description = "On Heads calls, this coin gains +0.10 Heads weight before rolling.",
-    tags = { "heads", "weight" },
+    description = "A heavy anchor coin that drifts toward Heads over time.",
+    effectDescription = "On each Heads match, permanently gains +5% Heads chance.",
+    tags = { "heads", "weight", "attunement" },
+    typeTags = { "attunement", "heads" },
     triggers = {
       {
-        hook = "before_coin_roll",
-        condition = { call = "heads" },
+        hook = "after_coin_roll",
+        condition = { call = "heads", result = "heads" },
         effects = {
-          { op = "modify_coin_weight", side = "heads", amount = 0.10 },
+          { op = "modify_coin_weight", side = "heads", amount = 0.05, persistent = true },
         },
       },
     },
@@ -396,29 +175,16 @@ local definitions = {
     id = "tails_anchor",
     name = "Tails Anchor",
     rarity = "common",
-    description = "On Tails calls, this coin gains +0.10 Tails weight before rolling.",
-    tags = { "tails", "weight" },
+    description = "A heavy anchor coin that drifts toward Tails over time.",
+    effectDescription = "On each Tails match, permanently gains +5% Tails chance.",
+    tags = { "tails", "weight", "attunement" },
+    typeTags = { "attunement", "tails" },
     triggers = {
       {
-        hook = "before_coin_roll",
-        condition = { call = "tails" },
+        hook = "after_coin_roll",
+        condition = { call = "tails", result = "tails" },
         effects = {
-          { op = "modify_coin_weight", side = "tails", amount = 0.10 },
-        },
-      },
-    },
-  },
-  {
-    id = "banked_spark",
-    name = "Banked Spark",
-    rarity = "common",
-    description = "+1 Chip after scoring each batch.",
-    tags = { "economy", "score" },
-    triggers = {
-      {
-        hook = "after_scoring",
-        effects = {
-          { op = "add_shop_points", amount = 1 },
+          { op = "modify_coin_weight", side = "tails", amount = 0.05, persistent = true },
         },
       },
     },
@@ -427,8 +193,10 @@ local definitions = {
     id = "pocket_refund",
     name = "Pocket Refund",
     rarity = "common",
-    description = "When this coin is returned to the purse by Sleight, gain +1 Chip.",
+    description = "A quick-return coin with a hidden rebate notch.",
+    effectDescription = "When this coin is returned to the purse by Sleight, gain +1 extra Chip.",
     tags = { "sleight", "economy" },
+    typeTags = { "economy", "motion" },
     triggers = {
       {
         hook = "after_sleight_return",
@@ -439,26 +207,13 @@ local definitions = {
     },
   },
   {
-    id = "fresh_mint",
-    name = "Fresh Mint",
-    rarity = "common",
-    description = "When this coin enters your hand as a Sleight replacement, deal +1 damage.",
-    tags = { "sleight", "score" },
-    triggers = {
-      {
-        hook = "after_replacement_draw",
-        effects = {
-          { op = "add_stage_score", amount = 1 },
-        },
-      },
-    },
-  },
-  {
     id = "opening_penny",
     name = "Opening Penny",
     rarity = "common",
-    description = "When this coin is drawn into a new hand, gain +1 Chip.",
+    description = "A bright opener kept ready at the top of the purse.",
+    effectDescription = "When this coin is drawn into a new hand, gain +1 extra Chip.",
     tags = { "draw", "economy" },
+    typeTags = { "economy", "motion" },
     triggers = {
       {
         hook = "after_hand_draw",
@@ -472,8 +227,10 @@ local definitions = {
     id = "slider_cent",
     name = "Slider Cent",
     rarity = "uncommon",
-    description = "When this coin is moved by hand reordering, gain +1 Chip.",
+    description = "A slick cent that rewards deft repositioning.",
+    effectDescription = "When this coin is moved by hand reordering, gain +1 extra Chip.",
     tags = { "reorder", "economy" },
+    typeTags = { "economy", "motion" },
     triggers = {
       {
         hook = "after_hand_reorder",
@@ -487,8 +244,10 @@ local definitions = {
     id = "commitment_chip",
     name = "Commitment Chip",
     rarity = "uncommon",
-    description = "Before flipping the hand, apply a 1.10x score multiplier.",
+    description = "A weighty chip made for decisive hands.",
+    effectDescription = "Before flipping the hand, apply a 1.10x score multiplier.",
     tags = { "flip", "multiplier" },
+    typeTags = { "combo", "motion" },
     triggers = {
       {
         hook = "before_hand_flip",
@@ -502,8 +261,10 @@ local definitions = {
     id = "left_lift",
     name = "Left Lift",
     rarity = "uncommon",
-    description = "Before rolling, this coin and the coin to the left gain +0.20 Heads weight.",
+    description = "A tilted coin that pulls fortune from the left.",
+    effectDescription = "Before rolling, the coin to the left gains +20% Heads chance.",
     tags = { "neighbor", "heads", "weight" },
+    typeTags = { "odds", "neighbor", "heads" },
     triggers = {
       {
         hook = "before_coin_roll",
@@ -517,8 +278,10 @@ local definitions = {
     id = "right_drift",
     name = "Right Drift",
     rarity = "uncommon",
-    description = "Before rolling, this coin and the coin to the right gain +0.20 Tails weight.",
+    description = "A drifting coin that tugs fate to the right.",
+    effectDescription = "Before rolling, the coin to the right gains +20% Tails chance.",
     tags = { "neighbor", "tails", "weight" },
+    typeTags = { "odds", "neighbor", "tails" },
     triggers = {
       {
         hook = "before_coin_roll",
@@ -529,41 +292,13 @@ local definitions = {
     },
   },
   {
-    id = "right_hand_charm",
-    name = "Right-Hand Charm",
-    rarity = "uncommon",
-    description = "If this coin and the coin to its right both match your call, deal +1 damage and gain +1 run score.",
-    tags = { "neighbor", "match", "score" },
-    customResolver = "src.systems.neighbor_resolver",
-    neighbor = {
-      kind = "right_match_bonus",
-      stageScore = 1,
-      runScore = 1,
-      label = "Right-Hand Charm",
-    },
-    triggers = {},
-  },
-  {
-    id = "edge_bet",
-    name = "Edge Bet",
-    rarity = "common",
-    description = "If this coin is leftmost or rightmost and matches your call, deal +2 damage and gain +2 run score.",
-    tags = { "neighbor", "edge", "match", "score" },
-    customResolver = "src.systems.neighbor_resolver",
-    neighbor = {
-      kind = "edge_match_bonus",
-      stageScore = 2,
-      runScore = 2,
-      label = "Edge Bet",
-    },
-    triggers = {},
-  },
-  {
     id = "glass_nickel",
     name = "Glass Nickel",
     rarity = "rare",
-    description = "Each match primes a 1.15x score multiplier before base scoring. Fragile, but explosive with wide loadouts.",
+    description = "A brittle nickel that flashes brightest under pressure.",
+    effectDescription = "Each match primes a 1.15x score multiplier before base scoring.",
     tags = { "match", "multiplier", "score" },
+    typeTags = { "combo" },
     triggers = {
       {
         hook = "after_coin_roll",
@@ -578,8 +313,10 @@ local definitions = {
     id = "moon_mint",
     name = "Moon Mint",
     rarity = "uncommon",
-    description = "This coin gains +0.15 Tails weight. On a Tails match, gain +1 Chip.",
+    description = "A pale mint struck for the Tails side of the moon.",
+    effectDescription = "On a Tails match, gain +1 extra Chip.",
     tags = { "tails", "weight", "economy" },
+    typeTags = { "odds", "economy", "tails" },
     triggers = {
       {
         hook = "before_coin_roll",
@@ -597,226 +334,22 @@ local definitions = {
     },
   },
   {
-    id = "sun_stamp",
-    name = "Sun Stamp",
+    id = "fate_token",
+    name = "Fate Token",
     rarity = "uncommon",
-    description = "If every equipped coin matches this batch, deal +3 damage and gain +3 run score at batch end.",
-    tags = { "perfect", "score", "match" },
-    triggers = {
-      {
-        hook = "on_batch_end",
-        condition = { all_matched = true },
-        effects = {
-          { op = "add_stage_score", amount = 3 },
-          { op = "add_run_score", amount = 3 },
-        },
-      },
-    },
-  },
-  {
-    id = "black_cat_cent",
-    name = "Black Cat Cent",
-    rarity = "rare",
-    description = "If no equipped coin matches this batch, gain +2 Chips and +1 run score.",
-    tags = { "miss", "safety", "economy" },
-    triggers = {
-      {
-        hook = "on_batch_end",
-        condition = { no_matches = true },
-        effects = {
-          { op = "add_shop_points", amount = 2 },
-          { op = "add_run_score", amount = 1 },
-        },
-      },
-    },
-  },
-  {
-    id = "grave_taler",
-    name = "Grave Taler",
-    rarity = "cursed",
-    price = 14,
-    description = "Cursed. Cannot be Sleighted or reordered. When it matches your call, deal +5 damage and gain +5 run score.",
-    tags = { "cursed", "locked", "match", "score" },
-    cannotSleight = true,
-    cannotReorder = true,
+    description = "An omen-stamped token that feeds the Luck Meter.",
+    effectDescription = "On a match, add +2 extra Luck Meter progress.",
+    tags = { "luck", "match" },
+    typeTags = { "luck", "combo" },
     triggers = {
       {
         hook = "after_coin_roll",
         condition = { match = true },
         effects = {
-          { op = "add_stage_score", amount = 5 },
-          { op = "add_run_score", amount = 5 },
+          { op = "add_luck", amount = 2, reason = "fate_token_match" },
         },
       },
     },
-  },
-  {
-    id = "blood_oracle",
-    name = "Blood Oracle",
-    rarity = "cursed",
-    price = 16,
-    description = "Cursed. Cannot be Sleighted or reordered. Gains +0.25 Heads weight before rolling. On a Heads match, deal +6 damage.",
-    tags = { "cursed", "locked", "heads", "weight", "score" },
-    cannotSleight = true,
-    cannotReorder = true,
-    triggers = {
-      {
-        hook = "before_coin_roll",
-        effects = {
-          { op = "modify_coin_weight", side = "heads", amount = 0.25 },
-        },
-      },
-      {
-        hook = "after_coin_roll",
-        condition = { call = "heads", result = "heads" },
-        effects = {
-          { op = "add_stage_score", amount = 6 },
-        },
-      },
-    },
-  },
-  {
-    id = "triple_crown",
-    name = "Triple Crown",
-    rarity = "uncommon",
-    description = "COMBO: If any three adjacent coins land Heads, deal +4 damage and gain +4 run score.",
-    tags = { "combo", "pattern", "heads", "score" },
-    customResolver = "src.systems.combo_resolver",
-    combo = {
-      kind = "adjacent_results",
-      results = { "heads", "heads", "heads" },
-      stageScore = 4,
-      runScore = 4,
-      label = "Triple Heads Combo",
-    },
-    triggers = {},
-  },
-  {
-    id = "switchback_cent",
-    name = "Switchback Cent",
-    rarity = "uncommon",
-    description = "COMBO: If any three adjacent coins land Heads-Tails-Heads, deal +3 damage and gain +2 Chips.",
-    tags = { "combo", "pattern", "economy", "score" },
-    customResolver = "src.systems.combo_resolver",
-    combo = {
-      kind = "adjacent_results",
-      results = { "heads", "tails", "heads" },
-      stageScore = 3,
-      shopPoints = 2,
-      label = "Switchback Combo",
-    },
-    triggers = {},
-  },
-  {
-    id = "tails_triad",
-    name = "Tails Triad",
-    rarity = "uncommon",
-    description = "COMBO: If any three adjacent coins land Tails, deal +4 damage and gain +4 run score.",
-    tags = { "combo", "pattern", "tails", "score" },
-    customResolver = "src.systems.combo_resolver",
-    combo = {
-      kind = "adjacent_results",
-      results = { "tails", "tails", "tails" },
-      stageScore = 4,
-      runScore = 4,
-      label = "Triple Tails Combo",
-    },
-    triggers = {},
-  },
-  {
-    id = "turnabout_token",
-    name = "Turnabout Token",
-    rarity = "uncommon",
-    description = "COMBO: If any three adjacent coins land Tails-Heads-Tails, deal +3 damage and gain +2 Chips.",
-    tags = { "combo", "pattern", "economy", "score" },
-    customResolver = "src.systems.combo_resolver",
-    combo = {
-      kind = "adjacent_results",
-      results = { "tails", "heads", "tails" },
-      stageScore = 3,
-      shopPoints = 2,
-      label = "Turnabout Combo",
-    },
-    triggers = {},
-  },
-  {
-    id = "rising_run",
-    name = "Rising Run",
-    rarity = "common",
-    description = "COMBO: If any three adjacent coins land Heads-Heads-Tails, deal +2 damage and gain +2 run score.",
-    tags = { "combo", "pattern", "score" },
-    customResolver = "src.systems.combo_resolver",
-    combo = {
-      kind = "adjacent_results",
-      results = { "heads", "heads", "tails" },
-      stageScore = 2,
-      runScore = 2,
-      label = "Rising Run Combo",
-    },
-    triggers = {},
-  },
-  {
-    id = "falling_run",
-    name = "Falling Run",
-    rarity = "common",
-    description = "COMBO: If any three adjacent coins land Tails-Tails-Heads, deal +2 damage and gain +2 run score.",
-    tags = { "combo", "pattern", "score" },
-    customResolver = "src.systems.combo_resolver",
-    combo = {
-      kind = "adjacent_results",
-      results = { "tails", "tails", "heads" },
-      stageScore = 2,
-      runScore = 2,
-      label = "Falling Run Combo",
-    },
-    triggers = {},
-  },
-  {
-    id = "heads_tail_gate",
-    name = "Heads-Tail Gate",
-    rarity = "common",
-    description = "COMBO: If any three adjacent coins land Heads-Tails-Tails, deal +2 damage and gain +2 Chips.",
-    tags = { "combo", "pattern", "economy", "score" },
-    customResolver = "src.systems.combo_resolver",
-    combo = {
-      kind = "adjacent_results",
-      results = { "heads", "tails", "tails" },
-      stageScore = 2,
-      shopPoints = 2,
-      label = "Heads-Tail Gate Combo",
-    },
-    triggers = {},
-  },
-  {
-    id = "tails_head_gate",
-    name = "Tails-Head Gate",
-    rarity = "common",
-    description = "COMBO: If any three adjacent coins land Tails-Heads-Heads, deal +2 damage and gain +2 Chips.",
-    tags = { "combo", "pattern", "economy", "score" },
-    customResolver = "src.systems.combo_resolver",
-    combo = {
-      kind = "adjacent_results",
-      results = { "tails", "heads", "heads" },
-      stageScore = 2,
-      shopPoints = 2,
-      label = "Tails-Head Gate Combo",
-    },
-    triggers = {},
-  },
-  {
-    id = "edge_echo",
-    name = "Edge Echo",
-    rarity = "common",
-    description = "COMBO: If the leftmost and rightmost coins land the same side, deal +2 damage and gain +2 run score.",
-    tags = { "combo", "pattern", "score" },
-    customResolver = "src.systems.combo_resolver",
-    combo = {
-      kind = "matching_edges",
-      stageScore = 2,
-      runScore = 2,
-      label = "Edge Echo Combo",
-    },
-    triggers = {},
   },
 }
 
@@ -824,54 +357,76 @@ local visualIdentities = {
   regular_dollar = { face = "regular_dollar", rim = "score" },
   heads_loaded_penny = { face = "heads", rim = "weight" },
   tails_loaded_penny = { face = "tails", rim = "weight" },
-  match_spark = { face = "match_spark", rim = "score" },
-  heads_hunter = { face = "heads_hunter", rim = "score" },
-  tails_chaser = { face = "tails_chaser", rim = "score" },
   lucky_miss = { face = "lucky_miss", rim = "safety" },
-  weighted_shell = { face = "weighted_shell", rim = "weight" },
   streak_drill = { face = "streak_drill", rim = "combo" },
-  boss_biter = { face = "boss_biter", rim = "boss" },
   cross_catch = { face = "cross_catch", rim = "safety" },
-  heads_banker = { face = "heads_banker", rim = "economy" },
-  tails_banker = { face = "tails_banker", rim = "economy" },
-  safety_net = { face = "safety_net", rim = "safety" },
-  reserve_token = { face = "reserve_token", rim = "economy" },
-  mirror_mark = { face = "mirror_mark", rim = "combo" },
-  parachute_pin = { face = "parachute_pin", rim = "safety" },
-  tails_echo = { face = "tails_echo", rim = "combo" },
   heads_cache = { face = "heads_cache", rim = "economy" },
   tails_cache = { face = "tails_cache", rim = "economy" },
   echo_penny = { face = "echo_penny", rim = "combo" },
-  perfect_penny = { face = "perfect_penny", rim = "combo" },
-  comeback_cent = { face = "comeback_cent", rim = "safety" },
   heads_anchor = { face = "heads_anchor", rim = "weight" },
   tails_anchor = { face = "tails_anchor", rim = "weight" },
-  banked_spark = { face = "banked_spark", rim = "economy" },
   pocket_refund = { face = "pocket_refund", rim = "motion" },
-  fresh_mint = { face = "fresh_mint", rim = "motion" },
   opening_penny = { face = "opening_penny", rim = "motion" },
   slider_cent = { face = "slider_cent", rim = "motion" },
   commitment_chip = { face = "commitment_chip", rim = "motion" },
   left_lift = { face = "left_lift", rim = "motion" },
   right_drift = { face = "right_drift", rim = "motion" },
-  right_hand_charm = { face = "right_hand_charm", rim = "motion" },
-  edge_bet = { face = "edge_bet", rim = "motion" },
   glass_nickel = { face = "glass_nickel", rim = "combo" },
   moon_mint = { face = "moon_mint", rim = "weight" },
-  sun_stamp = { face = "sun_stamp", rim = "combo" },
-  black_cat_cent = { face = "black_cat_cent", rim = "safety" },
-  grave_taler = { face = "grave_taler", rim = "cursed" },
-  blood_oracle = { face = "blood_oracle", rim = "cursed" },
-  triple_crown = { face = "triple_crown", rim = "combo" },
-  switchback_cent = { face = "switchback_cent", rim = "combo" },
-  tails_triad = { face = "tails_triad", rim = "combo" },
-  turnabout_token = { face = "turnabout_token", rim = "combo" },
-  rising_run = { face = "rising_run", rim = "combo" },
-  falling_run = { face = "falling_run", rim = "combo" },
-  heads_tail_gate = { face = "heads_tail_gate", rim = "combo" },
-  tails_head_gate = { face = "tails_head_gate", rim = "combo" },
-  edge_echo = { face = "edge_echo", rim = "combo" },
+  fate_token = { face = "lucky_miss", rim = "combo" },
 }
+
+local function coinHasTag(definition, tag)
+  for _, value in ipairs(definition.tags or {}) do
+    if value == tag then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function effectsAddScore(effects)
+  for _, effect in ipairs(effects or {}) do
+    if effect.op == "add_stage_score" or effect.op == "add_run_score" then
+      return true
+    end
+
+    if effect.op == "queue_actions" and effectsAddScore(effect.actions) then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function coinAddsScore(definition)
+  if definition.neighbor and (definition.neighbor.stageScore or definition.neighbor.runScore) then
+    return true
+  end
+
+  if definition.combo and (definition.combo.stageScore or definition.combo.runScore) then
+    return true
+  end
+
+  for _, trigger in ipairs(definition.triggers or {}) do
+    if effectsAddScore(trigger.effects) then
+      return true
+    end
+  end
+
+  return false
+end
+
+local activeDefinitions = {}
+
+for _, definition in ipairs(definitions) do
+  if not coinHasTag(definition, "boss") and not coinAddsScore(definition) then
+    table.insert(activeDefinitions, definition)
+  end
+end
+
+definitions = activeDefinitions
 
 local byId = {}
 

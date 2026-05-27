@@ -1,9 +1,9 @@
 local definitions = {
   {
     id = "weighted_tail_coating",
-    name = "Weighted Tail Coating",
+    name = "Tails Coating",
     rarity = "uncommon",
-    description = "All equipped coins gain +0.15 Tails weight.",
+    description = "All equipped coins gain +15% Tails chance.",
     tags = { "tails", "weight" },
     triggers = {
       {
@@ -18,7 +18,7 @@ local definitions = {
     id = "merchant_notebook",
     name = "Merchant Notebook",
     rarity = "common",
-    description = "+1 Chip after scoring each batch.",
+    description = "+1 extra Chip after scoring each batch.",
     tags = { "economy" },
     triggers = {
       {
@@ -58,7 +58,7 @@ local definitions = {
     id = "starter_grant",
     name = "Starter Grant",
     rarity = "common",
-    description = "+2 Chips on acquire.",
+    description = "+2 extra Chips on acquire.",
     tags = { "economy" },
     onAcquire = {
       { op = "add_shop_points", amount = 2 },
@@ -68,30 +68,13 @@ local definitions = {
     id = "heads_varnish",
     name = "Heads Varnish",
     rarity = "common",
-    description = "All equipped coins gain +0.12 Heads weight.",
+    description = "All equipped coins gain +12% Heads chance.",
     tags = { "heads", "weight" },
     triggers = {
       {
         hook = "before_coin_roll",
         effects = {
           { op = "modify_coin_weight", side = "heads", amount = 0.12 },
-        },
-      },
-    },
-  },
-  {
-    id = "boss_banner",
-    name = "Boss Banner",
-    rarity = "uncommon",
-    unlockedByDefault = false,
-    description = "Applies a 1.35x score multiplier during boss stages.",
-    tags = { "boss", "multiplier" },
-    triggers = {
-      {
-        hook = "before_scoring",
-        condition = { stage_type = "boss" },
-        effects = {
-          { op = "apply_score_multiplier", value = 1.35 },
         },
       },
     },
@@ -125,24 +108,6 @@ local definitions = {
     },
   },
   {
-    id = "contraband_case",
-    name = "Contraband Case",
-    rarity = "rare",
-    unlockedByDefault = false,
-    rewardEligible = false,
-    description = "Future shops add an extra Boss Biter coin offer.",
-    tags = { "shop", "offer" },
-    triggers = {
-      {
-        hook = "before_shop_generation",
-        effects = {
-          { op = "add_shop_offer", offerType = "coin", contentId = "boss_biter" },
-          { op = "add_shop_message", message = "Contraband Case smuggled in a bonus coin offer." },
-        },
-      },
-    },
-  },
-  {
     id = "cashback_badge",
     name = "Cashback Badge",
     rarity = "common",
@@ -166,7 +131,7 @@ local definitions = {
     name = "Echo Cache",
     rarity = "uncommon",
     unlockedByDefault = false,
-    description = "At batch start, create a temporary echo for this batch: if every equipped coin matches, gain +1 Chip.",
+    description = "At batch start, create a temporary echo for this batch: if every equipped coin matches, gain +1 extra Chip.",
     tags = { "temporary", "shop", "all_match" },
     triggers = {
       {
@@ -177,7 +142,7 @@ local definitions = {
             effect = {
               id = "echo_cache_echo",
               name = "Echo Cache Echo",
-              description = "This batch only: if every equipped coin matches, gain +1 Chip.",
+              description = "This batch only: if every equipped coin matches, gain +1 extra Chip.",
               triggers = {
                 {
                   hook = "after_scoring",
@@ -220,7 +185,7 @@ local definitions = {
     id = "heads_notebook",
     name = "Heads Notebook",
     rarity = "common",
-    description = "+1 Chip after scoring a Heads call batch.",
+    description = "+1 extra Chip after scoring a Heads call batch.",
     tags = { "heads", "economy" },
     triggers = {
       {
@@ -249,25 +214,10 @@ local definitions = {
     },
   },
   {
-    id = "profit_margin",
-    name = "Profit Margin",
-    rarity = "common",
-    description = "+1 run score after each scored batch.",
-    tags = { "economy", "score" },
-    triggers = {
-      {
-        hook = "after_scoring",
-        effects = {
-          { op = "add_run_score", amount = 1 },
-        },
-      },
-    },
-  },
-  {
     id = "insurance_ledger",
     name = "Insurance Ledger",
     rarity = "common",
-    description = "If no coins match this batch, gain +2 Chips.",
+    description = "If no coins match this batch, gain +2 extra Chips.",
     tags = { "economy", "safety" },
     triggers = {
       {
@@ -316,35 +266,10 @@ local definitions = {
     },
   },
   {
-    id = "reserve_fuse",
-    name = "Reserve Fuse",
-    rarity = "rare",
-    unlockedByDefault = false,
-    description = "If every equipped coin matches, queue +1 damage and +1 run score before the stage-end check.",
-    tags = { "chain", "threshold", "all_match" },
-    triggers = {
-      {
-        hook = "after_scoring",
-        condition = { all_matched = true },
-        effects = {
-          {
-            op = "queue_actions",
-            phase = "before_stage_end_check",
-            actions = {
-              { op = "add_stage_score", amount = 1, category = "chain_bonus", label = "Reserve Fuse" },
-              { op = "add_run_score", amount = 1, category = "chain_bonus", label = "Reserve Fuse" },
-              { op = "queue_trace_note", note = "Reserve Fuse fired before the stage-end check." },
-            },
-          },
-        },
-      },
-    },
-  },
-  {
     id = "streak_credit",
     name = "Streak Credit",
     rarity = "common",
-    description = "+1 Chip when a coin matches on a repeated call batch.",
+    description = "+1 extra Chip when a coin matches on a repeated call batch.",
     tags = { "economy", "streak" },
     triggers = {
       {
@@ -357,26 +282,10 @@ local definitions = {
     },
   },
   {
-    id = "parlay_notes",
-    name = "Parlay Notes",
-    rarity = "common",
-    description = "+2 run score when every equipped coin matches a batch.",
-    tags = { "perfect", "score" },
-    triggers = {
-      {
-        hook = "on_batch_end",
-        condition = { all_matched = true },
-        effects = {
-          { op = "add_run_score", amount = 2 },
-        },
-      },
-    },
-  },
-  {
     id = "pressure_valve",
     name = "Pressure Valve",
     rarity = "common",
-    description = "+1 Chip after any repeated-call batch.",
+    description = "+1 extra Chip after any repeated-call batch.",
     tags = { "streak", "economy" },
     triggers = {
       {

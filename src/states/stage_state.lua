@@ -3,8 +3,10 @@ local CoinDetailOverlay = require("src.ui.coin_detail_overlay")
 local CoinArt = require("src.ui.coin_art")
 local Coins = require("src.content.coins")
 local Layout = require("src.ui.layout")
+local LuckSystem = require("src.systems.luck_system")
 local Panel = require("src.ui.panel")
 local PurseView = require("src.ui.purse_view")
+local ScoreFloaty = require("src.ui.score_floaty")
 local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
 
@@ -73,6 +75,50 @@ end
 
 local function clamp(value, minimum, maximum)
   return math.max(minimum, math.min(maximum, value))
+end
+
+local function formatSignedScore(value)
+  local amount = tonumber(value) or 0
+
+  if math.abs(amount - math.floor(amount + 0.5)) < 0.001 then
+    amount = math.floor(amount + 0.5)
+    return amount >= 0 and string.format("+%d", amount) or tostring(amount)
+  end
+
+  return amount >= 0 and string.format("+%.1f", amount) or string.format("%.1f", amount)
+end
+
+local function getPerCoinScoreEntry(batchResult, coinState)
+  local perCoin = batchResult and batchResult.scoreBreakdown and batchResult.scoreBreakdown.perCoin or {}
+
+  for _, entry in ipairs(perCoin) do
+    if coinState.resolutionIndex and entry.resolutionIndex == coinState.resolutionIndex then
+      return entry
+    end
+  end
+
+  for _, entry in ipairs(perCoin) do
+    if entry.slotIndex == coinState.slotIndex and entry.coinId == coinState.coinId then
+      return entry
+    end
+  end
+
+  return nil
+end
+
+local COIN_ROW_JITTER_X_RANGE = 0.14
+local COIN_ROW_JITTER_Y_RANGE = 0.38
+
+-- Stable visual scatter avoids per-frame random jitter in draw().
+local function getStableSignedValue(key, salt)
+  local source = string.format("%s:%s:%s", salt, tostring(key or "coin"), salt)
+  local hash = 17
+
+  for index = 1, #source do
+    hash = ((hash * 131) + string.byte(source, index) + (index * 17)) % 1000003
+  end
+
+  return ((hash / 1000003) * 2) - 1
 end
 
 local function getUiRect(app)
@@ -177,6 +223,10 @@ function StageState.new()
     reveal = nil,
     handCardRects = {},
     coinRowVisuals = {},
+    coinRowJitters = {},
+    scoreFloaties = {},
+    spawnedScoreFloatyKeys = {},
+    opponentDamageFloatyAnchor = nil,
     lastDt = 1 / 60,
     draggingHandSlotIndex = nil,
     draggingHandCoinId = nil,
@@ -248,6 +298,7 @@ function StageState:startCoinRowReveal(app, batchResult)
     nextSoundIndex = 1,
     feedbackPlayed = false,
   }
+  self.spawnedScoreFloatyKeys = {}
 end
 
 function StageState:completeReveal(app)
@@ -284,7 +335,11 @@ function StageState:selectCall(app, call)
   end
 
   app.selectedCall = call
-  self.statusMessage = string.format("Call selected: %s. Reorder, Sleight, or Flip.", string.upper(call))
+  if app:isFatedFlipActive() then
+    self.statusMessage = string.format("FATED FLIP: %s selected. All coins will land on your call.", string.upper(call))
+  else
+    self.statusMessage = string.format("Call selected: %s. Reorder, Sleight, or Flip.", string.upper(call))
+  end
   return true
 end
 
@@ -455,6 +510,7 @@ function StageState:buildButtons(app, x, y, width, height)
   local buttonHeight = math.max(1, height or componentMetrics.buttonHeight)
   local stageActive = self:isStageActive(app)
   local revealActive = self:isRevealActive()
+  local fatedActive = stageActive and not revealActive and app:isFatedFlipActive()
 
   self.buttons = {
     {
@@ -475,8 +531,10 @@ function StageState:buildButtons(app, x, y, width, height)
       y = y,
       width = buttonWidth,
       height = buttonHeight,
-      label = "FLIP HAND",
-      variant = "success",
+      label = fatedActive and "FLIP FATE" or "FLIP HAND",
+      variant = fatedActive and "warning" or "success",
+      focused = fatedActive,
+      glow = fatedActive,
       disabled = not stageActive or revealActive or not app.selectedCall,
       onClick = function()
         return self:tryResolveBatch(app)
@@ -866,6 +924,10 @@ function StageState:drawScorePanel(app, area)
   local hpRemaining = math.max(0, (stage.targetScore or 0) - (stage.stageScore or 0))
   local scoreColor = stage.stageScore >= stage.targetScore and Theme.colors.success or Theme.colors.text
   local contentArea = Panel.getContentArea(area.x, area.y, area.width, area.height, "Opponent")
+  self.opponentDamageFloatyAnchor = {
+    x = contentArea.x + math.floor(contentArea.width / 2),
+    y = contentArea.y + 6 + math.floor(app.fonts.title:getHeight() / 2),
+  }
 
   Panel.draw(area.x, area.y, area.width, area.height, "Opponent")
 
@@ -881,10 +943,12 @@ end
 
 function StageState:drawStageSummary(app, area)
   local stage = app.stageState
+  local fatedActive = app:isFatedFlipActive()
   local stats = {
     { label = "Chips", value = tostring(app.runState and app.runState.shopPoints or 0), color = Theme.colors.text },
     { label = "Flips", value = tostring(stage.flipsRemaining), color = Theme.colors.text },
     { label = "Call", value = app.selectedCall and string.upper(app.selectedCall) or "-", color = Theme.colors.text },
+    { label = "Luck", value = LuckSystem.formatMeter(app.runState), color = fatedActive and Theme.colors.warning or Theme.colors.text },
   }
 
   local statGap = Theme.spacing.itemGap
@@ -929,18 +993,71 @@ function StageState:drawStageSummary(app, area)
   end
 end
 
+function StageState:drawFatedFlipBanner(app, area)
+  if not self:isStageActive(app) or not app:isFatedFlipActive() or self:isRevealActive() then
+    return
+  end
+
+  local width = math.min(area.width - 24, 560)
+  if width <= 0 then
+    return
+  end
+
+  local height = math.min(88, math.max(62, math.floor(area.height * 0.24)))
+  local x = area.x + math.floor((area.width - width) / 2)
+  local y = area.y + math.floor((area.height - height) / 2)
+  local pulse = app:getUiPulse(5.5, 0.16, 0.30)
+
+  love.graphics.setColor(Theme.colors.warning[1], Theme.colors.warning[2], Theme.colors.warning[3], pulse)
+  love.graphics.rectangle("fill", x - 6, y - 6, width + 12, height + 12, 14, 14)
+  love.graphics.setColor(Theme.colors.panel[1], Theme.colors.panel[2], Theme.colors.panel[3], 0.92)
+  love.graphics.rectangle("fill", x, y, width, height, 12, 12)
+  Theme.applyColor(Theme.colors.warning)
+  love.graphics.setLineWidth(2)
+  love.graphics.rectangle("line", x, y, width, height, 12, 12)
+  love.graphics.setLineWidth(1)
+
+  love.graphics.setFont(app.fonts.heading)
+  Theme.applyColor(Theme.colors.warning)
+  love.graphics.printf("FATED FLIP", x + 16, y + 15, width - 32, "center")
+  love.graphics.setFont(app.fonts.small)
+  Theme.applyColor(Theme.colors.text)
+  love.graphics.printf("All coins will land on your selected call.", x + 16, y + 50, width - 32, "center")
+end
+
+function StageState:drawFatedButtonGlow(app, buttons)
+  if not app:isFatedFlipActive() then
+    return
+  end
+
+  for _, button in ipairs(buttons or {}) do
+    if button.glow then
+      local pulse = app:getUiPulse(6.0, 0.30, 0.55)
+      love.graphics.setColor(Theme.colors.warning[1], Theme.colors.warning[2], Theme.colors.warning[3], pulse)
+      love.graphics.setLineWidth(3)
+      love.graphics.rectangle("line", button.x - 6, button.y - 6, button.width + 12, button.height + 12, 10, 10)
+      love.graphics.setLineWidth(1)
+    end
+  end
+end
+
 function StageState:getVisibleCoinStates(app)
-  local batchResult = app.lastBatchResult
+  local batchResult = self.coinRowReveal and self.coinRowReveal.batchResult or app.lastBatchResult
   local coins = {}
 
   if self.coinRowReveal and batchResult and batchResult.perCoin then
     for _, coinState in ipairs(batchResult.perCoin) do
+      local scoreEntry = getPerCoinScoreEntry(batchResult, coinState)
+      local baseScoreContribution = scoreEntry and scoreEntry.baseScoreContribution or nil
+
       table.insert(coins, {
         coinId = coinState.coinId,
         slotIndex = coinState.slotIndex,
+        resolutionIndex = coinState.resolutionIndex,
         result = coinState.result,
         forcedResult = coinState.forcedResult,
         didMatch = coinState.result == batchResult.call,
+        scoreContribution = baseScoreContribution or (coinState.result == batchResult.call and 1 or 0),
       })
     end
 
@@ -1075,6 +1192,83 @@ function StageState:updateCoinRowVisual(key, targetX, targetY, targetSize, anima
   return visual
 end
 
+function StageState:getCoinRowJitter(key, cardWidth, coinSize)
+  self.coinRowJitters = self.coinRowJitters or {}
+
+  local jitter = self.coinRowJitters[key]
+
+  if not jitter then
+    jitter = {
+      x = getStableSignedValue(key, "x"),
+      y = getStableSignedValue(key, "y"),
+    }
+    self.coinRowJitters[key] = jitter
+  end
+
+  return math.floor(jitter.x * math.floor(cardWidth * COIN_ROW_JITTER_X_RANGE)),
+    math.floor(jitter.y * math.floor(coinSize * COIN_ROW_JITTER_Y_RANGE))
+end
+
+function StageState:spawnScoreFloatyOnce(key, label, x, y, options)
+  self.spawnedScoreFloatyKeys = self.spawnedScoreFloatyKeys or {}
+
+  if not key or self.spawnedScoreFloatyKeys[key] then
+    return false
+  end
+
+  self.spawnedScoreFloatyKeys[key] = true
+  self.scoreFloaties = self.scoreFloaties or {}
+  table.insert(self.scoreFloaties, ScoreFloaty.new(label, x, y, options))
+  return true
+end
+
+function StageState:spawnCoinScoreFloaty(reveal, coin, index, coinCenterX, coinDrawY)
+  local contribution = tonumber(coin.scoreContribution) or 0
+
+  if not reveal or contribution <= 0 then
+    return false
+  end
+
+  local key = string.format("%s:coin:%s:%s", tostring(reveal.batchId or "batch"), tostring(coin.resolutionIndex or index), tostring(coin.coinId or "coin"))
+
+  return self:spawnScoreFloatyOnce(key, formatSignedScore(contribution), coinCenterX, coinDrawY - Theme.scale(8), {
+    color = Theme.colors.success,
+    direction = "up",
+    fontName = "heading",
+  })
+end
+
+function StageState:spawnFlipSummaryFloaties(reveal, rowCenterX, rowY)
+  if not reveal or reveal.elapsed < ((reveal.revealDuration or 0) + (reveal.coinMotionDuration or 0)) then
+    return
+  end
+
+  local batchResult = reveal.batchResult
+  local scoreBreakdown = batchResult and batchResult.scoreBreakdown or {}
+  local baseDisplayed = tonumber(scoreBreakdown.baseScore) or 0
+  local totalDamage = tonumber(scoreBreakdown.totalStageScoreDelta) or 0
+  local endDelta = totalDamage - baseDisplayed
+  local batchKey = tostring(reveal.batchId or "batch")
+
+  if math.abs(endDelta) > 0.001 then
+    self:spawnScoreFloatyOnce(string.format("%s:summary", batchKey), formatSignedScore(endDelta), rowCenterX, rowY + Theme.scale(34), {
+      color = endDelta >= 0 and Theme.colors.success or Theme.colors.danger,
+      direction = endDelta >= 0 and "up" or "down",
+      fontName = "title",
+      distance = endDelta >= 0 and Theme.scale(64) or Theme.scale(48),
+    })
+  end
+
+  if totalDamage > 0 and self.opponentDamageFloatyAnchor then
+    self:spawnScoreFloatyOnce(string.format("%s:damage", batchKey), formatSignedScore(-totalDamage), self.opponentDamageFloatyAnchor.x, self.opponentDamageFloatyAnchor.y, {
+      color = Theme.colors.danger,
+      direction = "down",
+      fontName = "title",
+      distance = Theme.scale(48),
+    })
+  end
+end
+
 function StageState:drawCoinRow(app, x, y, width, height)
   local coins, call, batchId = self:getVisibleCoinStates(app)
 
@@ -1084,6 +1278,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
     love.graphics.printf("No hand drawn.", x, y + math.floor(height / 2) - 10, width, "center")
     self.handCardRects = {}
     self.coinRowVisuals = {}
+    self.coinRowJitters = {}
     return
   end
 
@@ -1181,10 +1376,10 @@ function StageState:drawCoinRow(app, x, y, width, height)
     local cardDrawX = cardX
     local coinSize = math.min(Theme.scale(96), math.max(Theme.scale(62), math.floor(activeCardWidth * 0.54)))
     local animatedCoinSize = math.floor(coinSize * (motionScale + (impactPunch * 0.08)))
-    local coinCenterX = cardDrawX + math.floor(activeCardWidth / 2)
-    local staggerOffset = (index % 2 == 0) and 16 or -16
-    local coinCenterY = activeCenterLineY + staggerOffset + liftOffset
     local visualKey = self:getCoinRowVisualKey(coin, index, batchId)
+    local jitterX, jitterY = self:getCoinRowJitter(visualKey, activeCardWidth, coinSize)
+    local coinCenterX = cardDrawX + math.floor(activeCardWidth / 2) + jitterX
+    local coinCenterY = activeCenterLineY + jitterY + liftOffset
     local rowVisual = self:updateCoinRowVisual(visualKey, coinCenterX, coinCenterY, animatedCoinSize, not rowRevealActive and not hasResult)
     activeVisualKeys[visualKey] = true
 
@@ -1276,6 +1471,10 @@ function StageState:drawCoinRow(app, x, y, width, height)
 
     if hasResult then
       if resultSettled then
+        if rowRevealActive then
+          self:spawnCoinScoreFloaty(reveal, coin, index, coinCenterX, coinDrawY)
+        end
+
         Theme.applyColor(coin.didMatch and Theme.colors.success or Theme.colors.mutedText)
         love.graphics.printf(coin.didMatch and string.upper(Terminology.getOutcomeLabel("match")) or string.upper(Terminology.getOutcomeLabel("miss")), cardDrawX + 8, labelY + 18, activeCardWidth - 16, "center")
 
@@ -1322,9 +1521,19 @@ function StageState:drawCoinRow(app, x, y, width, height)
 
   end
 
+  if rowRevealActive then
+    self:spawnFlipSummaryFloaties(reveal, x + math.floor(width / 2), y)
+  end
+
   for key in pairs(self.coinRowVisuals or {}) do
     if not activeVisualKeys[key] and key ~= self.draggingHandVisualKey then
       self.coinRowVisuals[key] = nil
+    end
+  end
+
+  for key in pairs(self.coinRowJitters or {}) do
+    if not activeVisualKeys[key] and key ~= self.draggingHandVisualKey then
+      self.coinRowJitters[key] = nil
     end
   end
 
@@ -1494,6 +1703,10 @@ function StageState:enter(app)
   self.coinRowReveal = nil
   self.sleightAnimations = {}
   self.coinRowVisuals = {}
+  self.coinRowJitters = {}
+  self.scoreFloaties = {}
+  self.spawnedScoreFloatyKeys = {}
+  self.opponentDamageFloatyAnchor = nil
   self.lastDt = 1 / 60
   self.draggingHandSlotIndex = nil
   self.draggingHandCoinId = nil
@@ -1515,6 +1728,8 @@ function StageState:enter(app)
   self.logDialogScrollOffset = 0
   if app.stageState and app.stageState.stageStatus ~= "active" then
     self.statusMessage = string.format("Stage %s.", app.stageState.stageStatus)
+  elseif app:isFatedFlipActive() then
+    self.statusMessage = "FATED FLIP ready: choose a call. All coins will land on it."
   else
     self.statusMessage = "Review your hand, then pick HEADS or TAILS."
   end
@@ -1552,6 +1767,7 @@ end
 function StageState:update(app, dt)
   self.lastDt = dt or self.lastDt or (1 / 60)
   self:updateDragVisual(dt)
+  self.scoreFloaties = ScoreFloaty.updateAll(self.scoreFloaties, dt)
 
   for slotIndex, animation in pairs(self.sleightAnimations or {}) do
     animation.elapsed = animation.elapsed + dt
@@ -1916,6 +2132,7 @@ function StageState:draw(app)
   local coinRowArea = Panel.getContentArea(gameArea.x, gameArea.y, gameArea.width, gameArea.height, "Hand")
 
   local hoveredCoinId = self:drawCoinRow(app, coinRowArea.x, coinRowArea.y, coinRowArea.width, coinRowArea.height)
+  self:drawFatedFlipBanner(app, coinRowArea)
 
   Panel.draw(actionsArea.x, actionsArea.y, actionsArea.width, actionsArea.height)
 
@@ -1923,9 +2140,13 @@ function StageState:draw(app)
   Theme.applyColor(Theme.colors.mutedText)
   love.graphics.printf(self.statusMessage, actionsArea.x + spacing.itemGap, actionsArea.y + spacing.itemGap, math.max(1, actionsArea.width - (spacing.itemGap * 2)), "center")
 
-  Button.drawButtons(self:buildButtons(app, buttonLayout.x, buttonLayout.y, buttonLayout.width, buttonLayout.height), mouseX, mouseY)
+  local buttons = self:buildButtons(app, buttonLayout.x, buttonLayout.y, buttonLayout.width, buttonLayout.height)
+  self:drawFatedButtonGlow(app, buttons)
+  Button.drawButtons(buttons, mouseX, mouseY)
 
   Button.drawButtons({ self:getLogButtonLayout(app), self:getPurseButtonLayout(app), self:getHelpButtonLayout(app) }, mouseX, mouseY)
+  ScoreFloaty.drawAll(self.scoreFloaties, app.fonts)
+
   if hoveredCoinId and not self.draggingHandCoinId then
     self:drawCoinDetailOverlay(app, hoveredCoinId, mouseX, mouseY)
   end

@@ -23,10 +23,6 @@ function PauseState:getSummaryLines(app)
     table.insert(lines, string.format("Round: %d", app.runState.roundIndex or 0))
   end
 
-  if app.runState then
-    table.insert(lines, string.format("Run score: %d", app.runState.runTotalScore or 0))
-  end
-
   table.insert(lines, "")
   table.insert(lines, self.statusMessage)
 

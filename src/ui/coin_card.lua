@@ -46,8 +46,28 @@ function CoinCard.draw(app, card, x, y, width, height, options)
   love.graphics.setFont(app.fonts.small)
   Theme.applyColor(Theme.colors.mutedText)
   local descriptionLineHeight = app.fonts.small:getHeight() + Theme.scale(2)
-  local descriptionHeight = math.max(descriptionLineHeight, (showCount and countY or (y + height - padding)) - contentY - Theme.scale(8))
-  Layout.drawRichWrappedText(Terminology.getMechanicRichText(card.description), textX, contentY - Theme.scale(4), textWidth, Theme.colors.mutedText, descriptionLineHeight, descriptionHeight)
+  local detailHeight = math.max(descriptionLineHeight, (showCount and countY or (y + height - padding)) - contentY - Theme.scale(8))
+  local detailY = contentY - Theme.scale(4)
+  local remainingHeight = detailHeight
+
+  if card.chanceText then
+    Theme.applyColor(Theme.colors.text)
+    love.graphics.printf("Chance: " .. card.chanceText, textX, detailY, textWidth, "left")
+    detailY = detailY + descriptionLineHeight
+    remainingHeight = remainingHeight - descriptionLineHeight
+  end
+
+  if card.effectDescription and card.effectDescription ~= "" and remainingHeight > descriptionLineHeight then
+    local effectHeight = math.max(descriptionLineHeight, math.floor(remainingHeight * 0.60))
+    local nextY = Layout.drawRichWrappedText(Terminology.getMechanicRichText("Effect: " .. card.effectDescription), textX, detailY, textWidth, Theme.colors.mutedText, descriptionLineHeight, effectHeight)
+    local usedHeight = nextY - detailY
+    detailY = detailY + usedHeight
+    remainingHeight = remainingHeight - usedHeight
+  end
+
+  if card.description and card.description ~= "" and remainingHeight > 0 then
+    Layout.drawRichWrappedText("Description: " .. card.description, textX, detailY, textWidth, Theme.colors.mutedText, descriptionLineHeight, remainingHeight)
+  end
 
   if not showCount then
     return

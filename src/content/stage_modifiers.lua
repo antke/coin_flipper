@@ -2,7 +2,7 @@ local definitions = {
   {
     id = "crosswind_table",
     name = "Crosswind Table",
-    description = "Each equipped coin gains +0.05 Tails weight before rolling.",
+    description = "Each equipped coin gains +5% Tails chance before rolling.",
     tags = { "stage", "weight", "tails" },
     triggers = {
       {
@@ -16,7 +16,7 @@ local definitions = {
   {
     id = "bright_lights",
     name = "Bright Lights",
-    description = "Each equipped coin gains +0.05 Heads weight before rolling.",
+    description = "Each equipped coin gains +5% Heads chance before rolling.",
     tags = { "stage", "weight", "heads" },
     triggers = {
       {
@@ -47,7 +47,7 @@ local definitions = {
   {
     id = "side_pot",
     name = "Side Pot",
-    description = "+1 Chip after each scored batch in this stage.",
+    description = "+1 extra Chip after each scored batch in this stage.",
     tags = { "stage", "economy" },
     triggers = {
       {
@@ -69,20 +69,6 @@ local definitions = {
         condition = { call = "heads" },
         effects = {
           { op = "apply_score_multiplier", value = 1.10 },
-        },
-      },
-    },
-  },
-  {
-    id = "long_game",
-    name = "Long Game",
-    description = "+1 run score after each scored batch in this stage.",
-    tags = { "stage", "score", "economy" },
-    triggers = {
-      {
-        hook = "after_scoring",
-        effects = {
-          { op = "add_run_score", amount = 1 },
         },
       },
     },

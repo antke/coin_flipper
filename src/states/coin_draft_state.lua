@@ -153,8 +153,11 @@ function CoinDraftState:drawOfferCards(app, panelLayout)
     local lines = {
       string.format("%s", card.name or card.coinId),
       string.format("Rarity: %s", card.rarity or "n/a"),
+      string.format("Chance: %s", card.chanceText or "n/a"),
       "",
-      Terminology.getMechanicRichText(card.description),
+      card.effectDescription and card.effectDescription ~= "" and Terminology.getMechanicRichText("Effect: " .. card.effectDescription) or "",
+      "",
+      string.format("Description: %s", card.description or ""),
     }
 
     Layout.drawWrappedLines(lines, textX, textY, textWidth, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height)

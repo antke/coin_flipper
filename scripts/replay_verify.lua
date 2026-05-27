@@ -26,15 +26,14 @@ local function buildTargetedQueueReplayRun(baseSeed)
     local metaState = MetaState.new()
     local runState, metaProjection = RunInitializer.createNewRun(metaState, {
       seed = seed,
-      starterCollection = { "weighted_shell" },
-      ownedUpgradeIds = { "heads_varnish", "echo_cache", "reserve_fuse" },
+      starterCollection = { "heads_loaded_penny" },
+      ownedUpgradeIds = { "heads_varnish", "echo_cache" },
     })
     local stageState = RunInitializer.createStageForCurrentRound(runState)
-    local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "weighted_shell" })
+    local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "heads_loaded_penny" })
     assert(selection, errorMessage)
 
     local rng = RNG.new(seed)
-    local sawQueue = false
     local sawGrant = false
     local sawConsume = false
 
@@ -43,14 +42,13 @@ local function buildTargetedQueueReplayRun(baseSeed)
       assert(batchResult, batchError)
       table.insert(runState.history.flipBatches, Utils.clone(batchResult.batch))
 
-      sawQueue = sawQueue or #(batchResult.trace.queuedActions or {}) > 0
       sawGrant = sawGrant or #(batchResult.trace.temporaryEffectsGranted or {}) > 0
       sawConsume = sawConsume or #(batchResult.trace.temporaryEffectsConsumed or {}) > 0
     end
 
     RunHistorySystem.finalizeStage(runState, stageState, metaState)
 
-    if sawQueue and sawGrant and sawConsume then
+    if sawGrant and sawConsume then
       return seed, runState
     end
   end
@@ -62,10 +60,10 @@ local function buildTargetedForcedReplayRun(seed)
   local metaState = MetaState.new()
   local runState, metaProjection = RunInitializer.createNewRun(metaState, {
     seed = seed,
-    starterCollection = { "match_spark" },
+    starterCollection = { "regular_dollar" },
   })
   local stageState = RunInitializer.createStageForCurrentRound(runState)
-  local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "match_spark" })
+  local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "regular_dollar" })
   assert(selection, errorMessage)
 
   local rng = RNG.new(seed)
@@ -123,8 +121,7 @@ local targetedOk, targetedResult = pcall(function()
   local sawSlotMetadata = false
   local sawSlotAwareTraceSignature = false
   for _, batchSignature in ipairs(transcript.expected.batchSignatures or {}) do
-    if #(batchSignature.queuedActions or {}) > 0
-      and #(batchSignature.temporaryEffectsGranted or {}) > 0
+    if #(batchSignature.temporaryEffectsGranted or {}) > 0
       and #(batchSignature.temporaryEffectsConsumed or {}) > 0 then
       sawDetailedSignature = true
     end
@@ -175,7 +172,7 @@ local targetedOk, targetedResult = pcall(function()
     end
   end
 
-  assert(sawDetailedSignature, "targeted transcript missing queued action / temporary effect trace signature")
+  assert(sawDetailedSignature, "targeted transcript missing temporary effect trace signature")
   assert(sawSlotMetadata, "targeted transcript missing slot-aware resolution metadata")
   assert(sawSlotAwareTraceSignature, "targeted transcript missing slot-aware trace/action signature")
 

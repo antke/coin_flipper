@@ -80,15 +80,14 @@ local function runTargetedQueueScenario(baseSeed)
     local metaState = MetaState.new()
     local runState, metaProjection = RunInitializer.createNewRun(metaState, {
       seed = seed,
-      starterCollection = { "weighted_shell" },
-      ownedUpgradeIds = { "heads_varnish", "echo_cache", "reserve_fuse" },
+      starterCollection = { "heads_loaded_penny" },
+      ownedUpgradeIds = { "heads_varnish", "echo_cache" },
     })
     local stageState = RunInitializer.createStageForCurrentRound(runState)
-    local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "weighted_shell" })
+    local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "heads_loaded_penny" })
     assert(selection, errorMessage)
 
     local rng = RNG.new(seed)
-    local sawQueue = false
     local sawGrant = false
     local sawConsume = false
 
@@ -97,7 +96,6 @@ local function runTargetedQueueScenario(baseSeed)
       assert(batchResult, batchError)
       table.insert(runState.history.flipBatches, Utils.clone(batchResult.batch))
 
-      sawQueue = sawQueue or #(batchResult.trace.queuedActions or {}) > 0
       sawGrant = sawGrant or #(batchResult.trace.temporaryEffectsGranted or {}) > 0
       sawConsume = sawConsume or #(batchResult.trace.temporaryEffectsConsumed or {}) > 0
 
@@ -110,7 +108,7 @@ local function runTargetedQueueScenario(baseSeed)
     RunHistorySystem.finalizeStage(runState, stageState, metaState)
     Validator.assertRuntimeInvariants("scripts.invariant_verify.targeted.queue_final", runState, nil, { history = true })
 
-    if sawQueue and sawGrant and sawConsume then
+    if sawGrant and sawConsume then
       return true
     end
   end
@@ -122,10 +120,10 @@ local function runTargetedForcedResultScenario(seed)
   local metaState = MetaState.new()
   local runState, metaProjection = RunInitializer.createNewRun(metaState, {
     seed = seed,
-    starterCollection = { "match_spark" },
+    starterCollection = { "regular_dollar" },
   })
   local stageState = RunInitializer.createStageForCurrentRound(runState)
-  local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "match_spark" })
+  local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "regular_dollar" })
   assert(selection, errorMessage)
 
   local rng = RNG.new(seed)
@@ -163,10 +161,10 @@ local function runForcedResultLeakScenario(seed)
   local metaState = MetaState.new()
   local runState = RunInitializer.createNewRun(metaState, {
     seed = seed,
-    starterCollection = { "match_spark" },
+    starterCollection = { "regular_dollar" },
   })
   local stageState = RunInitializer.createStageForCurrentRound(runState)
-  local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "match_spark" })
+  local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "regular_dollar" })
   assert(selection, errorMessage)
 
   table.insert(runState.pendingForcedCoinResults, "heads")

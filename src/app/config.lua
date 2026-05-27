@@ -62,6 +62,18 @@ local GameConfig = {
     shopPointMultiplier = 1.0,
   },
 
+  luck = {
+    meterMax = 12,
+    baseMatchGain = 1,
+    fatedFlipGeneratesLuck = false,
+    fountainFavorByRarity = {
+      common = 1,
+      uncommon = 2,
+      rare = 3,
+      cursed = 2,
+    },
+  },
+
   flip = {
     baseHeadsWeight = 0.5,
     baseTailsWeight = 0.5,

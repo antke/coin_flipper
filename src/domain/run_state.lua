@@ -1,4 +1,5 @@
 local Loadout = require("src.domain.loadout")
+local GameConfig = require("src.app.config")
 local PurseSystem = require("src.systems.purse_system")
 local Utils = require("src.core.utils")
 
@@ -30,6 +31,13 @@ function RunState.new(options)
     shopPoints = math.max(0, tonumber(options.startingShopPoints) or 0),
     shopRerollsRemaining = math.max(0, tonumber(options.startingShopRerolls) or 0),
     runTotalScore = 0,
+    luck = {
+      value = 0,
+      max = math.max(1, tonumber(GameConfig.get("luck.meterMax", 12)) or 12),
+      fatedFlipActive = false,
+      fatedFlipGeneratesLuck = GameConfig.get("luck.fatedFlipGeneratesLuck", false) == true,
+      fountainFavor = 0,
+    },
     metaRewardEarned = 0,
     metaRewardGranted = false,
     runStartRecorded = false,

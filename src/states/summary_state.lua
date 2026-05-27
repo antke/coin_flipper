@@ -124,7 +124,7 @@ function SummaryState:draw(app)
   local summaryLines = {
     string.format("Run Status: %s", summary.runStatus),
     string.format("Final Round Reached: %d", summary.roundIndex),
-    string.format("Run Total Damage: %d", summary.runTotalScore),
+    string.format("Total Score: %d", summary.runTotalScore),
     string.format("Meta Reward Earned: %d", summary.metaRewardEarned or 0),
     string.format("Final Stage: %s", summary.finalStageLabel),
     string.format("Final Stage Status: %s", summary.finalStageStatus),
