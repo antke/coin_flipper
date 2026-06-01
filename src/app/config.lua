@@ -63,13 +63,13 @@ local GameConfig = {
   },
 
   luck = {
-    meterMax = 12,
+    fatedFlipThreshold = 12,
     baseMatchGain = 1,
     fatedFlipGeneratesLuck = false,
     fountainFavorByRarity = {
-      common = 1,
-      uncommon = 2,
-      rare = 3,
+      common = 0.25,
+      uncommon = 0.5,
+      rare = 0.75,
       cursed = 2,
     },
   },

@@ -33,7 +33,7 @@ function CoinDraftState:enter(app)
     app:generateDraftOffers()
   end
 
-  self.statusMessage = "Choose a coin to add to your purse. Offers refresh after each pick."
+  self.statusMessage = "Choose a coin to add to your pouch. Offers refresh after each pick."
 end
 
 function CoinDraftState:getLayout(app)
@@ -146,7 +146,6 @@ function CoinDraftState:drawOfferCards(app, panelLayout)
     local textWidth = contentArea.width - artSize - Theme.spacing.itemGap
 
     CoinArt.draw(card.coinId, contentArea.x, contentArea.y, artSize, {
-      selected = true,
       tilt = (entry.index % 2 == 0) and 0.08 or -0.08,
     })
 
@@ -222,7 +221,7 @@ function CoinDraftState:drawSelectedCoinSummary(app, area, session)
     love.graphics.setFont(app.fonts.small)
 
     if filled then
-      CoinArt.draw(coinId, itemX + Theme.scale(9), itemY + Theme.scale(10), Theme.scale(38), { selected = hovered, glow = hovered })
+      CoinArt.draw(coinId, itemX + Theme.scale(9), itemY + Theme.scale(10), Theme.scale(38))
       Theme.applyColor(Theme.colors.text)
       love.graphics.printf(coin and coin.name or coinId, itemX + Theme.scale(56), itemY + Theme.scale(20), math.max(1, itemWidth - Theme.scale(64)), "left")
     end
@@ -241,7 +240,7 @@ function CoinDraftState:draw(app)
   love.graphics.setFont(app.fonts.body)
   local lines = {
     string.format("Draft picks remaining: %d/%d", session.picksRemaining or 0, session.totalPicks or 0),
-    "Your purse starts with 5 Heads-Loaded Pennies and 5 Tails-Loaded Pennies. Each draft pick adds one special coin instance.",
+    "Your pouch starts with 5 Heads-Loaded Pennies and 5 Tails-Loaded Pennies. Each draft pick adds one special coin instance.",
     self.statusMessage,
   }
   Layout.drawWrappedLines(lines, layout.padding, layout.infoY, layout.width - (layout.padding * 2), Theme.colors.text, Theme.spacing.lineHeight, layout.infoHeight)

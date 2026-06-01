@@ -1123,7 +1123,7 @@ function CoinArt.draw(coinOrId, x, y, size, options)
     love.graphics.translate(-(x + (size / 2)), -(y + (size / 2)))
   end
 
-  if options.glow ~= false then
+  if options.glow == true then
     for index = 1, 3 do
       apply(palette.glow or palette.rim, (0.10 / index) * alpha)
       love.graphics.rectangle(
@@ -1138,8 +1138,10 @@ function CoinArt.draw(coinOrId, x, y, size, options)
     end
   end
 
-  apply(Theme.colors.shadow, 0.24 * alpha)
-  love.graphics.rectangle("fill", x, y + (2 * scale), size, size, 6, 6)
+  if options.shadow == true then
+    apply(Theme.colors.shadow, 0.24 * alpha)
+    love.graphics.rectangle("fill", x, y + (2 * scale), size, size, 6, 6)
+  end
 
   local rows = {
     { 5, 6 },
@@ -1229,7 +1231,6 @@ function CoinArt.drawCard(coinOrId, x, y, width, height, options)
   CoinArt.draw(definition, x + math.floor((width - coinSize) / 2), y + 14, coinSize, {
     side = options.side,
     selected = options.selected,
-    glow = true,
   })
 end
 

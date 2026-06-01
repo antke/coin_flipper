@@ -7,7 +7,11 @@ local FountainSystem = {}
 
 local function getFavorForRarity(rarity)
   local values = GameConfig.get("luck.fountainFavorByRarity", {}) or {}
-  return math.max(0, math.floor(tonumber(values[rarity or "common"] or values.common or 1) or 1))
+  return math.max(0, tonumber(values[rarity or "common"] or values.common or 0.25) or 0.25)
+end
+
+local function formatFavor(amount)
+  return LuckSystem.formatAmount(amount)
 end
 
 function FountainSystem.buildSession(runState, lastStageResult)
@@ -88,7 +92,7 @@ function FountainSystem.sacrifice(runState, stageState, session, instanceId)
   session.sacrificedInstanceId = instanceId
   session.sacrificedCoinId = definition.id
   session.favorGained = favor
-  session.message = string.format("Sacrificed %s for +%d Fountain Favor.", definition.name, favor)
+  session.message = string.format("Sacrificed %s for +%s Fountain Favor.", definition.name, formatFavor(favor))
 
   return true, {
     instanceId = instanceId,

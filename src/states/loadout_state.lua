@@ -256,13 +256,13 @@ end
 function LoadoutState:tryStartStage(app)
   app:ensureCurrentStage()
   app:recordRunStartIfNeeded()
-  self.statusMessage = "Purse ready. Drawing your first hand."
+  self.statusMessage = "Pouch ready. Drawing your first hand."
   return app.stateGraph:request("stage_ready")
 end
 
 function LoadoutState:scrollPurse(app, direction)
   local layout = self:getLayout(app)
-  local purseArea = Panel.getContentArea(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Purse")
+  local purseArea = Panel.getContentArea(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Pouch")
   local maxScrollOffset = PurseView.getMaxScrollOffset(app, purseArea, nil)
 
   self.purseScrollOffset = math.max(0, math.min((self.purseScrollOffset or 0) + direction, maxScrollOffset))
@@ -444,7 +444,7 @@ function LoadoutState:enter(app, payload)
   self.reconciliation = nil
   self.collectionScrollOffset = 1
   self.purseScrollOffset = 0
-  self.statusMessage = "Review your purse. The stage will draw 5 coins per flip."
+  self.statusMessage = "Review your pouch. The stage will draw 5 coins per flip."
 
   local resumeState = payload and payload.resumeLoadoutState or nil
 
@@ -473,7 +473,7 @@ function LoadoutState:enter(app, payload)
       self.collectionScrollOffset = math.max(1, math.floor(resumeState.collectionScrollOffset))
     end
 
-    self.statusMessage = "Resumed saved run in purse review."
+    self.statusMessage = "Resumed saved run in pouch review."
   end
 end
 
@@ -492,7 +492,7 @@ function LoadoutState:draw(app)
   local layout = self:getLayout(app)
   local stagePreview = app:getPlannedStagePreviewData()
   local stageDefinition = stagePreview.stageDefinition
-  local stageTitle = stageDefinition and (stageDefinition.label or stageDefinition.name or stageDefinition.id) or "Purse Review"
+  local stageTitle = stageDefinition and (stageDefinition.label or stageDefinition.name or stageDefinition.id) or "Pouch Review"
 
   love.graphics.setFont(app.fonts.heading)
   Theme.applyColor(Theme.colors.text)
@@ -512,10 +512,10 @@ function LoadoutState:draw(app)
   )
 
   Panel.draw(layout.padding, layout.panelY, layout.contentWidth, layout.topHeight, "Stage Briefing")
-  Panel.draw(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Purse")
+  Panel.draw(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Pouch")
 
   local briefingArea = Panel.getContentArea(layout.padding, layout.panelY, layout.contentWidth, layout.topHeight, "Stage Briefing")
-  local purseArea = Panel.getContentArea(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Purse")
+  local purseArea = Panel.getContentArea(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Pouch")
 
   local mouseX, mouseY = love.mouse.getPosition()
   love.graphics.setFont(app.fonts.body)
@@ -578,7 +578,7 @@ function LoadoutState:wheelmoved(app, _, y)
 
   local mouseX, mouseY = love.mouse.getPosition()
   local layout = self:getLayout(app)
-  local purseArea = Panel.getContentArea(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Purse")
+  local purseArea = Panel.getContentArea(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Pouch")
 
   if Button.containsPoint(purseArea, mouseX, mouseY) then
     self:scrollPurse(app, y > 0 and -1 or 1)

@@ -33,7 +33,7 @@ function RunState.new(options)
     runTotalScore = 0,
     luck = {
       value = 0,
-      max = math.max(1, tonumber(GameConfig.get("luck.meterMax", 12)) or 12),
+      max = math.max(1, tonumber(GameConfig.get("luck.fatedFlipThreshold", 12)) or 12),
       fatedFlipActive = false,
       fatedFlipGeneratesLuck = GameConfig.get("luck.fatedFlipGeneratesLuck", false) == true,
       fountainFavor = 0,

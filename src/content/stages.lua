@@ -26,7 +26,7 @@ local definitions = {
     opponent = {
       id = "mid_table_sharp",
       name = "Mid-Table Sharp",
-      description = "A patient gambler with just enough tricks to test your purse.",
+      description = "A patient gambler with just enough tricks to test your pouch.",
       hp = 8,
     },
     activeStageModifierIds = { "crosswind_table" },

@@ -13,8 +13,29 @@ local function toInteger(value, defaultValue)
   return math.floor(numeric)
 end
 
+local function toNumber(value, defaultValue)
+  local numeric = tonumber(value)
+
+  if numeric == nil then
+    return defaultValue or 0
+  end
+
+  return numeric
+end
+
+function LuckSystem.formatAmount(value)
+  local amount = tonumber(value) or 0
+
+  if math.floor(amount) == amount then
+    return string.format("%d", amount)
+  end
+
+  local formatted = string.format("%.2f", amount):gsub("0+$", ""):gsub("%.$", "")
+  return formatted
+end
+
 local function getConfiguredMax()
-  return math.max(1, toInteger(GameConfig.get("luck.meterMax", 12), 12))
+  return math.max(1, toInteger(GameConfig.get("luck.fatedFlipThreshold", 12), 12))
 end
 
 local function ensureTrace(context)
@@ -63,7 +84,7 @@ function LuckSystem.normalize(runState)
   local configuredFatedGeneration = GameConfig.get("luck.fatedFlipGeneratesLuck", false) == true
 
   luck.max = math.max(1, toInteger(luck.max, getConfiguredMax()))
-  luck.value = Utils.clamp(toInteger(luck.value, 0), 0, luck.max)
+  luck.value = Utils.clamp(toNumber(luck.value, 0), 0, luck.max)
   luck.fatedFlipActive = luck.fatedFlipActive == true or luck.value >= luck.max
   if luck.fatedFlipGeneratesLuck == nil then
     luck.fatedFlipGeneratesLuck = configuredFatedGeneration
@@ -71,7 +92,7 @@ function LuckSystem.normalize(runState)
     luck.fatedFlipGeneratesLuck = luck.fatedFlipGeneratesLuck == true
   end
 
-  luck.fountainFavor = math.max(0, toInteger(luck.fountainFavor, 0))
+  luck.fountainFavor = math.max(0, toNumber(luck.fountainFavor, 0))
 
   return luck
 end
@@ -99,14 +120,17 @@ function LuckSystem.getMeter(runState)
   }
 end
 
+function LuckSystem.getMeterProgress(runState)
+  local meter = LuckSystem.getMeter(runState)
+  local maxValue = math.max(1, tonumber(meter.max) or 1)
+  local ratio = Utils.clamp((tonumber(meter.value) or 0) / maxValue, 0, 1)
+
+  return ratio, math.floor((ratio * 100) + 0.5), meter
+end
+
 function LuckSystem.formatMeter(runState)
   local meter = LuckSystem.getMeter(runState)
-
-  if meter.fatedFlipActive then
-    return "FATE"
-  end
-
-  return string.format("%d/%d", meter.value, meter.max)
+  return meter.fatedFlipActive and "FATE" or "Charging"
 end
 
 function LuckSystem.isFatedFlipActive(runState)
@@ -123,7 +147,7 @@ end
 
 function LuckSystem.addFountainFavor(runState, amount)
   local luck = LuckSystem.normalize(runState)
-  local gained = math.max(0, toInteger(amount, 0))
+  local gained = math.max(0, toNumber(amount, 0))
 
   luck.fountainFavor = math.max(0, (luck.fountainFavor or 0) + gained)
   return gained, luck.fountainFavor
@@ -143,7 +167,7 @@ end
 
 function LuckSystem.addLuck(runState, context, amount, options)
   local luck = LuckSystem.normalize(runState)
-  local delta = toInteger(amount, 0)
+  local delta = toNumber(amount, 0)
   local trace = LuckSystem.ensureTrace(context)
   local before = luck.value
   local suppressed = delta > 0 and not LuckSystem.canGeneratePositiveLuck(context, options)

@@ -2,6 +2,7 @@ local Button = require("src.ui.button")
 local CoinArt = require("src.ui.coin_art")
 local Layout = require("src.ui.layout")
 local Panel = require("src.ui.panel")
+local LuckSystem = require("src.systems.luck_system")
 local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
 
@@ -57,7 +58,7 @@ function FountainState:trySacrifice(app, option)
   local ok, result = app:sacrificeFountainCoin(option.instanceId)
 
   if ok then
-    self.statusMessage = string.format("Sacrificed %s for +%d Fountain Favor.", result.name, result.favorGained)
+    self.statusMessage = string.format("Sacrificed %s for +%s Fountain Favor.", result.name, LuckSystem.formatAmount(result.favorGained))
   else
     self.statusMessage = tostring(result)
   end
@@ -156,10 +157,10 @@ function FountainState:drawInfo(app, layout)
   local meter = app:getLuckMeter()
   love.graphics.setFont(app.fonts.body)
   Theme.applyColor(Theme.colors.text)
-  love.graphics.printf("Sacrifice up to one coin. Removed coins leave your purse; Fountain Favor permanently boosts future Luck gains.", area.x, area.y, area.width, "left")
+  love.graphics.printf("Sacrifice up to one coin. Removed coins leave your pouch; Fountain Favor permanently boosts future Luck gains.", area.x, area.y, area.width, "left")
   love.graphics.setFont(app.fonts.small)
   Theme.applyColor(Theme.colors.warning)
-  love.graphics.printf(string.format("Luck: %s • Fountain Favor: +%d", meter.fatedFlipActive and "FATE READY" or string.format("%d/%d", meter.value, meter.max), meter.fountainFavor or 0), area.x, area.y + 36, area.width, "left")
+  love.graphics.printf(string.format("Luck: %s • Fountain Favor: +%s", meter.fatedFlipActive and "FATE READY" or "Charging", LuckSystem.formatAmount(meter.fountainFavor or 0)), area.x, area.y + 36, area.width, "left")
 end
 
 function FountainState:drawOption(app, entry)
@@ -173,7 +174,7 @@ function FountainState:drawOption(app, entry)
 
   love.graphics.setFont(app.fonts.small)
   Theme.applyColor(Theme.colors.mutedText)
-  love.graphics.printf(string.format("%s • +%d Favor", option.rarity or "common", option.favor or 0), area.x + coinSize + 12, area.y + 8, math.max(1, area.width - coinSize - 12), "left")
+  love.graphics.printf(string.format("%s • +%s Favor", option.rarity or "common", LuckSystem.formatAmount(option.favor or 0)), area.x + coinSize + 12, area.y + 8, math.max(1, area.width - coinSize - 12), "left")
 
   Theme.applyColor(Theme.colors.text)
   love.graphics.printf(Terminology.formatText(option.description or ""), area.x, area.y + coinSize + 10, area.width, "left")

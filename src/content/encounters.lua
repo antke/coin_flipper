@@ -11,7 +11,7 @@ local EncounterDefinitions = {
         id = "house_purse",
         type = "shop_points",
         amount = 3,
-        label = "Take the purse",
+        label = "Take the pouch",
         description = "+3 extra Chips for the next stop.",
       },
       {
@@ -172,7 +172,7 @@ local EncounterDefinitions = {
         id = "mirror_purse_choice",
         type = "shop_points",
         amount = 4,
-        label = "Take the mirrored purse",
+        label = "Take the mirrored pouch",
         description = "+4 extra Chips for the next stop.",
       },
     },

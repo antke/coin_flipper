@@ -289,6 +289,10 @@ local function isNonNegativeInteger(value)
   return isInteger(value) and value >= 0
 end
 
+local function isNonNegativeNumber(value)
+  return type(value) == "number" and value >= 0
+end
+
 local function validateIdList(values, label, resolver)
   local seen = {}
 
@@ -2417,8 +2421,8 @@ function Validator.validateRunState(runState)
       return false, "runState.luck must be a table"
     end
 
-    if not isNonNegativeInteger(runState.luck.value) then
-      return false, "runState.luck.value must be a non-negative integer"
+    if not isNonNegativeNumber(runState.luck.value) then
+      return false, "runState.luck.value must be a non-negative number"
     end
 
     if not isPositiveInteger(runState.luck.max) then
@@ -2437,8 +2441,8 @@ function Validator.validateRunState(runState)
       return false, "runState.luck.fatedFlipGeneratesLuck must be a boolean"
     end
 
-    if not isNonNegativeInteger(runState.luck.fountainFavor) then
-      return false, "runState.luck.fountainFavor must be a non-negative integer"
+    if not isNonNegativeNumber(runState.luck.fountainFavor) then
+      return false, "runState.luck.fountainFavor must be a non-negative number"
     end
   end
 

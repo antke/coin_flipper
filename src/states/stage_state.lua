@@ -77,6 +77,10 @@ local function clamp(value, minimum, maximum)
   return math.max(minimum, math.min(maximum, value))
 end
 
+local function lerp(startValue, endValue, progress)
+  return startValue + ((endValue - startValue) * progress)
+end
+
 local function formatSignedScore(value)
   local amount = tonumber(value) or 0
 
@@ -108,6 +112,12 @@ end
 
 local COIN_ROW_JITTER_X_RANGE = 0.14
 local COIN_ROW_JITTER_Y_RANGE = 0.38
+local HAND_THROW_DURATION = 0.34
+local HAND_THROW_STAGGER = 0.055
+local HAND_THROW_SETTLE_PADDING = 0.10
+local HAND_THROW_IMPACT_DURATION = 0.24
+local LUCK_METER_FILL_DURATION = 0.16
+local LUCK_METER_STEP_GAP = 0.09
 
 -- Stable visual scatter avoids per-frame random jitter in draw().
 local function getStableSignedValue(key, salt)
@@ -120,6 +130,22 @@ local function getStableSignedValue(key, salt)
 
   return ((hash / 1000003) * 2) - 1
 end
+
+local function appendLuckMeterEvents(events, startTime, amount)
+  local remaining = math.max(0, tonumber(amount) or 0)
+  local stepIndex = 0
+
+  while remaining > 0.000001 do
+    local chunk = math.min(1, remaining)
+    table.insert(events, {
+      time = (startTime or 0) + (stepIndex * LUCK_METER_STEP_GAP),
+      amount = chunk,
+    })
+    remaining = remaining - chunk
+    stepIndex = stepIndex + 1
+  end
+end
+
 
 local function getUiRect(app)
   local metrics = app:getUiMetrics()
@@ -219,11 +245,14 @@ function StageState.new()
     logDialogScrollOffset = 0,
     logScrollButtons = {},
     coinRowReveal = nil,
+    handThrowAnimation = nil,
+    pendingHandThrow = false,
     sleightAnimations = {},
     reveal = nil,
     handCardRects = {},
     coinRowVisuals = {},
     coinRowJitters = {},
+    luckMeterAnimation = nil,
     scoreFloaties = {},
     spawnedScoreFloatyKeys = {},
     opponentDamageFloatyAnchor = nil,
@@ -298,7 +327,93 @@ function StageState:startCoinRowReveal(app, batchResult)
     nextSoundIndex = 1,
     feedbackPlayed = false,
   }
+  self:startLuckMeterAnimation(self.coinRowReveal)
   self.spawnedScoreFloatyKeys = {}
+end
+
+function StageState:startLuckMeterAnimation(reveal)
+  local batchResult = reveal and reveal.batchResult or nil
+  local trace = batchResult and batchResult.trace and batchResult.trace.luck or nil
+  local before = trace and trace.before or nil
+
+  if not before or type(trace.deltas) ~= "table" then
+    self.luckMeterAnimation = nil
+    return
+  end
+
+  local events = {}
+  local matchEvents = {}
+
+  for index, coinState in ipairs(batchResult.perCoin or {}) do
+    if coinState.result == batchResult.call then
+      table.insert(matchEvents, {
+        time = getCoinRevealTime(reveal, index) + ((reveal.coinMotionDuration or 0.25) * 0.78),
+      })
+    end
+  end
+
+  for _, delta in ipairs(trace.deltas or {}) do
+    local amount = tonumber(delta.appliedAmount) or 0
+
+    if amount > 0 then
+      if delta.source == "base_match" and #matchEvents > 0 then
+        local perMatchAmount = amount / #matchEvents
+
+        for _, matchEvent in ipairs(matchEvents) do
+          appendLuckMeterEvents(events, matchEvent.time, perMatchAmount)
+        end
+      else
+        appendLuckMeterEvents(events, (reveal.revealDuration or 0) + (reveal.coinMotionDuration or 0.25), amount)
+      end
+    end
+  end
+
+  if #events <= 0 then
+    self.luckMeterAnimation = nil
+    return
+  end
+
+  table.sort(events, function(left, right)
+    return (left.time or 0) < (right.time or 0)
+  end)
+
+  self.luckMeterAnimation = {
+    beforeValue = tonumber(before.value) or 0,
+    max = math.max(1, tonumber(before.max) or 1),
+    events = events,
+  }
+end
+
+function StageState:getDisplayedLuckMeter(app)
+  local animation = self.luckMeterAnimation
+  local reveal = self.coinRowReveal
+
+  if not animation or not reveal then
+    local meter = LuckSystem.getMeter(app.runState)
+    local ratio, _ = LuckSystem.getMeterProgress(app.runState)
+    return meter, ratio
+  end
+
+  local value = animation.beforeValue or 0
+
+  for _, event in ipairs(animation.events or {}) do
+    local elapsed = (reveal.elapsed or 0) - (event.time or 0)
+
+    if elapsed >= LUCK_METER_FILL_DURATION then
+      value = value + (event.amount or 0)
+    elseif elapsed > 0 then
+      value = value + ((event.amount or 0) * easeOutCubic(elapsed / LUCK_METER_FILL_DURATION))
+    end
+  end
+
+  local maxValue = math.max(1, animation.max or 1)
+  value = clamp(value, 0, maxValue)
+
+  return {
+    value = value,
+    max = maxValue,
+    fatedFlipActive = value >= maxValue,
+  }, clamp(value / maxValue, 0, 1)
 end
 
 function StageState:completeReveal(app)
@@ -310,6 +425,7 @@ function StageState:completeReveal(app)
 
   playCoinRowFeedback(app, self.coinRowReveal)
   self.reveal = nil
+  self.luckMeterAnimation = nil
 
   if stageShouldAdvance then
     app:clearFeedback()
@@ -393,7 +509,11 @@ function StageState:tryResolveBatch(app)
   app.selectedCall = nil
 
   if batchResult.status == "active" then
-    local _, drawWarning = app:ensureHandDrawn()
+    local handSlots, drawWarning = app:ensureHandDrawn()
+
+    if handSlots and #handSlots > 0 then
+      self:queueHandThrow(app)
+    end
 
     if app.stageState and app.stageState.stageStatus ~= "active" then
       batchResult.status = app.stageState.stageStatus
@@ -412,7 +532,7 @@ function StageState:tryResolveBatch(app)
       end
 
       if drawWarning == "purse_empty" then
-        self.statusMessage = string.format("Purse empty. Stage %s.", batchResult.status)
+        self.statusMessage = string.format("Pouch empty. Stage %s.", batchResult.status)
       end
     end
   end
@@ -631,8 +751,8 @@ function StageState:getPurseButtonLayout(app)
 end
 
 function StageState:scrollPurseDialog(app, direction)
-  local dialog = self:getHelpDialogLayout(app)
-  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
+  local dialog = self:getPurseDialogLayout(app)
+  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Pouch")
   local maxScrollOffset = PurseView.getMaxScrollOffset(app, contentArea, app.stageState)
 
   self.purseDialogScrollOffset = math.max(0, math.min((self.purseDialogScrollOffset or 0) + direction, maxScrollOffset))
@@ -749,7 +869,7 @@ function StageState:getHelpDialogLines(app)
   table.insert(lines, "- Flip Hand / Enter: resolve the current hand")
   table.insert(lines, "- Sleight: replace a hand slot once before flipping")
   table.insert(lines, "- Drag coins in the hand: reorder the hand")
-  table.insert(lines, "- P: inspect purse")
+  table.insert(lines, "- P: inspect pouch")
   table.insert(lines, "- L: inspect flip log")
   table.insert(lines, "- Space / Enter: skip reveal")
   table.insert(lines, "- Esc: close this dialog")
@@ -775,6 +895,18 @@ function StageState:getHelpDialogLayout(app)
     y = rect.y + math.floor((rect.height - dialogHeight) / 2),
     width = dialogWidth,
     height = dialogHeight,
+  }
+end
+
+function StageState:getPurseDialogLayout(app)
+  local rect, spacing = getUiRect(app)
+  local inset = math.max(Theme.scale(8), math.floor(spacing.screenPadding / 2))
+
+  return {
+    x = rect.x + inset,
+    y = rect.y + inset,
+    width = math.max(Theme.scale(280), rect.width - (inset * 2)),
+    height = math.max(Theme.scale(260), rect.height - (inset * 2)),
   }
 end
 
@@ -813,8 +945,8 @@ function StageState:drawPurseDialog(app)
   end
 
   local _, _, _, window = getUiRect(app)
-  local dialog = self:getHelpDialogLayout(app)
-  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
+  local dialog = self:getPurseDialogLayout(app)
+  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Pouch")
   local closeButton = self:getHelpDialogCloseButton(dialog.x, dialog.y, dialog.width)
   local mouseX, mouseY = love.mouse.getPosition()
 
@@ -825,7 +957,7 @@ function StageState:drawPurseDialog(app)
 
   love.graphics.setColor(0, 0, 0, 0.50)
   love.graphics.rectangle("fill", 0, 0, window.width, window.height)
-  Panel.draw(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
+  Panel.draw(dialog.x, dialog.y, dialog.width, dialog.height, "Pouch")
   Button.drawButtons({ closeButton }, mouseX, mouseY)
   local maxPurseScrollOffset = PurseView.getMaxScrollOffset(app, contentArea, app.stageState)
   self.purseDialogScrollOffset = math.max(0, math.min(self.purseDialogScrollOffset or 0, maxPurseScrollOffset))
@@ -943,12 +1075,13 @@ end
 
 function StageState:drawStageSummary(app, area)
   local stage = app.stageState
-  local fatedActive = app:isFatedFlipActive()
+  local luckMeter, luckProgress = self:getDisplayedLuckMeter(app)
+  local fatedActive = luckMeter and luckMeter.fatedFlipActive == true
   local stats = {
     { label = "Chips", value = tostring(app.runState and app.runState.shopPoints or 0), color = Theme.colors.text },
     { label = "Flips", value = tostring(stage.flipsRemaining), color = Theme.colors.text },
     { label = "Call", value = app.selectedCall and string.upper(app.selectedCall) or "-", color = Theme.colors.text },
-    { label = "Luck", value = LuckSystem.formatMeter(app.runState), color = fatedActive and Theme.colors.warning or Theme.colors.text },
+    { label = "Luck", kind = "progress", progress = luckProgress, color = fatedActive and Theme.colors.warning or Theme.colors.text },
   }
 
   local statGap = Theme.spacing.itemGap
@@ -968,9 +1101,24 @@ function StageState:drawStageSummary(app, area)
     Theme.applyColor(Theme.colors.mutedText)
     love.graphics.printf(stat.label, statX + 8, statY + 7, math.max(1, statWidth - 16), "center")
 
-    love.graphics.setFont(app.fonts.body)
-    Theme.applyColor(stat.color)
-    love.graphics.printf(stat.value, statX + 8, statY + 24, math.max(1, statWidth - 16), "center")
+    if stat.kind == "progress" then
+      local barX = statX + 12
+      local barY = statY + 26
+      local barWidth = math.max(1, statWidth - 24)
+      local barHeight = 14
+      local fillWidth = math.floor(barWidth * clamp(stat.progress or 0, 0, 1))
+
+      setColorWithAlpha(Theme.colors.panelBorder, 0.35)
+      love.graphics.rectangle("fill", barX, barY, barWidth, barHeight, 7, 7)
+      setColorWithAlpha(fatedActive and Theme.colors.warning or Theme.colors.accent, fatedActive and 0.90 or 0.78)
+      love.graphics.rectangle("fill", barX, barY, fillWidth, barHeight, 7, 7)
+      Theme.applyColor(Theme.colors.panelBorder)
+      love.graphics.rectangle("line", barX, barY, barWidth, barHeight, 7, 7)
+    else
+      love.graphics.setFont(app.fonts.body)
+      Theme.applyColor(stat.color)
+      love.graphics.printf(stat.value, statX + 8, statY + 24, math.max(1, statWidth - 16), "center")
+    end
   end
 
   if stage.stageType == "boss" then
@@ -991,38 +1139,6 @@ function StageState:drawStageSummary(app, area)
       love.graphics.printf(string.format("Boss pressure active: %d modifier(s)", #bossCards), area.x + 14, bannerY + 12, area.width - 28, "center")
     end
   end
-end
-
-function StageState:drawFatedFlipBanner(app, area)
-  if not self:isStageActive(app) or not app:isFatedFlipActive() or self:isRevealActive() then
-    return
-  end
-
-  local width = math.min(area.width - 24, 560)
-  if width <= 0 then
-    return
-  end
-
-  local height = math.min(88, math.max(62, math.floor(area.height * 0.24)))
-  local x = area.x + math.floor((area.width - width) / 2)
-  local y = area.y + math.floor((area.height - height) / 2)
-  local pulse = app:getUiPulse(5.5, 0.16, 0.30)
-
-  love.graphics.setColor(Theme.colors.warning[1], Theme.colors.warning[2], Theme.colors.warning[3], pulse)
-  love.graphics.rectangle("fill", x - 6, y - 6, width + 12, height + 12, 14, 14)
-  love.graphics.setColor(Theme.colors.panel[1], Theme.colors.panel[2], Theme.colors.panel[3], 0.92)
-  love.graphics.rectangle("fill", x, y, width, height, 12, 12)
-  Theme.applyColor(Theme.colors.warning)
-  love.graphics.setLineWidth(2)
-  love.graphics.rectangle("line", x, y, width, height, 12, 12)
-  love.graphics.setLineWidth(1)
-
-  love.graphics.setFont(app.fonts.heading)
-  Theme.applyColor(Theme.colors.warning)
-  love.graphics.printf("FATED FLIP", x + 16, y + 15, width - 32, "center")
-  love.graphics.setFont(app.fonts.small)
-  Theme.applyColor(Theme.colors.text)
-  love.graphics.printf("All coins will land on your selected call.", x + 16, y + 50, width - 32, "center")
 end
 
 function StageState:drawFatedButtonGlow(app, buttons)
@@ -1052,6 +1168,7 @@ function StageState:getVisibleCoinStates(app)
 
       table.insert(coins, {
         coinId = coinState.coinId,
+        instanceId = coinState.instanceId,
         slotIndex = coinState.slotIndex,
         resolutionIndex = coinState.resolutionIndex,
         result = coinState.result,
@@ -1081,6 +1198,119 @@ function StageState:getVisibleCoinStates(app)
   end
 
   return coins, nil, nil
+end
+
+function StageState:getCurrentHandSignature(app)
+  local slots = app.stageState and app.stageState.purse and app.stageState.purse.handSlots or {}
+  local parts = {}
+
+  for slotIndex, slot in ipairs(slots) do
+    if slot.instanceId then
+      table.insert(parts, string.format("%d:%s", slotIndex, tostring(slot.instanceId)))
+    end
+  end
+
+  if #parts == 0 then
+    return nil, 0
+  end
+
+  return table.concat(parts, "|"), #parts
+end
+
+function StageState:startHandThrow(app)
+  local signature, coinCount = self:getCurrentHandSignature(app)
+
+  if not signature then
+    self.handThrowAnimation = nil
+    self.pendingHandThrow = false
+    return false
+  end
+
+  self.handThrowAnimation = {
+    signature = signature,
+    elapsed = 0,
+    duration = HAND_THROW_DURATION,
+    stagger = HAND_THROW_STAGGER,
+    coinCount = coinCount,
+  }
+  self.pendingHandThrow = false
+  return true
+end
+
+function StageState:queueHandThrow(app)
+  local signature = self:getCurrentHandSignature(app)
+
+  if not signature then
+    self.pendingHandThrow = false
+    return false
+  end
+
+  if self.coinRowReveal then
+    self.pendingHandThrow = true
+    return true
+  end
+
+  return self:startHandThrow(app)
+end
+
+function StageState:updateHandThrow(app, dt)
+  local animation = self.handThrowAnimation
+
+  if animation then
+    local signature = self:getCurrentHandSignature(app)
+
+    if signature ~= animation.signature then
+      self.handThrowAnimation = nil
+    else
+      animation.elapsed = animation.elapsed + (dt or 0)
+
+      local totalDuration = (animation.duration or HAND_THROW_DURATION)
+        + (math.max(0, (animation.coinCount or 1) - 1) * (animation.stagger or HAND_THROW_STAGGER))
+        + HAND_THROW_SETTLE_PADDING
+
+      if animation.elapsed >= totalDuration then
+        self.handThrowAnimation = nil
+      end
+    end
+  end
+
+  if self.pendingHandThrow and not self.coinRowReveal then
+    self:startHandThrow(app)
+  end
+end
+
+function StageState:getHandThrowCoinVisual(animation, key, index, targetX, targetY, targetSize, layout)
+  if not animation or not layout then
+    return targetX, targetY, targetSize, 0, 1, 1, nil
+  end
+
+  local age = (animation.elapsed or 0) - ((index - 1) * (animation.stagger or HAND_THROW_STAGGER))
+  local duration = math.max(0.001, animation.duration or HAND_THROW_DURATION)
+  local rawProgress = clamp(age / duration, 0, 1)
+  local moveProgress = easeOutCubic(rawProgress)
+  local dealOriginX = layout.startX + math.floor(targetSize * 0.20)
+  local dealOriginY = layout.centerLineY + math.floor(targetSize * 0.70)
+  local startX = dealOriginX + math.floor(targetSize * 0.08 * getStableSignedValue(key, "throw-start-x"))
+  local startY = dealOriginY + math.floor(targetSize * 0.07 * getStableSignedValue(key, "throw-start-y"))
+  local directionX = targetX - startX
+  local directionY = targetY - startY
+  local directionLength = math.max(1, math.sqrt((directionX * directionX) + (directionY * directionY)))
+  local outwardX = directionX / directionLength
+  local outwardY = directionY / directionLength
+  local slideCurve = math.sin(rawProgress * math.pi) * targetSize * 0.08
+  local settleProgress = clamp((rawProgress - 0.72) / 0.28, 0, 1)
+  local overshoot = math.sin(settleProgress * math.pi) * targetSize * 0.08 * (1 - settleProgress)
+  local x = lerp(startX, targetX, moveProgress) + (-outwardY * slideCurve) + (outwardX * overshoot)
+  local y = lerp(startY, targetY, moveProgress) + (outwardX * slideCurve * 0.34) + (outwardY * overshoot)
+  local spinDirection = getStableSignedValue(key, "throw-spin") >= 0 and 1 or -1
+  local impactAge = age - (duration * 0.76)
+  local impactPunch = impactAge >= 0 and clamp(1 - (impactAge / 0.16), 0, 1) or 0
+  local tilt = spinDirection * (0.44 * (1 - moveProgress)) + (math.sin(rawProgress * math.pi * 2) * 0.05 * (1 - rawProgress))
+  local scale = 0.88 + (0.12 * moveProgress) + (impactPunch * 0.05)
+  local alpha = clamp(rawProgress * 3.0, 0, 1)
+  local labelAlpha = clamp((rawProgress - 0.48) / 0.52, 0, 1)
+
+  return math.floor(x), math.floor(y), math.floor(targetSize * scale), tilt, alpha, labelAlpha, impactAge
 end
 
 function StageState:getCoinRowLayout(app, x, y, width, height, coinCount, titleHeight)
@@ -1294,6 +1524,16 @@ function StageState:drawCoinRow(app, x, y, width, height)
   local reveal = self.coinRowReveal
   local visibleCount = #coins
   local rowRevealActive = reveal and reveal.batchId == batchId
+  local handThrowActive = self.handThrowAnimation ~= nil
+
+  if handThrowActive then
+    local handSignature = self:getCurrentHandSignature(app)
+
+    if not handSignature or handSignature ~= self.handThrowAnimation.signature then
+      self.handThrowAnimation = nil
+      handThrowActive = false
+    end
+  end
 
   if rowRevealActive then
     visibleCount = 0
@@ -1311,7 +1551,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
   local mouseX, mouseY = love.mouse.getPosition()
   local hoveredCoinId = nil
   local isDraggingHandCoin = self.draggingHandSlotIndex ~= nil
-  local handHoverEnabled = not self.purseDialogOpen
+  local handHoverEnabled = not self.purseDialogOpen and not handThrowActive
   local drawCoins = coins
   local dragLayout = nil
   local dragPushDistance = 0
@@ -1350,6 +1590,8 @@ function StageState:drawCoinRow(app, x, y, width, height)
     CoinArt.draw(self.draggingHandCoinId, dragGhostX - math.floor(dragGhostSize / 2), dragGhostY - math.floor(dragGhostSize / 2), dragGhostSize, {
       alpha = 0.18,
       tilt = -0.05,
+      glow = false,
+      shadow = false,
     })
   end
 
@@ -1386,6 +1628,24 @@ function StageState:drawCoinRow(app, x, y, width, height)
     coinCenterX = rowVisual.x
     coinCenterY = rowVisual.y
     animatedCoinSize = math.floor(rowVisual.size)
+
+    local throwTilt = 0
+    local throwAlpha = 1
+    local labelAlpha = 1
+    local throwImpactAge = nil
+
+    if handThrowActive and not hasResult and not rowRevealActive and not isDraggingHandCoin then
+      coinCenterX, coinCenterY, animatedCoinSize, throwTilt, throwAlpha, labelAlpha, throwImpactAge = self:getHandThrowCoinVisual(
+        self.handThrowAnimation,
+        visualKey,
+        index,
+        coinCenterX,
+        coinCenterY,
+        animatedCoinSize,
+        activeLayout
+      )
+    end
+
     cardDrawX = coinCenterX - math.floor(activeCardWidth / 2)
     local coinDrawX = coinCenterX - math.floor(animatedCoinSize / 2)
     local coinDrawY = coinCenterY - math.floor(animatedCoinSize / 2)
@@ -1424,7 +1684,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
       coinCenterX = coinCenterX,
       coinCenterY = coinCenterY,
       coinSize = animatedCoinSize,
-      movable = not rowRevealActive and not hasResult and not coin.cannotReorder and self:isStageActive(app) and not self:isRevealActive(),
+      movable = not handThrowActive and not rowRevealActive and not hasResult and not coin.cannotReorder and self:isStageActive(app) and not self:isRevealActive(),
     })
 
     if hasResult and resultSettled then
@@ -1445,20 +1705,28 @@ function StageState:drawCoinRow(app, x, y, width, height)
       love.graphics.setLineWidth(1)
     end
 
-    setColorWithAlpha(Theme.colors.shadow, 0.34)
-    love.graphics.ellipse("fill", coinCenterX, coinDrawY + animatedCoinSize + 8, math.floor(animatedCoinSize * 0.42), 8)
+    if not handThrowActive then
+      setColorWithAlpha(Theme.colors.shadow, 0.34 * throwAlpha)
+      love.graphics.ellipse("fill", coinCenterX, coinDrawY + animatedCoinSize + 8, math.floor(animatedCoinSize * 0.42), 8)
+    end
+
+    if throwImpactAge and throwImpactAge >= 0 and throwImpactAge <= HAND_THROW_IMPACT_DURATION then
+      self:drawHandThrowImpact(coinCenterX, coinCenterY, animatedCoinSize, throwImpactAge, throwAlpha)
+    end
 
     love.graphics.setFont(app.fonts.small)
-    Theme.applyColor(Theme.colors.mutedText)
+    setColorWithAlpha(Theme.colors.mutedText, labelAlpha)
     love.graphics.printf(app:getCoinName(coin.coinId), cardDrawX + 4, labelY, activeCardWidth - 8, "center")
 
     CoinArt.draw(coin.coinId, coinDrawX, coinDrawY, animatedCoinSize, {
       side = artSide,
       selected = artSelected,
-      alpha = sleightAnimation and 0.16 or (hasResult and 1.0 or 0.78),
-      tilt = liftProgress and motionTilt * ((index % 2 == 0) and 1 or -1) or (hasResult and ((index % 2 == 0) and 0.10 or -0.10) or 0),
+      alpha = (sleightAnimation and 0.16 or (hasResult and 1.0 or 0.78)) * throwAlpha,
+      tilt = throwTilt + (liftProgress and motionTilt * ((index % 2 == 0) and 1 or -1) or (hasResult and ((index % 2 == 0) and 0.10 or -0.10) or 0)),
       scaleX = liftProgress and motionScaleX or 1,
       scaleY = liftProgress and motionScaleY or 1,
+      glow = false,
+      shadow = false,
     })
 
     if sleightAnimation then
@@ -1500,7 +1768,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
         },
       }
 
-      if not rowRevealActive then
+      if not rowRevealActive and not handThrowActive then
         for _, button in ipairs(buttons) do
           table.insert(self.handActionButtons, button)
           drawSleightBadge(
@@ -1514,7 +1782,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
       end
 
       if coin.cannotReorder then
-        Theme.applyColor(Theme.colors.warning)
+        setColorWithAlpha(Theme.colors.warning, labelAlpha)
         love.graphics.printf("LOCKED", cardDrawX + 8, labelY + 18, activeCardWidth - 16, "center")
       end
     end
@@ -1552,6 +1820,8 @@ function StageState:drawCoinRow(app, x, y, width, height)
         selected = true,
         alpha = 0.78 + (0.14 * lift),
         tilt = self.dragTilt or 0,
+        glow = false,
+        shadow = false,
       })
     end
   end
@@ -1627,6 +1897,23 @@ function StageState:drawMissParticles(cardX, cardY, cardWidth, cardHeight, age)
   end
 end
 
+function StageState:drawHandThrowImpact(centerX, centerY, coinSize, age, alphaMultiplier)
+  local progress = clamp(age / HAND_THROW_IMPACT_DURATION, 0, 1)
+  local alpha = 0.72 * (1 - progress) * (alphaMultiplier or 1)
+  local radius = math.floor(coinSize * (0.56 + (progress * 0.38)))
+
+  if alpha <= 0 then
+    return
+  end
+
+  setColorWithAlpha(Theme.colors.accent, alpha * 0.16)
+  love.graphics.circle("fill", centerX, centerY, radius)
+  setColorWithAlpha(Theme.colors.accent, alpha)
+  love.graphics.setLineWidth(3)
+  love.graphics.circle("line", centerX, centerY, radius)
+  love.graphics.setLineWidth(1)
+end
+
 function StageState:drawRevealImpact(cardX, cardY, cardWidth, cardHeight, age, didMatch)
   local progress = math.min(1, age / 0.60)
   local color = didMatch and Theme.colors.success or Theme.colors.danger
@@ -1671,6 +1958,8 @@ function StageState:drawSleightSwitchAnimation(cardX, coinY, cardWidth, cardHeig
     CoinArt.draw(animation.returnedCoinId, coinX, outgoingY, coinSize, {
       alpha = outgoingAlpha,
       tilt = 0.16 + (progress * 0.34),
+      glow = false,
+      shadow = false,
     })
   end
 
@@ -1678,6 +1967,8 @@ function StageState:drawSleightSwitchAnimation(cardX, coinY, cardWidth, cardHeig
     CoinArt.draw(animation.replacementCoinId, coinX, incomingY, coinSize, {
       alpha = incomingAlpha,
       tilt = -0.18 + (progress * 0.18),
+      glow = false,
+      shadow = false,
     })
   end
 
@@ -1695,12 +1986,15 @@ function StageState:getHandCardAtPoint(x, y)
   return nil
 end
 
-function StageState:enter(app)
+function StageState:enter(app, payload, previousName)
   app:ensureCurrentStage()
   app.selectedCall = nil
-  app:ensureHandDrawn()
+  local handSlots = app:ensureHandDrawn()
   self.reveal = nil
   self.coinRowReveal = nil
+  self.luckMeterAnimation = nil
+  self.handThrowAnimation = nil
+  self.pendingHandThrow = false
   self.sleightAnimations = {}
   self.coinRowVisuals = {}
   self.coinRowJitters = {}
@@ -1726,6 +2020,11 @@ function StageState:enter(app)
   self.purseDialogScrollOffset = 0
   self.logDialogOpen = false
   self.logDialogScrollOffset = 0
+
+  if previousName ~= "pause" and handSlots and #handSlots > 0 then
+    self:startHandThrow(app)
+  end
+
   if app.stageState and app.stageState.stageStatus ~= "active" then
     self.statusMessage = string.format("Stage %s.", app.stageState.stageStatus)
   elseif app:isFatedFlipActive() then
@@ -1797,8 +2096,11 @@ function StageState:update(app, dt)
 
     if reveal.elapsed >= reveal.displayDuration then
       self.coinRowReveal = nil
+      self.luckMeterAnimation = nil
     end
   end
+
+  self:updateHandThrow(app, dt)
 
   if not self:isRevealActive() then
     if not self.coinRowReveal then
@@ -1897,6 +2199,8 @@ function StageState:drawRevealOverlay(app)
       selected = revealed and coin.didMatch,
       alpha = revealed and 1.0 or 0.55,
       tilt = revealed and ((index % 2 == 0) and 0.10 or -0.10) or 0,
+      glow = false,
+      shadow = false,
     })
 
     if revealed then
@@ -2098,8 +2402,8 @@ function StageState:wheelmoved(app, _, y)
   end
 
   local mouseX, mouseY = love.mouse.getPosition()
-  local dialog = self:getHelpDialogLayout(app)
-  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
+  local dialog = self:getPurseDialogLayout(app)
+  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Pouch")
 
   if Button.containsPoint(contentArea, mouseX, mouseY) then
     self:scrollPurseDialog(app, y > 0 and -1 or 1)
@@ -2132,7 +2436,6 @@ function StageState:draw(app)
   local coinRowArea = Panel.getContentArea(gameArea.x, gameArea.y, gameArea.width, gameArea.height, "Hand")
 
   local hoveredCoinId = self:drawCoinRow(app, coinRowArea.x, coinRowArea.y, coinRowArea.width, coinRowArea.height)
-  self:drawFatedFlipBanner(app, coinRowArea)
 
   Panel.draw(actionsArea.x, actionsArea.y, actionsArea.width, actionsArea.height)
 
@@ -2184,7 +2487,7 @@ function StageState:mousepressed(app, x, y, button)
   end
 
   if self.purseDialogOpen then
-    local dialog = self:getHelpDialogLayout(app)
+    local dialog = self:getPurseDialogLayout(app)
     local closeButton = self:getHelpDialogCloseButton(dialog.x, dialog.y, dialog.width)
     closeButton.onClick = function()
       self.purseDialogOpen = false

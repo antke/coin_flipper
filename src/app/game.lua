@@ -128,6 +128,7 @@ function Game.new()
     feedbackClock = 0,
     activeFeedback = nil,
     activeOutcomeBurst = nil,
+    outcomeBurstQueue = {},
     screenFlash = {
       color = Theme.colors.accent,
       alpha = 0,
@@ -890,6 +891,24 @@ function Game:showOutcomeBurst(label, kind, options)
   self.activeOutcomeBurst = OutcomeBurst.new(label, burstOptions)
 end
 
+function Game:queueOutcomeBurst(label, kind, options)
+  if not label or label == "" then
+    return
+  end
+
+  if not self.activeOutcomeBurst then
+    self:showOutcomeBurst(label, kind, options)
+    return
+  end
+
+  self.outcomeBurstQueue = self.outcomeBurstQueue or {}
+  table.insert(self.outcomeBurstQueue, {
+    label = label,
+    kind = kind,
+    options = options,
+  })
+end
+
 function Game:clearFeedback(options)
   local clearOptions = options or {}
 
@@ -919,6 +938,11 @@ function Game:updateFeedback(dt)
   end
 
   self.activeOutcomeBurst = OutcomeBurst.update(self.activeOutcomeBurst, dt)
+
+  if not self.activeOutcomeBurst and self.outcomeBurstQueue and #self.outcomeBurstQueue > 0 then
+    local nextBurst = table.remove(self.outcomeBurstQueue, 1)
+    self:showOutcomeBurst(nextBurst.label, nextBurst.kind, nextBurst.options)
+  end
 
   if (self.screenFlash.alpha or 0) > 0 then
     self.screenFlash.alpha = math.max(0, self.screenFlash.alpha - (dt * 0.32))
@@ -1005,6 +1029,14 @@ function Game:drawOutcomeBurst()
   OutcomeBurst.draw(self.activeOutcomeBurst, self.fonts, self:getUiMetrics().rect)
 end
 
+local function didLuckMeterFill(batchResult)
+  local luckTrace = batchResult and batchResult.trace and batchResult.trace.luck or nil
+  local before = luckTrace and luckTrace.before or nil
+  local after = luckTrace and luckTrace.after or nil
+
+  return before ~= nil and after ~= nil and before.fatedFlipActive ~= true and after.fatedFlipActive == true
+end
+
 function Game:triggerBatchFeedback(batchResult)
   if not batchResult then
     return
@@ -1013,6 +1045,10 @@ function Game:triggerBatchFeedback(batchResult)
   local label, kind = OutcomeBurst.getBatchLabel(batchResult, Theme.outcomeBurst)
 
   self:showOutcomeBurst(label, kind)
+
+  if didLuckMeterFill(batchResult) then
+    self:queueOutcomeBurst("FATED FLIP", "warning")
+  end
 end
 
 function Game:getBossModifierCards(modifierIds)
@@ -1964,7 +2000,7 @@ function Game:getPurseInspectionLines(stageState)
 
   local counts = PurseSystem.countZonesByDefinition(self.runState, stageState)
   local lines = {
-    string.format("Purse size: %d coin(s)", #(self.runState.coinInstances or {})),
+    string.format("Pouch size: %d coin(s)", #(self.runState.coinInstances or {})),
     string.format("Hand size: %d", PurseSystem.getHandSize(self.runState)),
   }
 
@@ -2414,7 +2450,7 @@ function Game:isFatedFlipActive()
   return self.runState ~= nil and LuckSystem.isFatedFlipActive(self.runState)
 end
 
-function Game:prepareFountain()
+function Game:prepareFountain(currentStateName)
   if not self.runState then
     return false, "run_not_initialized"
   end
@@ -2434,7 +2470,7 @@ function Game:prepareFountain()
   end
 
   self:assertRuntimeInvariants("game.prepareFountain", { history = true })
-  self:saveActiveRun("prepare_fountain", "fountain")
+  self:saveActiveRun("prepare_fountain", currentStateName or "fountain")
   return true
 end
 
@@ -2446,17 +2482,17 @@ function Game:getFountainOptions()
   return FountainSystem.getOptions(self.runState)
 end
 
-function Game:selectFountainCoin(instanceId)
+function Game:selectFountainCoin(instanceId, currentStateName)
   if not self.fountainSession then
     return false, "fountain_not_prepared"
   end
 
   self.fountainSession.selectedInstanceId = instanceId
-  self:saveActiveRun("select_fountain_coin", "fountain")
+  self:saveActiveRun("select_fountain_coin", currentStateName or "fountain")
   return true
 end
 
-function Game:sacrificeFountainCoin(instanceId)
+function Game:sacrificeFountainCoin(instanceId, currentStateName)
   local selectedInstanceId = instanceId or (self.fountainSession and self.fountainSession.selectedInstanceId) or nil
   local ok, result = FountainSystem.sacrifice(self.runState, self.stageState, self.fountainSession, selectedInstanceId)
 
@@ -2465,11 +2501,11 @@ function Game:sacrificeFountainCoin(instanceId)
   end
 
   self:assertRuntimeInvariants("game.sacrificeFountainCoin", { history = true })
-  self:showFeedback("warning", "Fountain Favor", string.format("%s became +%d Luck generation.", result.name, result.favorGained), {
+  self:showFeedback("warning", "Fountain Favor", string.format("%s became +%s Luck generation.", result.name, LuckSystem.formatAmount(result.favorGained)), {
     duration = 1.2,
     flashAlpha = 0.05,
   })
-  self:saveActiveRun("sacrifice_fountain_coin", "fountain")
+  self:saveActiveRun("sacrifice_fountain_coin", currentStateName or "fountain")
   return true, result
 end
 
@@ -3188,7 +3224,7 @@ function Game:getPostResultDestinationState()
     and self.lastStageResult.status == "cleared"
     and self.runState ~= nil
     and self.runState.runStatus == "active" then
-    return "fountain"
+    return "shop"
   end
 
   return "summary"

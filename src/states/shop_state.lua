@@ -19,6 +19,13 @@ function ShopState.new()
     purseDialogOpen = false,
     purseScrollButtons = {},
     purseScrollOffset = 0,
+    fountainOverlayOpen = false,
+    fountainScrollButtons = {},
+    fountainScrollOffset = 0,
+    fountainButtons = {},
+    selectedFountainCoinId = nil,
+    selectedFountainInstanceId = nil,
+    fountainStatusMessage = "",
   }, ShopState)
 end
 
@@ -80,6 +87,114 @@ end
 
 function ShopState:tryContinue(app)
   return app.stateGraph:request("continue")
+end
+
+function ShopState:getFountainOptionForCoin(app, coinId)
+  if not coinId then
+    return nil
+  end
+
+  for _, option in ipairs(app:getFountainOptions() or {}) do
+    if option.coinId == coinId then
+      return option
+    end
+  end
+
+  return nil
+end
+
+function ShopState:openFountain(app)
+  local ok, result = app:prepareFountain("shop")
+
+  if not ok then
+    self.statusMessage = tostring(result)
+    return false, result
+  end
+
+  local session = app:getFountainSession()
+  local selectedInstanceId = session and session.selectedInstanceId or nil
+  self.purseDialogOpen = false
+  self.fountainOverlayOpen = true
+  self.fountainScrollOffset = 0
+  self.selectedFountainInstanceId = selectedInstanceId
+  self.selectedFountainCoinId = nil
+  self.fountainStatusMessage = (session and session.sacrificed) and "YOU FEEL LUCKY." or "Select a coin from your pouch."
+
+  if selectedInstanceId then
+    for _, option in ipairs(app:getFountainOptions() or {}) do
+      if option.instanceId == selectedInstanceId then
+        self.selectedFountainCoinId = option.coinId
+        break
+      end
+    end
+  end
+
+  return true
+end
+
+function ShopState:closeFountain()
+  self.fountainOverlayOpen = false
+  self.selectedFountainCoinId = nil
+  self.selectedFountainInstanceId = nil
+  return true
+end
+
+function ShopState:selectFountainCoin(app, coinId)
+  local session = app:getFountainSession()
+
+  if session and session.sacrificed == true then
+    self.fountainStatusMessage = "YOU FEEL LUCKY."
+    return false, "fountain_already_used"
+  end
+
+  local option = self:getFountainOptionForCoin(app, coinId)
+
+  if not option then
+    self.fountainStatusMessage = "That coin cannot be sacrificed."
+    return false, "coin_not_found"
+  end
+
+  self.selectedFountainCoinId = coinId
+  self.selectedFountainInstanceId = option.instanceId
+  app:selectFountainCoin(option.instanceId, "shop")
+
+  if option.disabled then
+    self.fountainStatusMessage = option.disabledReason == "last_coin_required"
+      and "The fountain will not take your final coin."
+      or "That coin cannot be sacrificed."
+  else
+    self.fountainStatusMessage = string.format("%s selected.", option.name or option.coinId)
+  end
+
+  return true
+end
+
+function ShopState:trySacrificeFountainCoin(app)
+  local option = self:getFountainOptionForCoin(app, self.selectedFountainCoinId)
+
+  if not option or not self.selectedFountainInstanceId then
+    self.fountainStatusMessage = "Select a coin to sacrifice."
+    return false, "coin_required"
+  end
+
+  if option.disabled then
+    self.fountainStatusMessage = option.disabledReason == "last_coin_required"
+      and "The fountain will not take your final coin."
+      or "That coin cannot be sacrificed."
+    return false, option.disabledReason or "option_disabled"
+  end
+
+  local ok, result = app:sacrificeFountainCoin(self.selectedFountainInstanceId, "shop")
+
+  if ok then
+    self.fountainStatusMessage = "YOU FEEL LUCKY."
+    self.selectedFountainCoinId = nil
+    self.selectedFountainInstanceId = nil
+  else
+    self.fountainStatusMessage = tostring(result)
+  end
+
+  return ok, result
 end
 
 function ShopState:getLayout(app)
@@ -159,7 +274,7 @@ end
 function ShopState:buildFooterButtons(app, layout)
   local padding = layout.padding
   local gap = Theme.spacing.itemGap
-  local buttonWidth = math.floor((layout.width - (padding * 2) - (gap * 2)) / 3)
+  local buttonWidth = math.floor((layout.width - (padding * 2) - (gap * 3)) / 4)
   local buttonHeight = layout.footerMetrics.buttonHeight
   local y = layout.footerMetrics.buttonY
   local canReroll = self:canReroll(app)
@@ -182,7 +297,18 @@ function ShopState:buildFooterButtons(app, layout)
       y = y,
       width = buttonWidth,
       height = buttonHeight,
-      label = "Inspect Purse",
+      label = "Lucky Fountain",
+      variant = "warning",
+      onClick = function()
+        return self:openFountain(app)
+      end,
+    },
+    {
+      x = padding + ((buttonWidth + gap) * 2),
+      y = y,
+      width = buttonWidth,
+      height = buttonHeight,
+      label = "Inspect Pouch",
       variant = "default",
       onClick = function()
         self.purseScrollOffset = 0
@@ -191,7 +317,7 @@ function ShopState:buildFooterButtons(app, layout)
       end,
     },
     {
-      x = padding + ((buttonWidth + gap) * 2),
+      x = padding + ((buttonWidth + gap) * 3),
       y = y,
       width = buttonWidth,
       height = buttonHeight,
@@ -209,6 +335,11 @@ end
 function ShopState:enter(app)
   self.purseDialogOpen = false
   self.purseScrollOffset = 0
+  self.fountainOverlayOpen = false
+  self.fountainScrollOffset = 0
+  self.selectedFountainCoinId = nil
+  self.selectedFountainInstanceId = nil
+  self.fountainStatusMessage = ""
   self.statusMessage = "Choose an offer, reroll, or continue."
 end
 
@@ -216,8 +347,9 @@ function ShopState:getPurseDialogLayout()
   local width = love.graphics.getWidth()
   local height = love.graphics.getHeight()
   local padding = Theme.spacing.screenPadding
-  local dialogWidth = math.min(Theme.scale(700), math.max(Theme.scale(280), width - (padding * 4)))
-  local dialogHeight = math.min(Theme.scale(460), math.max(Theme.scale(260), height - (padding * 4)))
+  local inset = math.max(Theme.scale(8), math.floor(padding / 2))
+  local dialogWidth = math.max(Theme.scale(280), width - (inset * 2))
+  local dialogHeight = math.max(Theme.scale(260), height - (inset * 2))
 
   return {
     x = math.floor((width - dialogWidth) / 2),
@@ -245,7 +377,7 @@ end
 
 function ShopState:scrollPurse(app, direction)
   local dialog = self:getPurseDialogLayout()
-  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
+  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Pouch")
   local maxScrollOffset = PurseView.getMaxScrollOffset(app, contentArea, nil)
 
   self.purseScrollOffset = math.max(0, math.min((self.purseScrollOffset or 0) + direction, maxScrollOffset))
@@ -260,12 +392,12 @@ function ShopState:drawPurseDialog(app)
   local width = love.graphics.getWidth()
   local height = love.graphics.getHeight()
   local dialog = self:getPurseDialogLayout()
-  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
+  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Pouch")
   local mouseX, mouseY = love.mouse.getPosition()
 
   love.graphics.setColor(0, 0, 0, 0.50)
   love.graphics.rectangle("fill", 0, 0, width, height)
-  Panel.draw(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
+  Panel.draw(dialog.x, dialog.y, dialog.width, dialog.height, "Pouch")
   Button.drawButtons({ self:getPurseCloseButton(dialog) }, mouseX, mouseY)
   local maxPurseScrollOffset = PurseView.getMaxScrollOffset(app, contentArea, nil)
   self.purseScrollOffset = math.max(0, math.min(self.purseScrollOffset or 0, maxPurseScrollOffset))
@@ -287,7 +419,190 @@ function ShopState:drawPurseDialog(app)
   Button.drawButtons(self.purseScrollButtons, mouseX, mouseY)
 end
 
+function ShopState:getFountainOverlayLayout()
+  local width = love.graphics.getWidth()
+  local height = love.graphics.getHeight()
+  local padding = math.max(Theme.scale(8), math.floor(Theme.spacing.screenPadding / 2))
+  local gap = Theme.spacing.blockGap
+  local x = padding
+  local y = padding
+  local overlayWidth = width - (padding * 2)
+  local overlayHeight = height - (padding * 2)
+  local purseWidth = math.floor((overlayWidth - gap) * 0.75)
+  local fountainWidth = overlayWidth - purseWidth - gap
+
+  return {
+    x = x,
+    y = y,
+    width = overlayWidth,
+    height = overlayHeight,
+    purse = {
+      x = x,
+      y = y,
+      width = purseWidth,
+      height = overlayHeight,
+    },
+    fountain = {
+      x = x + purseWidth + gap,
+      y = y,
+      width = fountainWidth,
+      height = overlayHeight,
+    },
+  }
+end
+
+function ShopState:getFountainCloseButton(layout)
+  local size = Theme.scale(32)
+
+  return {
+    x = layout.x + layout.width - Theme.spacing.panelPadding - size,
+    y = layout.y + Theme.spacing.panelPadding - Theme.scale(4),
+    width = size,
+    height = size,
+    label = "X",
+    onClick = function()
+      return self:closeFountain()
+    end,
+  }
+end
+
+function ShopState:scrollFountainPurse(app, direction)
+  local layout = self:getFountainOverlayLayout()
+  local contentArea = Panel.getContentArea(layout.purse.x, layout.purse.y, layout.purse.width, layout.purse.height, "Pouch")
+  local maxScrollOffset = PurseView.getMaxScrollOffset(app, contentArea, nil)
+
+  self.fountainScrollOffset = math.max(0, math.min((self.fountainScrollOffset or 0) + direction, maxScrollOffset))
+  return true
+end
+
+function ShopState:buildFountainButtons(app, layout)
+  local session = app:getFountainSession()
+  local option = self:getFountainOptionForCoin(app, self.selectedFountainCoinId)
+  local alreadySacrificed = session and session.sacrificed == true
+  local buttonHeight = Theme.componentMetrics.buttonHeight
+  local buttonY = layout.fountain.y + layout.fountain.height - Theme.spacing.panelPadding - buttonHeight - Theme.scale(42)
+  local sacrificeEnabled = self.selectedFountainInstanceId ~= nil and option ~= nil and not option.disabled and not alreadySacrificed
+
+  self.fountainButtons = {
+    self:getFountainCloseButton(layout),
+    {
+      x = layout.fountain.x + Theme.spacing.panelPadding,
+      y = buttonY,
+      width = layout.fountain.width - (Theme.spacing.panelPadding * 2),
+      height = buttonHeight,
+      label = alreadySacrificed and "Fountain Spent" or "Sacrifice",
+      variant = sacrificeEnabled and "warning" or "default",
+      focused = sacrificeEnabled,
+      disabled = not sacrificeEnabled,
+      onClick = function()
+        return self:trySacrificeFountainCoin(app)
+      end,
+    },
+  }
+
+  return self.fountainButtons
+end
+
+function ShopState:drawFountainGraphic(app, area)
+  local centerX = area.x + math.floor(area.width / 2)
+  local topY = area.y + Theme.scale(26)
+  local basinY = area.y + math.floor(area.height * 0.48)
+  local basinWidth = math.floor(area.width * 0.82)
+  local bowlWidth = math.floor(area.width * 0.58)
+
+  Theme.applyColor({ Theme.colors.accent[1], Theme.colors.accent[2], Theme.colors.accent[3], 0.22 })
+  love.graphics.circle("fill", centerX, topY + Theme.scale(34), Theme.scale(50))
+  Theme.applyColor(Theme.colors.accent)
+  love.graphics.setLineWidth(2)
+  love.graphics.arc("line", "open", centerX, topY + Theme.scale(44), Theme.scale(42), math.rad(205), math.rad(335))
+  love.graphics.line(centerX, topY + Theme.scale(2), centerX, basinY - Theme.scale(28))
+  love.graphics.setLineWidth(1)
+
+  Theme.applyColor(Theme.colors.warning)
+  love.graphics.rectangle("fill", centerX - Theme.scale(12), basinY - Theme.scale(70), Theme.scale(24), Theme.scale(72), Theme.scale(8), Theme.scale(8))
+  love.graphics.ellipse("fill", centerX, basinY - Theme.scale(74), bowlWidth / 2, Theme.scale(18))
+  love.graphics.ellipse("line", centerX, basinY - Theme.scale(74), bowlWidth / 2, Theme.scale(18))
+
+  Theme.applyColor(Theme.colors.panelBorder)
+  love.graphics.ellipse("fill", centerX, basinY, basinWidth / 2, Theme.scale(34))
+  Theme.applyColor(Theme.colors.accent)
+  love.graphics.ellipse("fill", centerX, basinY - Theme.scale(5), basinWidth / 2 - Theme.scale(14), Theme.scale(20))
+  Theme.applyColor(Theme.colors.warning)
+  love.graphics.ellipse("line", centerX, basinY, basinWidth / 2, Theme.scale(34))
+
+  love.graphics.setFont(app.fonts.heading)
+  Theme.applyColor(Theme.colors.text)
+  love.graphics.printf("Lucky Fountain", area.x, basinY + Theme.scale(50), area.width, "center")
+end
+
+function ShopState:drawFountainOverlay(app)
+  if not self.fountainOverlayOpen then
+    return
+  end
+
+  local width = love.graphics.getWidth()
+  local height = love.graphics.getHeight()
+  local layout = self:getFountainOverlayLayout()
+  local purseContentArea = Panel.getContentArea(layout.purse.x, layout.purse.y, layout.purse.width, layout.purse.height, "Pouch")
+  local fountainContentArea = Panel.getContentArea(layout.fountain.x, layout.fountain.y, layout.fountain.width, layout.fountain.height, "Lucky Fountain")
+  local mouseX, mouseY = love.mouse.getPosition()
+
+  love.graphics.setColor(0, 0, 0, 0.72)
+  love.graphics.rectangle("fill", 0, 0, width, height)
+  Panel.draw(layout.purse.x, layout.purse.y, layout.purse.width, layout.purse.height, "Pouch")
+  Panel.draw(layout.fountain.x, layout.fountain.y, layout.fountain.width, layout.fountain.height, "Lucky Fountain")
+
+  local maxPurseScrollOffset = PurseView.getMaxScrollOffset(app, purseContentArea, nil)
+  self.fountainScrollOffset = math.max(0, math.min(self.fountainScrollOffset or 0, maxPurseScrollOffset))
+
+  PurseView.draw(app, purseContentArea, nil, {
+    scrollOffset = self.fountainScrollOffset,
+    selectedCoinId = self.selectedFountainCoinId,
+    note = "Pick a coin for the fountain.",
+  })
+  self.fountainScrollButtons = PurseView.getScrollButtons(
+    purseContentArea,
+    self.fountainScrollOffset,
+    maxPurseScrollOffset,
+    function()
+      return self:scrollFountainPurse(app, -1)
+    end,
+    function()
+      return self:scrollFountainPurse(app, 1)
+    end
+  )
+
+  self:drawFountainGraphic(app, fountainContentArea)
+
+  love.graphics.setFont(app.fonts.body)
+  Theme.applyColor(Theme.colors.warning)
+  love.graphics.printf(
+    self.fountainStatusMessage or "",
+    fountainContentArea.x,
+    layout.fountain.y + layout.fountain.height - Theme.spacing.panelPadding - Theme.scale(34),
+    fountainContentArea.width,
+    "center"
+  )
+
+  Button.drawButtons(self:buildFountainButtons(app, layout), mouseX, mouseY)
+  Button.drawButtons(self.fountainScrollButtons, mouseX, mouseY)
+end
+
 function ShopState:keypressed(app, key)
+  if self.fountainOverlayOpen then
+    if key == "escape" then
+      self:closeFountain()
+    elseif key == "up" then
+      self:scrollFountainPurse(app, -1)
+    elseif key == "down" then
+      self:scrollFountainPurse(app, 1)
+    elseif key == "return" or key == "space" or key == "kpenter" then
+      self:trySacrificeFountainCoin(app)
+    end
+
+    return
+  end
+
   if self.purseDialogOpen then
     if key == "escape" or key == "p" or key == "return" or key == "kpenter" then
       self.purseDialogOpen = false
@@ -337,7 +652,7 @@ function ShopState:draw(app)
   love.graphics.print(string.format("Chips: %d", app.runState.shopPoints), layout.padding, layout.padding + 30)
 
   local infoLines = {
-    string.format("Purse: %d coin(s)", #(app.runState.coinInstances or {})),
+    string.format("Pouch: %d coin(s)", #(app.runState.coinInstances or {})),
     string.format("Free rerolls: %d", app.runState.shopRerollsRemaining or 0),
   }
   if upcomingStage then
@@ -391,7 +706,7 @@ function ShopState:draw(app)
     }
 
     if offer.type == "coin" then
-      table.insert(lines, 4, "Adds +1 coin instance to your purse.")
+      table.insert(lines, 4, "Adds +1 coin instance to your pouch.")
     end
 
     Layout.drawWrappedLines(lines, textX, textY, textWidth, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height - (buttonHeight + 8))
@@ -404,16 +719,29 @@ function ShopState:draw(app)
   Theme.applyColor(Theme.colors.warning)
   love.graphics.printf(self.statusMessage, layout.padding, layout.height - layout.footerMetrics.statusHeight + Theme.spacing.statusPadding, layout.width - (layout.padding * 2), "left")
   self:drawPurseDialog(app)
+  self:drawFountainOverlay(app)
 end
 
 function ShopState:wheelmoved(app, _, y)
+  if self.fountainOverlayOpen and y ~= 0 then
+    local mouseX, mouseY = love.mouse.getPosition()
+    local layout = self:getFountainOverlayLayout()
+    local contentArea = Panel.getContentArea(layout.purse.x, layout.purse.y, layout.purse.width, layout.purse.height, "Pouch")
+
+    if Button.containsPoint(contentArea, mouseX, mouseY) then
+      self:scrollFountainPurse(app, y > 0 and -1 or 1)
+    end
+
+    return
+  end
+
   if not self.purseDialogOpen or y == 0 then
     return
   end
 
   local mouseX, mouseY = love.mouse.getPosition()
   local dialog = self:getPurseDialogLayout()
-  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Purse")
+  local contentArea = Panel.getContentArea(dialog.x, dialog.y, dialog.width, dialog.height, "Pouch")
 
   if Button.containsPoint(contentArea, mouseX, mouseY) then
     self:scrollPurse(app, y > 0 and -1 or 1)
@@ -422,6 +750,29 @@ end
 
 function ShopState:mousepressed(app, x, y, button)
   if button ~= 1 then
+    return
+  end
+
+  if self.fountainOverlayOpen then
+    local layout = self:getFountainOverlayLayout()
+    local purseContentArea = Panel.getContentArea(layout.purse.x, layout.purse.y, layout.purse.width, layout.purse.height, "Pouch")
+
+    if Button.handleMousePressed(self:buildFountainButtons(app, layout), x, y) then
+      return
+    end
+
+    if Button.handleMousePressed(self.fountainScrollButtons, x, y) then
+      return
+    end
+
+    local card = PurseView.getCardAtPoint(app, purseContentArea, nil, x, y, {
+      scrollOffset = self.fountainScrollOffset,
+    })
+
+    if card then
+      self:selectFountainCoin(app, card.coinId)
+    end
+
     return
   end
 
