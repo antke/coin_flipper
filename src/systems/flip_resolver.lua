@@ -158,20 +158,8 @@ function FlipResolver.updateCounters(runState, stageState, context)
 
   if context.call == "heads" then
     runState.counters.headsCalls = runState.counters.headsCalls + 1
-    if stageState.lastCall == "heads" then
-      stageState.streak.consecutiveHeadsCalls = stageState.streak.consecutiveHeadsCalls + 1
-    else
-      stageState.streak.consecutiveHeadsCalls = 1
-    end
-    stageState.streak.consecutiveTailsCalls = 0
   else
     runState.counters.tailsCalls = runState.counters.tailsCalls + 1
-    if stageState.lastCall == "tails" then
-      stageState.streak.consecutiveTailsCalls = stageState.streak.consecutiveTailsCalls + 1
-    else
-      stageState.streak.consecutiveTailsCalls = 1
-    end
-    stageState.streak.consecutiveHeadsCalls = 0
   end
 
   local batchMatches = 0
@@ -187,14 +175,6 @@ function FlipResolver.updateCounters(runState, stageState, context)
 
   runState.counters.totalMatches = runState.counters.totalMatches + batchMatches
   runState.counters.totalMisses = runState.counters.totalMisses + batchMisses
-
-  if batchMatches > 0 then
-    stageState.streak.consecutiveMatches = stageState.streak.consecutiveMatches + 1
-    stageState.streak.consecutiveMisses = 0
-  else
-    stageState.streak.consecutiveMisses = stageState.streak.consecutiveMisses + 1
-    stageState.streak.consecutiveMatches = 0
-  end
 
   stageState.lastCall = context.call
 end

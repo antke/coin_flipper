@@ -25,13 +25,6 @@ local RARITY_PALETTES = {
     shine = { 0.94, 0.84, 1.00, 1.0 },
     glow = { 0.82, 0.28, 1.00, 1.0 },
   },
-  cursed = {
-    rim = { 0.58, 0.05, 0.07, 1.0 },
-    face = { 0.18, 0.46, 0.20, 1.0 },
-    dark = { 0.05, 0.12, 0.07, 1.0 },
-    shine = { 0.74, 1.00, 0.45, 1.0 },
-    glow = { 0.86, 0.05, 0.08, 1.0 },
-  },
 }
 
 local FACE_PATTERNS = {
@@ -109,21 +102,6 @@ local FACE_PATTERNS = {
     "0000010100000",
     "0000100010000",
     "0000000000000",
-  },
-  streak_drill = {
-    "1000000000000",
-    "1100000000000",
-    "1110000000000",
-    "0111000000000",
-    "0011100000000",
-    "0001110000000",
-    "0000111000000",
-    "0000011100000",
-    "0000001110000",
-    "0000000111000",
-    "0000000011100",
-    "0000000001110",
-    "0000000000111",
   },
   boss_biter = {
     "0101000101000",
@@ -274,21 +252,6 @@ local FACE_PATTERNS = {
     "0010111110100",
     "0010000000100",
     "0011111111100",
-  },
-  echo_penny = {
-    "0000011100000",
-    "0001100011000",
-    "0010000000100",
-    "0100011100010",
-    "0100100010010",
-    "1001000001001",
-    "1001001001001",
-    "1001000001001",
-    "0100100010010",
-    "0100011100010",
-    "0010000000100",
-    "0001100011000",
-    "0000011100000",
   },
   perfect_penny = {
     "0000001000000",
@@ -575,10 +538,6 @@ local function getFaceKey(definition)
     return "regular_dollar"
   end
 
-  if hasTag(definition, "streak") then
-    return "echo_penny"
-  end
-
   if hasTag(definition, "boss") then
     return "boss_biter"
   end
@@ -603,10 +562,6 @@ local function getRimType(definition)
     return definition.art.rim
   end
 
-  if definition and (definition.rarity == "cursed" or hasTag(definition, "cursed")) then
-    return "cursed"
-  end
-
   if hasTag(definition, "boss") then
     return "boss"
   end
@@ -619,7 +574,7 @@ local function getRimType(definition)
     return "weight"
   end
 
-  if hasTag(definition, "streak") or hasTag(definition, "perfect") or hasTag(definition, "multiplier") then
+  if hasTag(definition, "perfect") or hasTag(definition, "multiplier") then
     return "combo"
   end
 
@@ -911,11 +866,6 @@ local FACE_DRAWERS = {
     block(ctx, 7, 7, 2, 2)
     block(ctx, 13, 3, 2, 2)
   end,
-  streak_drill = function(ctx)
-    line(ctx, 4, 4, 16, 16, 3)
-    line(ctx, 6, 2, 18, 14, 1)
-    line(ctx, 2, 6, 14, 18, 1)
-  end,
   boss_biter = function(ctx)
     block(ctx, 4, 4, 13, 2)
     block(ctx, 5, 15, 11, 2)
@@ -949,15 +899,6 @@ local FACE_DRAWERS = {
   tails_echo = function(ctx) tail(ctx, 4, 3); line(ctx, 12, 7, 17, 12, 1); line(ctx, 11, 11, 17, 17, 1); line(ctx, 14, 5, 19, 10, 1) end,
   heads_cache = function(ctx) head(ctx, 3, 3); cache(ctx, 11, 11) end,
   tails_cache = function(ctx) tail(ctx, 4, 3); cache(ctx, 11, 11) end,
-  echo_penny = function(ctx)
-    for radius = 3, 8, 2 do
-      block(ctx, 10 - radius, 10 - radius, radius * 2 + 1, 1)
-      block(ctx, 10 - radius, 10 + radius, radius * 2 + 1, 1)
-      block(ctx, 10 - radius, 10 - radius, 1, radius * 2 + 1)
-      block(ctx, 10 + radius, 10 - radius, 1, radius * 2 + 1)
-    end
-    cell(ctx, 10, 10)
-  end,
   perfect_penny = function(ctx) star(ctx, 8, 4); line(ctx, 6, 13, 9, 16, 2); line(ctx, 9, 16, 16, 8, 2) end,
   heads_anchor = function(ctx) head(ctx, 8, 2); anchor(ctx, 6, 11) end,
   tails_anchor = function(ctx) tail(ctx, 8, 2); anchor(ctx, 6, 11) end,
@@ -1077,13 +1018,6 @@ local function drawRimMarks(rimType, x, y, size, scale, palette, alpha)
     end
     drawRimMark(x + (2 * scale), y + (7 * scale), 2 * scale, scale, color, softAlpha)
     drawRimMark(x + (12 * scale), y + (8 * scale), 2 * scale, scale, color, softAlpha)
-  elseif rimType == "cursed" then
-    for index = 0, 3 do
-      drawRimMark(x + ((2 + index * 4) * scale), y + (2 * scale), 2 * scale, 2 * scale, color, softAlpha)
-      drawRimMark(x + ((2 + index * 4) * scale), y + (12 * scale), 2 * scale, 2 * scale, color, softAlpha)
-    end
-    drawRimMark(x + (1 * scale), y + (6 * scale), 2 * scale, 4 * scale, color, softAlpha)
-    drawRimMark(x + (13 * scale), y + (6 * scale), 2 * scale, 4 * scale, color, softAlpha)
   else
     drawRimMark(x + (2 * scale), y + (5 * scale), 2 * scale, scale, color, softAlpha)
     drawRimMark(x + (12 * scale), y + (10 * scale), 2 * scale, scale, color, softAlpha)

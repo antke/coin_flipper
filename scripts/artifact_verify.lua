@@ -28,6 +28,64 @@ local function encodeTable(value)
   return "return " .. SaveSystem.serializeValue(value)
 end
 
+local function appendUniqueId(list, seen, id)
+  if type(id) ~= "string" or id == "" or seen[id] then
+    return
+  end
+
+  seen[id] = true
+  table.insert(list, id)
+end
+
+local function appendUpgradeChoice(list, seen, choice)
+  if choice and choice.type == "upgrade" then
+    appendUniqueId(list, seen, choice.contentId)
+  end
+end
+
+local function rebuildOwnedUpgradeIdsForShopSnapshot(sourceRunState, stageHistoryIndex, shopVisit)
+  local ownedUpgradeIds = {}
+  local seen = {}
+
+  for _, upgradeId in ipairs(sourceRunState.history.bootstrap.ownedUpgradeIds or {}) do
+    appendUniqueId(ownedUpgradeIds, seen, upgradeId)
+  end
+
+  for index = 1, stageHistoryIndex do
+    local stageRecord = sourceRunState.history.stageResults[index]
+    appendUpgradeChoice(ownedUpgradeIds, seen, stageRecord and stageRecord.rewardChoice)
+    appendUpgradeChoice(ownedUpgradeIds, seen, stageRecord and stageRecord.encounterChoice)
+  end
+
+  for _, visit in ipairs(sourceRunState.history.shopVisits or {}) do
+    if (visit.visitIndex or math.huge) <= (shopVisit.visitIndex or math.huge) then
+      for _, purchase in ipairs(visit.purchases or {}) do
+        if purchase.type == "upgrade" then
+          appendUniqueId(ownedUpgradeIds, seen, purchase.contentId)
+        end
+      end
+    end
+  end
+
+  return ownedUpgradeIds
+end
+
+local function markPurchasedShopOffers(shopOffers, shopVisit)
+  local purchased = {}
+
+  for _, purchase in ipairs(shopVisit.purchases or {}) do
+    if type(purchase.type) == "string" and type(purchase.contentId) == "string" then
+      purchased[string.format("%s:%s", purchase.type, purchase.contentId)] = true
+    end
+  end
+
+  for _, offer in ipairs(shopOffers or {}) do
+    if purchased[string.format("%s:%s", tostring(offer.type), tostring(offer.contentId))] then
+      offer.purchased = true
+    end
+  end
+end
+
 runCheck("current_meta_save_roundtrip", function()
   local metaState = MetaState.new({
     metaPoints = 4,
@@ -342,7 +400,6 @@ runCheck("active_run_encounter_roundtrip", function()
       effectiveValues = {},
       resolvedValues = {},
       batchIndex = 0,
-      streak = {},
       lastCall = nil,
       lastBatchResults = nil,
       flags = {},
@@ -411,6 +468,7 @@ runCheck("active_run_shop_snapshot", function()
   runState.roundIndex = stageRecord.roundIndex
   runState.runStatus = "active"
   runState.currentStageId = stageRecord.stageId
+  runState.ownedUpgradeIds = rebuildOwnedUpgradeIdsForShopSnapshot(result.runState, stageHistoryIndex, shopVisit)
   runState.history.stageResults = {}
 
   for index = 1, stageHistoryIndex do
@@ -427,6 +485,8 @@ runCheck("active_run_shop_snapshot", function()
 
   local latestOfferSet = shopVisit.offerSets[#shopVisit.offerSets]
   local shopOffers = Utils.clone(latestOfferSet.offers or {})
+
+  markPurchasedShopOffers(shopOffers, shopVisit)
 
   for index, offer in ipairs(shopOffers) do
     offer.id = offer.id or string.format("offer_%02d", index)
@@ -452,7 +512,6 @@ runCheck("active_run_shop_snapshot", function()
       effectiveValues = {},
       resolvedValues = {},
       batchIndex = 0,
-      streak = {},
       lastCall = nil,
       lastBatchResults = nil,
       flags = {},

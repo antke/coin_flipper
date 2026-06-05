@@ -265,38 +265,6 @@ local definitions = {
       },
     },
   },
-  {
-    id = "streak_credit",
-    name = "Streak Credit",
-    rarity = "common",
-    description = "+1 extra Chip when a coin matches on a repeated call batch.",
-    tags = { "economy", "streak" },
-    triggers = {
-      {
-        hook = "after_coin_roll",
-        condition = { match = true, repeated_call = true },
-        effects = {
-          { op = "add_shop_points", amount = 1 },
-        },
-      },
-    },
-  },
-  {
-    id = "pressure_valve",
-    name = "Pressure Valve",
-    rarity = "common",
-    description = "+1 extra Chip after any repeated-call batch.",
-    tags = { "streak", "economy" },
-    triggers = {
-      {
-        hook = "after_scoring",
-        condition = { repeated_call = true },
-        effects = {
-          { op = "add_shop_points", amount = 1 },
-        },
-      },
-    },
-  },
 }
 
 local byId = {}

@@ -63,25 +63,6 @@ local definitions = {
     },
   },
   {
-    id = "streak_drill",
-    name = "Streak Drill",
-    rarity = "uncommon",
-    unlockedByDefault = false,
-    description = "A grooved coin that bites harder into a steady rhythm.",
-    effectDescription = "Repeated successful calls apply a 1.25x score multiplier.",
-    tags = { "streak", "multiplier" },
-    typeTags = { "combo" },
-    triggers = {
-      {
-        hook = "before_scoring",
-        condition = { repeated_call = true },
-        effects = {
-          { op = "apply_score_multiplier", value = 1.25 },
-        },
-      },
-    },
-  },
-  {
     id = "cross_catch",
     name = "Cross Catch",
     rarity = "common",
@@ -131,24 +112,6 @@ local definitions = {
         condition = { call = "tails", result = "tails" },
         effects = {
           { op = "add_shop_points", amount = 2 },
-        },
-      },
-    },
-  },
-  {
-    id = "echo_penny",
-    name = "Echo Penny",
-    rarity = "common",
-    description = "A resonant penny that favors repeated patterns.",
-    effectDescription = "Repeated calls are worth 1.10x score.",
-    tags = { "streak", "multiplier" },
-    typeTags = { "combo" },
-    triggers = {
-      {
-        hook = "before_scoring",
-        condition = { repeated_call = true },
-        effects = {
-          { op = "apply_score_multiplier", value = 1.10 },
         },
       },
     },
@@ -358,11 +321,9 @@ local visualIdentities = {
   heads_loaded_penny = { face = "heads", rim = "weight" },
   tails_loaded_penny = { face = "tails", rim = "weight" },
   lucky_miss = { face = "lucky_miss", rim = "safety" },
-  streak_drill = { face = "streak_drill", rim = "combo" },
   cross_catch = { face = "cross_catch", rim = "safety" },
   heads_cache = { face = "heads_cache", rim = "economy" },
   tails_cache = { face = "tails_cache", rim = "economy" },
-  echo_penny = { face = "echo_penny", rim = "combo" },
   heads_anchor = { face = "heads_anchor", rim = "weight" },
   tails_anchor = { face = "tails_anchor", rim = "weight" },
   pocket_refund = { face = "pocket_refund", rim = "motion" },

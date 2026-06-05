@@ -13,7 +13,6 @@ local RARITY_COLORS = {
   common = Theme.colors.mutedText,
   uncommon = Theme.colors.accent,
   rare = Theme.colors.highlight,
-  cursed = Theme.colors.danger,
 }
 
 local TYPE_TAG_COLORS = {

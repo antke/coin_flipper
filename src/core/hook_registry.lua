@@ -94,12 +94,6 @@ HookRegistry.CONDITION_SCHEMAS = {
       return type(value) == "boolean", "must be boolean"
     end,
   },
-  repeated_call = {
-    phases = CALL_CONDITION_PHASES,
-    validate = function(value)
-      return type(value) == "boolean", "must be boolean"
-    end,
-  },
   stage_type = {
     validate = function(value)
       return value == "normal" or value == "boss", "must be normal or boss"
@@ -233,12 +227,6 @@ local function matchesCondition(condition, context)
       local didMatch = context.currentCoin and (context.currentCoin.result == context.call) or false
 
       if didMatch ~= expectedValue then
-        return false
-      end
-    elseif key == "repeated_call" then
-      local repeatedCall = context.stageState.lastCall ~= nil and context.stageState.lastCall == context.call
-
-      if repeatedCall ~= expectedValue then
         return false
       end
     elseif key == "stage_type" then

@@ -40,14 +40,6 @@ local definitions = {
     },
   },
   {
-    id = "meta_unlock_streak_drill",
-    name = "Pattern Primer",
-    description = "Unlock Streak Drill for future runs and shops.",
-    cost = 3,
-    tags = { "meta", "unlock", "coin" },
-    unlockCoinIds = { "streak_drill" },
-  },
-  {
     id = "meta_unlock_merchant_tools",
     name = "Merchant Toolbelt",
     description = "Unlock Cashback Badge, Showcase Rack, and Recovery Coupon for future shops.",

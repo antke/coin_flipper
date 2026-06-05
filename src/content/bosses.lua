@@ -1,22 +1,5 @@
 local definitions = {
   {
-    id = "anti_streak_warden",
-    name = "Anti-Streak Warden",
-    description = "Repeated calls are worth 20% less score this batch.",
-    tags = { "boss", "anti_streak" },
-    triggers = {
-      {
-        hook = "before_scoring",
-        condition = {
-          repeated_call = true,
-        },
-        effects = {
-          { op = "apply_score_multiplier", value = 0.80 },
-        },
-      },
-    },
-  },
-  {
     id = "loaded_ledger",
     name = "Loaded Ledger",
     description = "Each equipped coin gains +6% Tails chance before rolling.",

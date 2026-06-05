@@ -7,7 +7,6 @@ Terminology.terms = {
   call = { label = "Call", lower = "call", plural = "calls" },
   heads_call = { label = "Heads Call", lower = "Heads call", plural = "Heads calls" },
   tails_call = { label = "Tails Call", lower = "Tails call", plural = "Tails calls" },
-  repeated_call = { label = "Repeated Call", lower = "repeated call", plural = "repeated calls" },
   matching_call = { label = "Matching Call", lower = "matching call", plural = "matching calls" },
   active_coin = { label = "Active Coin", lower = "active coin", plural = "active coins" },
   hand = { label = "Hand", lower = "hand", plural = "hands" },
@@ -67,7 +66,6 @@ Terminology.hooks = {
 
 Terminology.tags = {
   all_match = "Perfect Flip",
-  anti_streak = "Repeated Call Penalty",
   attunement = "Attunement",
   basic = "Basic",
   boss = "Boss",
@@ -103,7 +101,6 @@ Terminology.tags = {
   stage = "Stage",
   starter = "Starter",
   strategy = "Strategy",
-  streak = "Streak",
   tails = "Tails",
   temporary = "Temporary",
   threshold = "Threshold",
@@ -147,14 +144,12 @@ Terminology.mechanicTermCategories = {
   conditions = {
     bold = true,
     terms = {
-      "Repeated Call",
       "Matching Call",
       "Heads Call",
       "Tails Call",
       "Boss Stages",
       "Boss Stage",
       "Threshold",
-      "Streak",
       "Combo",
       "Heads",
       "Tails",
@@ -236,8 +231,6 @@ Terminology.textReplacements = {
   { from = "no equipped coin matches this batch", to = "no coins match this " .. lowerTerm("flip") },
   { from = "no equipped coin matches", to = "no coins match" },
   { from = "no coins match this batch", to = "no coins match this " .. lowerTerm("flip") },
-  { from = "repeated-call batch", to = "repeated-call " .. lowerTerm("flip") },
-  { from = "repeated call batch", to = "repeated call " .. lowerTerm("flip") },
   { from = "Heads call batch", to = "Heads call " .. lowerTerm("flip") },
   { from = "Tails call batch", to = "Tails call " .. lowerTerm("flip") },
   { from = "scored batch", to = "scoring " .. lowerTerm("flip") },

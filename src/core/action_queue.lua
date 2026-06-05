@@ -33,8 +33,6 @@ ActionQueue.KNOWN_OPS = {
   set_shop_flag = true,
   set_stage_flag = true,
   set_run_flag = true,
-  increment_streak = true,
-  reset_streak = true,
   queue_trace_note = true,
   grant_upgrade = true,
   grant_coin = true,
@@ -495,20 +493,6 @@ function ActionQueue.validateAction(action)
     return false, string.format("%s value must be boolean when present", action.op)
   end
 
-  if action.op == "increment_streak" then
-    if action.counter ~= nil and type(action.counter) ~= "string" then
-      return false, "increment_streak counter must be a string"
-    end
-
-    if action.amount ~= nil and not (type(action.amount) == "number" and math.floor(action.amount) == action.amount) then
-      return false, "increment_streak amount must be integer"
-    end
-  end
-
-  if action.op == "reset_streak" and action.counter ~= nil and type(action.counter) ~= "string" then
-    return false, "reset_streak counter must be a string"
-  end
-
   if action.op == "queue_trace_note" and action.note ~= nil and type(action.note) ~= "string" then
     return false, "queue_trace_note note must be a string"
   end
@@ -742,13 +726,6 @@ function ActionQueue.apply(runState, stageState, context, action)
     stageState.flags[action.flag] = action.value ~= false
   elseif action.op == "set_run_flag" then
     runState.flags[action.flag] = action.value ~= false
-  elseif action.op == "increment_streak" then
-    requireStageState(stageState, action.op)
-    local counterName = action.counter or "consecutiveMatches"
-    stageState.streak[counterName] = (stageState.streak[counterName] or 0) + (action.amount or 1)
-  elseif action.op == "reset_streak" then
-    requireStageState(stageState, action.op)
-    stageState.streak[action.counter or "consecutiveMatches"] = 0
   elseif action.op == "queue_trace_note" then
     ensureScoreBreakdown(context)
     table.insert(context.trace.notes, action.note or "(empty note)")

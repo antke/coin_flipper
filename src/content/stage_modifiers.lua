@@ -28,23 +28,6 @@ local definitions = {
     },
   },
   {
-    id = "echo_chamber",
-    name = "Echo Chamber",
-    description = "Repeated calls are worth 15% less score in this stage.",
-    tags = { "stage", "anti_streak" },
-    triggers = {
-      {
-        hook = "before_scoring",
-        condition = {
-          repeated_call = true,
-        },
-        effects = {
-          { op = "apply_score_multiplier", value = 0.85 },
-        },
-      },
-    },
-  },
-  {
     id = "side_pot",
     name = "Side Pot",
     description = "+1 extra Chip after each scored batch in this stage.",

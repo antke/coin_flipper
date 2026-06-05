@@ -70,7 +70,6 @@ local GameConfig = {
       common = 0.25,
       uncommon = 0.5,
       rare = 0.75,
-      cursed = 2,
     },
   },
 

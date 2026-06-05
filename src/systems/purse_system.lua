@@ -314,7 +314,7 @@ function PurseSystem.moveHandSlot(stageState, slotIndex, direction)
   end
 
   if slotHasReorderLock(handSlots[slotIndex]) or slotHasReorderLock(handSlots[targetIndex]) then
-    return false, "cannot_reorder_cursed"
+    return false, "cannot_reorder"
   end
 
   local movedInstanceId = handSlots[slotIndex].instanceId

@@ -38,12 +38,6 @@ function StageState.new(stageDefinition, runState, options)
     resolvedValues = Utils.clone(options.resolvedValues or {}),
 
     batchIndex = 0,
-    streak = {
-      consecutiveHeadsCalls = 0,
-      consecutiveTailsCalls = 0,
-      consecutiveMatches = 0,
-      consecutiveMisses = 0,
-    },
 
     lastCall = nil,
     lastBatchResults = nil,

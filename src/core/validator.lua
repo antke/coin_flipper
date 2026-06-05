@@ -2628,12 +2628,6 @@ function Validator.validateStageState(runState, stageState)
     return false, errorMessage
   end
 
-  for streakName, streakValue in pairs(stageState.streak or {}) do
-    if not isNonNegativeInteger(streakValue) then
-      return false, string.format("stageState.streak.%s must be a non-negative integer", tostring(streakName))
-    end
-  end
-
   if stageState.lastBatchResults then
     if stageState.lastBatchResults.batchId ~= nil and stageState.lastBatchResults.batchId ~= stageState.batchIndex then
       return false, "stageState.lastBatchResults.batchId does not match stageState.batchIndex"

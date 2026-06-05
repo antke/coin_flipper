@@ -452,7 +452,7 @@ function StageState:selectCall(app, call)
 
   app.selectedCall = call
   if app:isFatedFlipActive() then
-    self.statusMessage = string.format("FATED FLIP: %s selected. All coins will land on your call.", string.upper(call))
+    self.statusMessage = string.format("TWIST OF FATE: %s selected. All coins will land on your call.", string.upper(call))
   else
     self.statusMessage = string.format("Call selected: %s. Reorder, Sleight, or Flip.", string.upper(call))
   end
@@ -651,7 +651,7 @@ function StageState:buildButtons(app, x, y, width, height)
       y = y,
       width = buttonWidth,
       height = buttonHeight,
-      label = fatedActive and "FLIP FATE" or "FLIP HAND",
+      label = fatedActive and "TWIST OF FATE" or "FLIP HAND",
       variant = fatedActive and "warning" or "success",
       focused = fatedActive,
       glow = fatedActive,
@@ -2028,7 +2028,7 @@ function StageState:enter(app, payload, previousName)
   if app.stageState and app.stageState.stageStatus ~= "active" then
     self.statusMessage = string.format("Stage %s.", app.stageState.stageStatus)
   elseif app:isFatedFlipActive() then
-    self.statusMessage = "FATED FLIP ready: choose a call. All coins will land on it."
+    self.statusMessage = "TWIST OF FATE ready: choose a call. All coins will land on it."
   else
     self.statusMessage = "Review your hand, then pick HEADS or TAILS."
   end

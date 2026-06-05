@@ -79,19 +79,8 @@ local definitions = {
       description = "A harder mark who punishes loose coin choices.",
       hp = 11,
     },
-    activeStageModifierIds = { "echo_chamber", "side_pot" },
+    activeStageModifierIds = { "side_pot" },
     variants = {
-      {
-        id = "round_3_echo",
-        name = "Echo Chamber",
-        label = "Round 3 — Echo Chamber",
-        opponent = {
-          id = "echo_chamber_hustler",
-          name = "Echo-Chamber Hustler",
-          description = "A gambler who rewards repeated nerve until it breaks.",
-        },
-        activeStageModifierIds = { "echo_chamber", "side_pot" },
-      },
       {
         id = "round_3_house_lights",
         name = "House Lights",
@@ -101,7 +90,7 @@ local definitions = {
           name = "House-Lights Hustler",
           description = "A polished opponent who thrives under bright pressure.",
         },
-        activeStageModifierIds = { "bright_lights", "echo_chamber" },
+        activeStageModifierIds = { "bright_lights", "side_pot" },
       },
       {
         id = "round_3_long_game",
@@ -129,19 +118,8 @@ local definitions = {
       description = "The house's last obstacle: no attacks, just a chip wall to break.",
       hp = 14,
     },
-    bossModifierIds = { "anti_streak_warden", "loaded_ledger" },
+    bossModifierIds = { "loaded_ledger" },
     bossVariants = {
-      {
-        id = "boss_variant_warden",
-        name = "Anti-Streak Warden",
-        label = "Boss — Anti-Streak Warden",
-        opponent = {
-          id = "anti_streak_warden",
-          name = "Anti-Streak Warden",
-          description = "A boss who hates repeated calls and steady nerve.",
-        },
-        bossModifierIds = { "anti_streak_warden", "loaded_ledger" },
-      },
       {
         id = "boss_variant_embargo",
         name = "Heads Embargo",

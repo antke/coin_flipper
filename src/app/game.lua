@@ -1047,7 +1047,7 @@ function Game:triggerBatchFeedback(batchResult)
   self:showOutcomeBurst(label, kind)
 
   if didLuckMeterFill(batchResult) then
-    self:queueOutcomeBurst("FATED FLIP", "warning")
+    self:queueOutcomeBurst("TWIST OF FATE", "warning")
   end
 end
 

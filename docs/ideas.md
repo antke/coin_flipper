@@ -11,7 +11,7 @@ The game now behaves like a small coin-purse deckbuilder wrapped in coin-flip sh
 - duplicate coins are allowed
 - each flip draws a hand from the purse
 - the player chooses a call after seeing the hand
-- Sleight of Hand can return a coin to the purse and draw a replacement
+- Sleight-style effects can physically swap, substitute or reposition coins without changing flip results
 - the player can reorder the final hand before flipping
 - flipped coins exhaust until the next stage
 - shop purchases add new coin instances to the purse
@@ -24,44 +24,41 @@ Use `docs/game-mental-model-and-balance-map.md` as the current mental-model refe
 
 Ordered by likely value for the game right now, considering impact, implementation cost, clarity, and balance risk under the current opponent-HP purse loop.
 
-2. **Purse Economy and Bloat Tuning**
+1. **Purse Economy and Bloat Tuning**
    The shop now grows the purse with duplicate coin instances. The next design question is whether buying feels exciting, automatic, or diluted, and whether thinning/removal is needed.
 
-3. **Cursed Coins v2 / Downside Identity**
-   Cursed rarity and locked coins exist. The next pass should make cursed coins feel dangerous, not just strong-but-sticky.
-
-4. **Stronger Semantic Feedback**
+2. **Stronger Semantic Feedback**
    The outcome burst already supports labels such as `COMBO`, `OVERKILL`, `CLUTCH`, and `JACKPOT`. Future work should add a few rarer, high-confidence callouts rather than more generic celebration.
 
-5. **Coin Thinning, Merging, or Upgrades**
+3. **Coin Thinning, Merging, or Upgrades**
    Duplicates are real now, but a simple removal/thinning tool probably belongs before a full merge tree.
 
-6. **Expand Neighbour / Order Coin Set**
+4. **Expand Neighbour / Order Coin Set**
    Reordering and neighbour effects are implemented. Future work should expand, tune, and clarify this family rather than establish the baseline.
 
-7. **Expand Combo / Pattern Rewards**
+5. **Expand Combo / Pattern Rewards**
    Pattern coins and combo resolution exist. Future work should add better previews, tuning, and more content only after the current examples prove readable.
 
-8. **Divine Interventions**  
-   Still thematic, but overlaps with Sleight as a manipulation layer. Any intervention should be narrow and clearly different from “just another reroll.”
+6. **Divine Interventions**  
+   Still thematic, but separate from Fate. Fate now owns Luck Meter and Fated Flip payoffs; any intervention should be narrow and clearly different from “just another reroll.”
 
-9. **Luck and Karma Meters**  
-   The emotional idea is good, but meter spending overlaps with Sleight, offerings, and interventions. Karma/failure builds remain the more interesting half.
+7. **Luck and Karma Meters**  
+   Luck has a sharper Fate identity now: fill the Luck Meter, boost Fountain Favor, and cash out Fated Flip payoffs/chains. Karma/failure builds remain a separate future question.
 
-10. **Mulligan Option**  
-    Too generic as a universal rule because Sleight already covers the main “fix this hand” fantasy. Better as a coin, character passive, or rare intervention.
+8. **Mulligan Option**  
+     Too generic as a universal rule because Sleight already covers the main “fix this hand” fantasy. Better as a coin, character passive, or rare intervention.
 
-11. **Player Characters**  
-    Valuable later, once the purse loop has proven build archetypes for characters to modify.
+9. **Player Characters**  
+     Valuable later, once the purse loop has proven build archetypes for characters to modify.
 
-12. **Damage / Outcome Estimate on Hover**
-    Useful for clarity, but exact previews may solve too much of the hand puzzle. Prefer ranges/explanations or a special character ability.
+10. **Damage / Outcome Estimate on Hover**
+     Useful for clarity, but exact previews may solve too much of the hand puzzle. Prefer ranges/explanations or a special character ability.
 
-13. **Offerings**  
-    Thematic, but still overlaps with betting, Luck/Karma, and interventions. Needs a sharper identity before implementation.
+11. **Offerings**  
+     Thematic, but still overlaps with betting, Luck/Karma, and interventions. Needs a sharper identity before implementation.
 
-14. **Rooms / Stages / Map**  
-    Opponent stages, variants, shops, and bosses already exist. A full map is still a large future run-structure layer, not a core-loop priority.
+12. **Rooms / Stages / Map**  
+     Opponent stages, variants, shops, and bosses already exist. A full map is still a large future run-structure layer, not a core-loop priority.
 
 ---
 
@@ -73,7 +70,7 @@ The purse model is no longer an alternate prototype branch. It is the current co
 
 The game is now framed as coin-flip showdowns against opponents:
 
-> Build a growing purse, draw a tactical hand, call Heads or Tails, use Sleight of Hand to improve the draw, reorder the coins, then flip the optimized setup to deal enough damage to defeat the opponent.
+> Build a growing purse, draw a tactical hand, arrange the coins, call Heads or Tails, flip, then let Sleight-style tricks physically move coin bodies through the resolved result slots to deal enough damage to defeat the opponent.
 
 ### Current pillars
 
@@ -89,12 +86,11 @@ The game is now framed as coin-flip showdowns against opponents:
 
 - Opponent names, HP, encounter variants, and boss encounters.
 - Starting purse plus draft picks that add special coin instances.
-- Purse draw, Sleight replacement, hand reorder, and stage exhaustion.
+- Purse draw, hand reorder, Sleight-style physical manipulation, and stage exhaustion.
 - Duplicate coin purchases from the shop.
 - Shop rerolls, pricing by rarity, victory Chips, remaining-flip Chips, and overkill Chip rewards.
 - Neighbour/edge effects and ordered resolution.
 - Combo/pattern rewards and `COMBO` feedback.
-- Cursed rarity, cursed styling, and locked coins that cannot be Sleighted/reordered.
 - Central outcome burst labels such as `COMBO`, `OVERKILL`, `CLUTCH`, and `JACKPOT`.
 - Basic flip log and purse inspection dialogs.
 
@@ -105,7 +101,7 @@ The game is now framed as coin-flip showdowns against opponents:
 - Internal code still has legacy names such as `stageScore` and `targetScore`; docs should translate those to damage and opponent HP.
 - Fixed-slot language should be avoided unless explicitly discussing old/historical behavior.
 - Coin removal, thinning, merging, and upgrades are now purse-quality tools.
-- Interventions, mulligans, offerings, and meters must avoid duplicating Sleight’s role.
+- Interventions, mulligans, offerings, and non-Fate meters must avoid duplicating Sleight, Loaded or Fate’s Luck Meter role.
 
 ### Known cleanup issue
 
@@ -113,57 +109,7 @@ The code still contains a legacy loadout/pre-stage path with active-slot concept
 
 ---
 
-## 1. Push Your Luck / Bank-or-Press
-
-### Core idea
-
-After the opponent is defeated, let the player either bank the win or continue flipping for extra rewards with added risk.
-
-### Example
-
-“The opponent is down. Bank your reward now, or press your luck with one more hand for bonus Chips. If the hand fails, lose the bonus or take a penalty.”
-
-### Requirements
-
-- Add a post-defeat decision phase before leaving the stage.
-- Track banked clear rewards separately from push rewards.
-- Define the failure penalty clearly.
-- Make the risk/reward explicit before the player chooses.
-- Use current remaining purse state unless a special push mode is intentionally designed.
-
-### Technical notes
-
-- Current HP/overkill/remaining-flip rewards already create the natural entry point.
-- The result flow must distinguish normal clear, banked clear, pushed clear, and pushed failure.
-- Pushing should probably continue with the current stage purse state, including exhausted coins.
-- The UI should show remaining flips, remaining purse, likely reward, and penalty.
-
-### Design effect
-
-- Adds a natural gambling moment.
-- Gives strong hands and remaining purse quality more value after a clear.
-- Makes overkill and remaining flips feel like part of a larger risk/reward economy.
-
-### Risks
-
-- If expected value is clearly positive, players always push.
-- If too punishing, players never push.
-- Pushing could slow the run if offered too frequently or with too much UI.
-
-### Evaluation criteria
-
-- Does the choice feel optional but tempting?
-- Does pushing create memorable wins and losses?
-- Does it work with the purse exhaustion model?
-- Does the player understand what is already banked and what is at risk?
-
-### Comment
-
-This is the best early prototype candidate because it uses systems that already exist instead of adding another manipulation layer. Start with one conservative version: after a defeat, offer one optional push for bonus Chips, with the bonus at risk but the stage clear safe.
-
----
-
-## 2. Purse Economy and Bloat Tuning
+## 1. Purse Economy and Bloat Tuning
 
 ### Core idea
 
@@ -236,64 +182,7 @@ Do not immediately grow the shop into buying, selling, merging, thinning, perman
 
 ---
 
-## 3. Cursed Coins v2 / Downside Identity
-
-### Core idea
-
-Make cursed coins dangerous coins with strong upside and clear downside.
-
-The baseline exists: cursed rarity, cursed visual treatment, `cannotSleight`, `cannotReorder`, and sticky high-upside examples. The next step is giving curses a sharper risk identity.
-
-### Example effects
-
-- Cannot be Sleighted, but pays double on match.
-- Cannot be Sleighted; if it misses, it penalizes adjacent coins.
-- Cannot be reordered; if placed poorly, its downside is harder to avoid.
-- If all coins match, huge payout; if the pattern breaks, lose Chips or damage.
-- If protected by a neighbour/protection effect, its penalty is reduced.
-
-### Requirements
-
-- Cursed styling must be visually distinct.
-- `cannotSleight` and `cannotReorder` must be communicated before purchase and when drawn.
-- Downsides should be deterministic and readable.
-- Players need enough control to build around the risk: reordering, neighbour protection, pattern payoff, or future interventions.
-- Cursed coins should be tempting, not automatic picks and not traps.
-
-### Technical notes
-
-- Coin definitions already support locked behavior fields.
-- Scoring may need clearer support for penalties, negative modifiers, or risky conditional payouts.
-- Cursed effects should be data-driven so reward/penalty numbers can be tuned quickly.
-- Logs and feedback should identify cursed outcomes clearly.
-
-### Design effect
-
-- Gives the purse dangerous texture.
-- Makes some draws tense because not every bad coin can be dodged.
-- Creates strong build-around opportunities with protection, adjacency, pattern effects, and Karma/failure mechanics.
-
-### Risks
-
-- If the downside is too severe, cursed coins become traps.
-- If the upside is too high or easy to guarantee, cursed coins become automatic.
-- Run-ending penalties may feel unfair if the player did not understand the risk.
-- Sticky coins can feel frustrating if they only remove agency.
-
-### Evaluation criteria
-
-- Is the cursed coin tempting despite the risk?
-- Can the player intentionally build around it?
-- Does locked behavior feel tense rather than frustrating?
-- Does the player understand the downside before it happens?
-
-### Comment
-
-The first v2 cursed coin should probably be simple: cannot Sleight, high damage on match, mild visible penalty on miss. Avoid complicated curse ecosystems until one downside coin feels good.
-
----
-
-## 4. Inspectable Event Log Improvements
+## 2. Inspectable Event Log Improvements
 
 ### Core idea
 
@@ -306,12 +195,12 @@ A basic flip log exists and can show coin outcomes, weight details, damage detai
 ### Future improvements
 
 - Show hand draw events.
-- Show Sleight return and replacement events.
+- Show Sleight movement, swap, substitution and moved-layout rescore events.
 - Show reorder events and final order.
 - Show triggered coin hooks in player-readable language.
 - Show neighbour effects and their targets.
 - Show combo/pattern hits and misses where useful.
-- Show penalties and cursed effects clearly.
+- Show penalties and special effects clearly.
 - Show overkill and reward calculations clearly.
 
 ### Requirements
@@ -319,7 +208,7 @@ A basic flip log exists and can show coin outcomes, weight details, damage detai
 - Keep the log hidden by default.
 - Use concise player-facing descriptions instead of raw internal hook names wherever possible.
 - Preserve enough detail to debug confusing damage outcomes.
-- Keep chronology clear: draw → Sleight/reorder → flip → effects → damage/rewards → opponent check.
+- Keep chronology clear: draw → select/reorder → flip → Sleight movement/effects → damage/rewards → opponent check.
 
 ### Technical notes
 
@@ -343,7 +232,7 @@ A basic flip log exists and can show coin outcomes, weight details, damage detai
 
 - Can a player answer “why did that happen?” after opening the log?
 - Does the main stage view stay clean when the log is closed?
-- Are combo/neighbour/cursed/Sleight events understandable without reading code-like terms?
+- Are combo/neighbour/Sleight events understandable without reading code-like terms?
 
 ### Comment
 
@@ -351,7 +240,7 @@ This should be incremental. The log exists; the next upgrade should be better ev
 
 ---
 
-## 5. Stronger Semantic Feedback
+## 3. Stronger Semantic Feedback
 
 ### Core idea
 
@@ -381,7 +270,7 @@ The presentation foundation already exists. The next step is not “add feedback
 ### Requirements
 
 - Detect notable hand outcomes, not just stage clear/fail.
-- Detect when Sleight materially improves a hand or triggers a valuable effect.
+- Detect when Sleight materially improves a moved layout or triggers a valuable effect.
 - Detect high-value reorder/neighbour/pattern outcomes.
 - Keep messages short and rare enough to feel special.
 - Avoid duplicating information already visible in the opponent/damage panel.
@@ -411,7 +300,7 @@ Keep this small. Add only high-confidence facts that are easy to explain and unl
 
 ---
 
-## 6. Coin Thinning, Merging, or Upgrades
+## 4. Coin Thinning, Merging, or Upgrades
 
 ### Core idea
 
@@ -475,7 +364,7 @@ This used to depend on a more mature inventory model. The hybrid purse now provi
 
 ---
 
-## 7. Expand Neighbour / Order Coin Set
+## 5. Expand Neighbour / Order Coin Set
 
 ### Core idea
 
@@ -491,10 +380,10 @@ Expand coins that care about adjacent coins or final hand position. Reordering t
 
 ### Example future effects
 
-- A coin copies the result of the coin to its left.
+- A Forgery-style effect makes a weak coin count as the slot 1 or left-neighbour template for one payout.
 - A coin deals bonus damage only when placed on an edge.
 - A coin pays out if placed between two matching results.
-- A coin protects adjacent cursed coins from penalties.
+- A coin protects adjacent low-value coins from penalties.
 - A coin changes behavior when surrounded by misses.
 
 ### Requirements
@@ -534,13 +423,13 @@ This is now implemented as a baseline direction. Future work should be content e
 
 ---
 
-## 8. Expand Combo / Pattern Rewards
+## 6. Expand Combo / Pattern Rewards
 
 ### Core idea
 
 Reward specific final hand patterns as combo goals, such as `HHH`, `HTH`, all same, alternating results, edge matches, or call-aligned sequences.
 
-Pattern checks happen after Sleight, reordering, coin flips, and result-modifying effects.
+Pattern checks happen after reordering, coin flips, Sleight movement, and any result-modifying effects.
 
 ### Current baseline
 
@@ -555,7 +444,7 @@ Pattern checks happen after Sleight, reordering, coin flips, and result-modifyin
 - Bonus Chips if all visible coins match the call.
 - A coin pays out if the two coins beside it land the same way.
 - A rare upgrade doubles damage for alternating results.
-- A cursed coin pays huge if the whole hand matches but penalizes if the pattern breaks.
+- A rare upgrade pays huge if the whole hand matches.
 
 ### Requirements
 
@@ -595,18 +484,18 @@ This has graduated from future concept to implemented family. The next work shou
 
 ---
 
-## 9. Divine Interventions
+## 7. Divine Interventions
 
 ### Core idea
 
-Add rare special actions that manipulate results, protect against bad luck, or create dramatic one-off saves.
+Add rare special actions that manipulate results, protect against a bad outcome, or create dramatic one-off saves. These are not Fate Tricks by default; Fate's current identity is Luck Meter acceleration and Fated Flip payoff.
 
 ### Example interventions
 
 - **Vanish:** remove one coin from the final result set before scoring.
 - **Flip Gravity:** invert all current coin results.
 - **Blessed Nudge:** reroll one missed coin.
-- **Bad Luck Protection:** reduce or prevent one penalty.
+- **Last-Second Cover:** reduce or prevent one penalty.
 - **Last Prayer:** one final boost if the stage would fail.
 
 ### Requirements
@@ -626,13 +515,13 @@ Add rare special actions that manipulate results, protect against bad luck, or c
 
 - Gives players agency after randomness happens.
 - Creates high-value chase purchases.
-- Can support cursed or pattern builds by fixing rare failures.
+- Can support pattern builds by fixing rare failures.
 
 ### Risks
 
 - Post-flip manipulation is extremely powerful because it uses full information.
 - Too many interventions can make the initial flip feel less important.
-- It can overlap with Sleight, Luck, Karma, and mulligans.
+- It can overlap with Sleight, Loaded result manipulation, Fate/Luck Meter payoffs, Karma, and mulligans.
 
 ### Evaluation criteria
 
@@ -642,31 +531,32 @@ Add rare special actions that manipulate results, protect against bad luck, or c
 
 ### Comment
 
-Still thematic and exciting, but lower priority after Sleight. If added, start with one narrow effect such as Vanish or Last Prayer, not a broad second ability system.
+Still thematic and exciting, but lower priority and separate from Fate. If added, start with one narrow effect such as Vanish or Last Prayer, not a broad second ability system.
 
 ---
 
-## 10. Luck and Karma Meters
+## 8. Luck and Karma Meters
 
 ### Core idea
 
-Add round- or stage-scoped meters that build from outcomes. Correct guesses build Luck. Misses build Karma. The player can spend these meters for special effects or alternate rewards.
+Fate now owns Luck Meter direction: correct guesses and Fate Tricks fill Luck, Fountain Favor can boost it, and Fated Flips create payoff/chaining opportunities. This section remains useful mainly for Karma or other non-Fate meter ideas.
 
 ### Possible Luck behavior
 
 - Correct guesses increase Luck.
-- Luck helps press an advantage, such as improving payout or improving odds on a future hand.
-- Luck may reset each stage.
+- Fate Tricks can accelerate Luck gain or Fountain Favor contributions.
+- Fated Flips are the main Luck payoff.
+- Luck should not become individual coin odds manipulation; that belongs to Loaded/Weight.
 
 ### Possible Karma behavior
 
 - Misses increase Karma.
 - Karma supports fail-forward builds, protection, or alternate payouts.
-- Karma could power cursed coins or bad-luck conversion effects.
+- Karma could power fail-forward alternate payouts.
 
 ### Requirements
 
-- Luck and Karma must have distinct identities.
+- Luck and Karma must have distinct identities; Luck is Fate/Fated Flip, Karma is failure space if it exists.
 - Define when meters are gained and spent: before hand, after draw, after Sleight, after flip, or between stages.
 - UI must be small enough not to compete with the hand.
 - Spending must not become an automatic always-correct action.
@@ -679,14 +569,14 @@ Add round- or stage-scoped meters that build from outcomes. Correct guesses buil
 
 ### Design effect
 
-- Makes streaks emotionally meaningful.
+- Gives successful calls a visible emotional payoff.
 - Gives missed calls a possible purpose.
-- Opens fail-build and curse-build space.
+- Opens fail-build space.
 
 ### Risks
 
 - If both meters just “improve odds,” the system adds UI without much payoff.
-- Meter spending overlaps with Sleight and interventions.
+- Meter spending can overlap with Sleight, Loaded and interventions if it starts fixing individual coins.
 - Too many manipulation layers can make the game feel overcontrolled.
 
 ### Evaluation criteria
@@ -697,11 +587,11 @@ Add round- or stage-scoped meters that build from outcomes. Correct guesses buil
 
 ### Comment
 
-Karma remains the more interesting half. A first version might skip Luck entirely and introduce Karma as a failure-conversion mechanic attached to a small set of coins.
+Luck now has a Fate lane, so a future pass should avoid redesigning it from scratch. Karma remains the more open half and should probably stay tied to failure conversion if it is revisited.
 
 ---
 
-## 11. Mulligan Option
+## 9. Mulligan Option
 
 ### Core idea
 
@@ -709,8 +599,8 @@ Allow a limited reroll/redraw/reset action.
 
 ### Possible versions
 
-- Redraw one hand slot before Sleight.
-- Reset Sleight on one slot.
+- Redraw one hand slot before flip.
+- Grant one extra Sleight movement or substitution on a resolved slot.
 - Reroll one revealed coin after the flip.
 - Redraw one shop offer.
 - Replace the whole hand at a major cost.
@@ -723,13 +613,13 @@ Allow a limited reroll/redraw/reset action.
 
 ### Technical notes
 
-- A pre-flip hand-slot mulligan is very close to Sleight and probably should be a coin/passive, not a universal rule.
+- A pre-flip hand-slot mulligan is close to the old draw-fixing version of Sleight and probably should be a coin/passive, not a universal rule.
 - A post-flip reroll requires result transformation and replay logging.
 - A shop mulligan could be implemented through existing reroll systems.
 
 ### Design effect
 
-- Reduces frustration from bad luck.
+- Reduces frustration from bad draws.
 - Can create a clear character or rare-item identity.
 
 ### Risks
@@ -749,7 +639,7 @@ Do not add this as a default rule. It is better as a character passive, rare int
 
 ---
 
-## 12. Player Characters
+## 10. Player Characters
 
 ### Core idea
 
@@ -758,10 +648,10 @@ At the beginning of a run, let the player choose a character. Each character cha
 ### Example characters
 
 - **Gambler:** higher payouts on perfect hands, harsher penalties on misses.
-- **Magician:** one extra Sleight per stage or improved replacement odds.
+- **Magician:** one extra Sleight movement per stage or improved substitution targeting.
 - **Collector:** starts with more special coins but a larger/weaker purse.
 - **Oracle:** sees limited damage/odds previews.
-- **Scoundrel:** cursed coins are cheaper and slightly safer.
+- **Scoundrel:** starts with extra shop rerolls or better information about offers.
 
 ### Requirements
 
@@ -774,7 +664,7 @@ At the beginning of a run, let the player choose a character. Each character cha
 
 - Character definitions need id, name, description, unlock condition, and passive effect.
 - Run state should reference selected character.
-- Passive effects may touch starter purse, Sleight count, shop generation, scoring, or feedback.
+- Passive effects may touch starter purse, Sleight movement/rescore count, shop generation, scoring, or feedback.
 
 ### Design effect
 
@@ -796,11 +686,11 @@ At the beginning of a run, let the player choose a character. Each character cha
 
 ### Comment
 
-Keep this for later. Characters will be much better once there are proven archetypes: neighbour/order builds, pattern builds, cursed builds, economy builds, and fail/Karma builds.
+Keep this for later. Characters will be much better once there are proven archetypes: neighbour/order builds, pattern builds, economy builds, and fail/Karma builds.
 
 ---
 
-## 13. Damage / Outcome Estimate on Hover
+## 11. Damage / Outcome Estimate on Hover
 
 ### Core idea
 
@@ -850,7 +740,7 @@ Prefer explanations and ranges before exact numbers. Exact hand-solving is proba
 
 ---
 
-## 14. Offerings
+## 12. Offerings
 
 ### Core idea
 
@@ -861,7 +751,7 @@ Before a flip, the player can sacrifice damage, Chips, coins, meter value, or an
 - Pay Chips to improve the selected call’s odds.
 - Sacrifice current damage progress for a larger payout if the hand succeeds.
 - Exhaust a coin voluntarily for a temporary boost.
-- Spend Karma to protect a cursed coin.
+- Spend Karma to prevent one failure penalty.
 
 ### Requirements
 
@@ -879,14 +769,14 @@ Before a flip, the player can sacrifice damage, Chips, coins, meter value, or an
 ### Design effect
 
 - Adds thematic divine/gambling flavor.
-- Gives players another way to manage risk.
-- Could create interesting interactions with cursed or Karma builds.
+- Gives players another way to manage temporary trade-offs.
+- Could create interesting interactions with Karma builds.
 
 ### Risks
 
 - “Pay Chips to improve odds” may be too solvable.
 - Overlaps with Luck/Karma and interventions.
-- Adds another pre-flip step to a loop that already has draw, call, Sleight, reorder, and flip.
+- Adds another pre-flip step to a loop that already has draw, select/reorder, call, flip, Sleight movement, and score.
 
 ### Evaluation criteria
 
@@ -900,7 +790,7 @@ Still low priority. The best version is probably not a universal offering screen
 
 ---
 
-## 15. Rooms / Stages / Map
+## 13. Rooms / Stages / Map
 
 ### Core idea
 
@@ -921,7 +811,7 @@ Add a map, rooms, or branching stage structure to the run.
 - Event
 - Reward
 - Rest/thinning opportunity
-- Curse shrine / offering room
+- Offering room
 
 ### Requirements
 
@@ -939,7 +829,7 @@ Add a map, rooms, or branching stage structure to the run.
 ### Design effect
 
 - Adds macro-level route decisions.
-- Can pace shops, events, bosses, and risk/reward rooms.
+- Can pace shops, events, bosses, and high-value reward rooms.
 - Gives thinning, offerings, and special rewards a natural home.
 
 ### Risks
@@ -966,7 +856,7 @@ Keep this as a future run-structure layer. It should wait until the hand loop, p
 
 This idea has effectively graduated into the current hybrid purse baseline.
 
-The original version asked whether the game should replace fixed slots with a purse/deckbuilder model. That decision has now been made in a hybrid form: the player builds a purse, draws hands, uses Sleight, reorders, and flips the final hand.
+The original version asked whether the game should replace fixed slots with a purse/deckbuilder model. That decision has now been made in a hybrid form: the player builds a purse, draws hands, arranges selected coins, flips them, and can support the result with Sleight-style physical movement.
 
 ### Remaining follow-ups
 
@@ -976,7 +866,6 @@ The unresolved parts of the old idea now live elsewhere in this backlog:
 - tactical hand arrangement → **Expand Neighbour / Order Coin Set**
 - ordered result goals → **Expand Combo / Pattern Rewards**
 - duplicate value → **Coin Thinning, Merging, or Upgrades**
-- sticky/dangerous purse cards → **Cursed Coins v2 / Downside Identity**
 
 ### Comment
 

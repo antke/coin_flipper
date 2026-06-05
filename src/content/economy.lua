@@ -4,13 +4,11 @@ local EconomyContent = {
       common = 4,
       uncommon = 8,
       rare = 13,
-      cursed = 7,
     },
     upgradeRarityPrices = {
       common = 8,
       uncommon = 15,
       rare = 25,
-      cursed = 14,
     },
     upgradePriceBonus = 1,
     fallbackPrice = 4,
