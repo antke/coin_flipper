@@ -46,7 +46,7 @@ function SummaryState:buildButtons(app)
       y = metrics.buttonY,
       width = buttonWidth,
       height = buttonHeight,
-      label = "Open Meta Progression",
+      label = "Open Tattoos",
       variant = "accent",
       onClick = function()
         return app.stateGraph:request("open_meta")
@@ -125,7 +125,7 @@ function SummaryState:draw(app)
     string.format("Run Status: %s", summary.runStatus),
     string.format("Final Round Reached: %d", summary.roundIndex),
     string.format("Total Score: %d", summary.runTotalScore),
-    string.format("Meta Reward Earned: %d", summary.metaRewardEarned or 0),
+    string.format("Reputation Earned: %d", summary.metaRewardEarned or 0),
     string.format("Final Stage: %s", summary.finalStageLabel),
     string.format("Final Stage Status: %s", summary.finalStageStatus),
   }
@@ -136,11 +136,11 @@ function SummaryState:draw(app)
 
   local stageHistoryLines = {}
   for _, stageRecord in ipairs(summary.stageHistory or {}) do
-    local line = string.format("- R%d %s => %s damage %d/%d", stageRecord.roundIndex, stageRecord.opponentName or stageRecord.stageLabel, stageRecord.status, stageRecord.stageScore, stageRecord.targetScore)
+    local line = string.format("- R%d %s => %s score to HP %d/%d", stageRecord.roundIndex, stageRecord.opponentName or stageRecord.stageLabel, stageRecord.status, stageRecord.stageScore, stageRecord.targetScore)
     local victoryChipReward = stageRecord.victoryShopPointReward
 
     if victoryChipReward and (victoryChipReward.total or 0) > 0 then
-      line = string.format("%s | Chips +%d", line, victoryChipReward.total or 0)
+      line = string.format("%s | Influence +%d", line, victoryChipReward.total or 0)
     end
 
     if stageRecord.rewardChoice then

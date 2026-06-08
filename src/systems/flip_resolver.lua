@@ -89,8 +89,18 @@ function FlipResolver.prepareCoinRollState(runState, stageState, metaProjection,
       coinId = resolutionEntry.coinId,
       instanceId = resolutionEntry.instanceId,
       slotIndex = resolutionEntry.slotIndex,
+      selectedSlotIndex = resolutionEntry.selectedSlotIndex,
+      dealtIndex = resolutionEntry.dealtIndex,
+      boardSlotIndex = resolutionEntry.boardSlotIndex,
+      overloadSlotIndex = resolutionEntry.overloadSlotIndex,
+      smuggled = resolutionEntry.smuggled == true,
+      smuggledBy = resolutionEntry.smuggledBy,
       originalDrawIndex = resolutionEntry.originalDrawIndex,
       resolutionIndex = resolutionEntry.resolutionIndex,
+      foretold = resolutionEntry.foretold == true,
+      foretoldResult = resolutionEntry.foretoldResult,
+      foretoldBy = resolutionEntry.foretoldBy,
+      foretoldRngRoll = resolutionEntry.foretoldRngRoll,
       baseHeadsWeight = coinHeadsWeight,
       baseTailsWeight = coinTailsWeight,
       headsWeight = coinHeadsWeight,
@@ -105,7 +115,8 @@ function FlipResolver.prepareCoinRollState(runState, stageState, metaProjection,
 end
 
 function FlipResolver.resolveCoinOutcome(coinRollState, context)
-  local roll = context.rng:nextFloat()
+  local hasForetoldResult = coinRollState.foretoldResult == "heads" or coinRollState.foretoldResult == "tails"
+  local roll = hasForetoldResult and coinRollState.foretoldRngRoll or context.rng:nextFloat()
   local headsChance = clampChance(coinRollState.headsWeight)
   local forcedResult = nil
   local forcedReason = nil
@@ -121,12 +132,18 @@ function FlipResolver.resolveCoinOutcome(coinRollState, context)
   coinRollState.rngRoll = roll
   coinRollState.forcedResult = forcedResult
   coinRollState.forcedReason = forcedReason
-  coinRollState.result = forcedResult or (roll <= headsChance and "heads" or "tails")
+  coinRollState.result = forcedResult or (hasForetoldResult and coinRollState.foretoldResult) or (roll <= headsChance and "heads" or "tails")
 
   table.insert(context.trace.coinRolls, {
     coinId = coinRollState.coinId,
     instanceId = coinRollState.instanceId,
     slotIndex = coinRollState.slotIndex,
+    selectedSlotIndex = coinRollState.selectedSlotIndex,
+    dealtIndex = coinRollState.dealtIndex,
+    boardSlotIndex = coinRollState.boardSlotIndex,
+    overloadSlotIndex = coinRollState.overloadSlotIndex,
+    smuggled = coinRollState.smuggled == true,
+    smuggledBy = coinRollState.smuggledBy,
     resolutionIndex = coinRollState.resolutionIndex,
     baseHeadsWeight = coinRollState.baseHeadsWeight,
     baseTailsWeight = coinRollState.baseTailsWeight,
@@ -134,6 +151,10 @@ function FlipResolver.resolveCoinOutcome(coinRollState, context)
     tailsWeight = coinRollState.tailsWeight,
     rngRoll = roll,
     result = coinRollState.result,
+    foretold = coinRollState.foretold == true,
+    foretoldResult = coinRollState.foretoldResult,
+    foretoldBy = coinRollState.foretoldBy,
+    foretoldRngRoll = coinRollState.foretoldRngRoll,
     forcedResult = forcedResult,
     forcedReason = forcedReason,
   })
@@ -212,6 +233,10 @@ function FlipResolver.buildBatchResult(runState, stageState, context, resolution
   batch.stageType = stageState.stageType
   batch.resolvedCoinResults = context.perCoin
   batch.forcedResults = Utils.clone(context.trace.forcedResults or {})
+  batch.dealtHand = Utils.clone(context.trace.dealtHand or {})
+  batch.selectedSlots = Utils.clone(context.trace.selectedSlots or {})
+  batch.boardSlots = Utils.clone(context.trace.boardSlots or {})
+  batch.refillEvent = Utils.clone(context.trace.refillEvent or nil)
   batch.actions = context.trace.actions
   batch.trace = context.trace
   batch.scoreBreakdown = context.scoreBreakdown
@@ -277,6 +302,10 @@ function FlipResolver.projectBatchBeforeRoll(runState, stageState, metaProjectio
   FlipResolver.runPhase(runState, stageState, context, "on_batch_start")
   FlipResolver.runPhase(runState, stageState, context, "before_batch_validation")
 
+  context.purseEventCoins = PurseHookSystem.buildHandCoinStates(runState, stageState)
+  FlipResolver.runPhase(runState, stageState, context, "after_call_before_flip")
+  context.purseEventCoins = nil
+
   context.perCoin, context.resolutionOrder = FlipResolver.prepareCoinRollState(runState, stageState, metaProjection, context)
   context.purseEventCoins = context.perCoin
   FlipResolver.runPhase(runState, stageState, context, "before_hand_flip")
@@ -289,9 +318,13 @@ end
 function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, rng)
   local context
 
-  local handSlots, drawWarning = PurseSystem.drawHand(runState, stageState, rng)
+  local _, drawWarning = PurseSystem.dealHand(runState, stageState, rng)
 
-  PurseHookSystem.runAfterHandDraw(runState, stageState, metaProjection, { call = call })
+  PurseHookSystem.runAfterDealBeforeSelection(runState, stageState, metaProjection, { call = call, rng = rng })
+  local handSlots, selectionWarning = PurseSystem.selectDefaultFlipSlots(runState, stageState)
+  PurseHookSystem.runAfterHandDraw(runState, stageState, metaProjection, { call = call, rng = rng })
+
+  drawWarning = drawWarning == "purse_empty" and drawWarning or (selectionWarning or drawWarning)
 
   if stageState.stageStatus ~= "active" then
     return nil, drawWarning or "stage_not_active"
@@ -322,9 +355,13 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
   end
 
   context = FlipResolver.projectBatchBeforeRoll(runState, stageState, metaProjection, call, rng)
-  context.trace.drawnInstanceIds = PurseSystem.getHandInstanceIds(stageState)
+  context.trace.dealtHand = PurseSystem.getDealtHandEntries(runState, stageState)
+  context.trace.selectedSlots = PurseSystem.getSelectedSlotEntries(runState, stageState)
+  context.trace.boardSlots = PurseSystem.getBoardSlotEntries(runState, stageState)
+  context.trace.drawnInstanceIds = PurseSystem.getDealtInstanceIds(stageState)
   context.trace.sleightHistory = Utils.clone(stageState.purse and stageState.purse.sleightHistory or {})
   context.trace.reorderHistory = Utils.clone(stageState.purse and stageState.purse.reorderHistory or {})
+  context.trace.purseHookHistory = Utils.clone(stageState.purse and stageState.purse.hookHistory or {})
 
   if drawWarning then
     table.insert(context.trace.warnings, drawWarning)
@@ -335,13 +372,26 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
   end
 
   FlipResolver.runPhase(runState, stageState, context, "after_coin_roll")
+  FlipResolver.runPhase(runState, stageState, context, "after_flip_before_score")
   FlipResolver.runPhase(runState, stageState, context, "before_scoring")
 
-  local scoringActions = ScoringSystem.buildScoreActions(context)
+  local scoringActions = ScoringSystem.buildScoreActions(context, {
+    runCoinScorePhase = function(phaseName, scoreEvent, coinState)
+      local previousCoin = context.currentCoin
+      local previousScoreEvent = context.currentScoreEvent
+
+      context.currentCoin = coinState
+      context.currentScoreEvent = scoreEvent
+      FlipResolver.runPhase(runState, stageState, context, phaseName)
+      context.currentCoin = previousCoin
+      context.currentScoreEvent = previousScoreEvent
+    end,
+  })
   FlipResolver.applyPhaseActions(runState, stageState, context, "score_assembly", scoringActions, 0)
 
   FlipResolver.runPhase(runState, stageState, context, "after_scoring")
   LuckSystem.applyBaseMatchLuck(runState, context)
+  FlipResolver.runPhase(runState, stageState, context, "after_all_effects")
   FlipResolver.updateCounters(runState, stageState, context)
   FlipResolver.runPhase(runState, stageState, context, "before_stage_end_check")
   FlipResolver.evaluateStageEnd(stageState, context)
@@ -353,7 +403,8 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
   end
 
   FlipResolver.updateTraceTerminalState(stageState, context)
-  context.trace.exhaustedInstanceIds = PurseSystem.exhaustHand(stageState)
+  context.trace.refillEvent = PurseSystem.refillHand(stageState)
+  context.trace.exhaustedInstanceIds = Utils.copyArray(context.trace.refillEvent.exhaustedInstanceIds or {})
 
   local undrainedPendingPhases = {}
 

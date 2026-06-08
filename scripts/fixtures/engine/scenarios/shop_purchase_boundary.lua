@@ -33,7 +33,7 @@ return {
         triggeredSources = {},
         actions = {},
         warnings = {},
-        messages = { "Fixture injected deterministic upgrade offers." },
+        messages = { "Fixture injected deterministic Trick offers." },
         notes = {},
         offerCount = 2,
       },
@@ -46,17 +46,17 @@ return {
     local firstPurchase = A.truthy(A.getResult("buy_cashback"), "missing first purchase result")
     local secondPurchase = A.truthy(A.getResult("buy_steady"), "missing second purchase result")
 
-    A.truthy(firstPurchase.ok, "cashback badge should purchase successfully")
-    A.truthy(secondPurchase.ok, "steady hand should purchase successfully")
-    A.equal(firstPurchase.result.finalPrice, 4, "cashback badge final price")
-    A.equal(secondPurchase.result.finalPrice, 4, "steady hand final price")
-    A.equal(env.runState.shopPoints, 13, "Chips after cashback sequence")
+    A.truthy(firstPurchase.ok, "Kickback Mark should purchase successfully")
+    A.truthy(secondPurchase.ok, "Steady Finish should purchase successfully")
+    A.equal(firstPurchase.result.finalPrice, 4, "Kickback Mark final price")
+    A.equal(secondPurchase.result.finalPrice, 4, "Steady Finish final price")
+    A.equal(env.runState.shopPoints, 13, "Influence after cashback sequence")
     A.notContains(firstPurchase.result.trace.messages or {}, function(message)
-      return tostring(message):find("Cashback Badge refunded 1 Chip.", 1, true) ~= nil
-    end, "cashback badge should not refund its own purchase")
+      return tostring(message):find("Kickback Mark refunded 1 Influence.", 1, true) ~= nil
+    end, "Kickback Mark should not refund its own purchase")
     A.contains(secondPurchase.result.trace.messages or {}, function(message)
-      return tostring(message):find("Cashback Badge refunded 1 Chip.", 1, true) ~= nil
-    end, "steady hand purchase should receive cashback refund")
+      return tostring(message):find("Kickback Mark refunded 1 Influence.", 1, true) ~= nil
+    end, "Steady Finish purchase should receive Kickback Mark refund")
     A.equal(#(env.runState.history.purchases or {}), 2, "global purchase history count")
     A.equal(#(env.shopSession.actions or {}), 2, "shop session action count")
   end,

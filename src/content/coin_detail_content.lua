@@ -45,6 +45,14 @@ local function formatChancePair(headsChance, tailsChance)
   return string.format("%.0fH %.0fT", (headsChance or 0) * 100, (tailsChance or 0) * 100)
 end
 
+local function formatChanceText(coin, headsChance, tailsChance)
+  if type(coin.call_match_chance) == "number" then
+    return string.format("%.0f%% call match", coin.call_match_chance * 100)
+  end
+
+  return formatChancePair(headsChance, tailsChance)
+end
+
 local function capitalize(value)
   local text = tostring(value or "common")
   return (text:gsub("^%l", string.upper))
@@ -65,6 +73,22 @@ function CoinDetailContent.build(coin)
     },
   }
 
+  if coin.material then
+    table.insert(pills, {
+      kind = "material",
+      value = coin.material,
+      label = Terminology.getTagLabel(coin.material),
+    })
+  end
+
+  if coin.archetype then
+    table.insert(pills, {
+      kind = "archetype",
+      value = coin.archetype,
+      label = Terminology.getTagLabel(coin.archetype),
+    })
+  end
+
   for _, tag in ipairs(coin.typeTags or {}) do
     table.insert(pills, {
       kind = "type",
@@ -76,7 +100,7 @@ function CoinDetailContent.build(coin)
   return {
     title = coin.name or coin.id,
     pills = pills,
-    chanceText = formatChancePair(headsChance, tailsChance),
+    chanceText = formatChanceText(coin, headsChance, tailsChance),
     effectText = Terminology.formatText(coin.effectDescription or ""),
     description = Terminology.formatText(coin.description or ""),
   }

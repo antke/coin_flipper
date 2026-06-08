@@ -36,6 +36,69 @@ local function mergeMissingEffectiveValues(target, source)
   end
 end
 
+local function getTattooLoadoutLimit(options)
+  local limit = tonumber(options and options.tattooLoadoutLimit)
+
+  if not limit then
+    limit = MetaUpgrades.getEquipLimit()
+  end
+
+  return math.max(0, math.floor(limit))
+end
+
+local function appendEquippedTattooId(target, equippedIndex, purchasedIndex, metaUpgradeId, limit)
+  if #target >= limit or equippedIndex[metaUpgradeId] or not purchasedIndex[metaUpgradeId] then
+    return
+  end
+
+  local definition = MetaUpgrades.getById(metaUpgradeId)
+  if not MetaUpgrades.isEquipEligible(definition) then
+    return
+  end
+
+  equippedIndex[metaUpgradeId] = true
+  table.insert(target, metaUpgradeId)
+end
+
+local function normalizeEquippedTattooIds(sourceEquippedTattooIds, purchasedMetaUpgradeIds, tattooLoadoutLimit)
+  local purchasedIndex = {}
+  local equippedIndex = {}
+  local equippedTattooIds = {}
+
+  for _, metaUpgradeId in ipairs(purchasedMetaUpgradeIds or {}) do
+    purchasedIndex[metaUpgradeId] = true
+  end
+
+  if type(sourceEquippedTattooIds) == "table" then
+    for _, metaUpgradeId in ipairs(sourceEquippedTattooIds) do
+      appendEquippedTattooId(equippedTattooIds, equippedIndex, purchasedIndex, metaUpgradeId, tattooLoadoutLimit)
+    end
+  else
+    for _, metaUpgradeId in ipairs(purchasedMetaUpgradeIds or {}) do
+      appendEquippedTattooId(equippedTattooIds, equippedIndex, purchasedIndex, metaUpgradeId, tattooLoadoutLimit)
+    end
+  end
+
+  return equippedTattooIds
+end
+
+local function buildEquippedTattooEffectiveValues(equippedTattooIds)
+  local effectiveValues = {}
+
+  for _, metaUpgradeId in ipairs(equippedTattooIds or {}) do
+    local definition = MetaUpgrades.getById(metaUpgradeId)
+
+    if definition then
+      EffectiveValueSystem.mergeEffectiveValueTables(
+        effectiveValues,
+        EffectiveValueSystem.getDefinitionEffectiveValues(definition)
+      )
+    end
+  end
+
+  return effectiveValues
+end
+
 function MetaState.new(options)
   if type(options) ~= "table" then
     options = {}
@@ -47,8 +110,11 @@ function MetaState.new(options)
   local unlockedCoinIds = type(options.unlockedCoinIds) == "table" and options.unlockedCoinIds or {}
   local unlockedUpgradeIds = type(options.unlockedUpgradeIds) == "table" and options.unlockedUpgradeIds or {}
   local purchasedMetaUpgradeIds = type(options.purchasedMetaUpgradeIds) == "table" and options.purchasedMetaUpgradeIds or {}
+  local sourceEquippedTattooIds = type(options.equippedTattooIds) == "table" and options.equippedTattooIds or nil
+  local tattooLoadoutLimit = getTattooLoadoutLimit(options)
+  local equippedTattooIds = normalizeEquippedTattooIds(sourceEquippedTattooIds, purchasedMetaUpgradeIds, tattooLoadoutLimit)
 
-  local effectiveValues = {}
+  local effectiveValues = buildEquippedTattooEffectiveValues(equippedTattooIds)
   local modifiers = {}
   local stats = {}
   local normalizedUnlockedCoinIds = {}
@@ -56,39 +122,13 @@ function MetaState.new(options)
   local unlockedCoinIndex = {}
   local unlockedUpgradeIndex = {}
 
-  if sourceEffectiveValues then
+  if sourceEffectiveValues and #purchasedMetaUpgradeIds == 0 then
     EffectiveValueSystem.mergeEffectiveValueTables(effectiveValues, sourceEffectiveValues)
-
-    local purchasedEffectiveValues = {}
-
-    for _, metaUpgradeId in ipairs(purchasedMetaUpgradeIds) do
-      local definition = MetaUpgrades.getById(metaUpgradeId)
-
-      if definition then
-        EffectiveValueSystem.mergeEffectiveValueTables(
-          purchasedEffectiveValues,
-          EffectiveValueSystem.getDefinitionEffectiveValues(definition)
-        )
-      end
-    end
-
-    mergeMissingEffectiveValues(effectiveValues, purchasedEffectiveValues)
-  else
+  elseif not sourceEffectiveValues then
     EffectiveValueSystem.mergeEffectiveValueTables(
       effectiveValues,
       EffectiveValueSystem.buildCanonicalEffectiveValuesFromLegacyModifiers(sourceModifiers)
     )
-
-    for _, metaUpgradeId in ipairs(purchasedMetaUpgradeIds) do
-      local definition = MetaUpgrades.getById(metaUpgradeId)
-
-      if definition then
-        EffectiveValueSystem.mergeEffectiveValueTables(
-          effectiveValues,
-          EffectiveValueSystem.getDefinitionEffectiveValues(definition)
-        )
-      end
-    end
   end
 
   modifiers = EffectiveValueSystem.buildLegacyModifierTableFromCanonicalEffectiveValues(effectiveValues, DEFAULT_MODIFIERS)
@@ -119,6 +159,8 @@ function MetaState.new(options)
     unlockedCoinIds = normalizedUnlockedCoinIds,
     unlockedUpgradeIds = normalizedUnlockedUpgradeIds,
     purchasedMetaUpgradeIds = Utils.copyArray(purchasedMetaUpgradeIds),
+    equippedTattooIds = Utils.copyArray(equippedTattooIds),
+    tattooLoadoutLimit = tattooLoadoutLimit,
     runRecords = Utils.clone(type(options.runRecords) == "table" and options.runRecords or {}),
     effectiveValues = effectiveValues,
     modifiers = modifiers,

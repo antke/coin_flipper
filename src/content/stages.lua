@@ -11,6 +11,7 @@ local definitions = {
     opponent = {
       id = "bright_lights_dealer",
       name = "Bright-Lights Dealer",
+      enemyClass = "card_shark",
       description = "A house dealer trying to rattle your opening call.",
       hp = 6,
     },
@@ -26,6 +27,7 @@ local definitions = {
     opponent = {
       id = "mid_table_sharp",
       name = "Mid-Table Sharp",
+      enemyClass = "forger",
       description = "A patient gambler with just enough tricks to test your pouch.",
       hp = 8,
     },
@@ -38,6 +40,7 @@ local definitions = {
         opponent = {
           id = "crosswind_sharp",
           name = "Crosswind Sharp",
+          enemyClass = "card_shark",
           description = "A sideways-smiling gambler leaning on the table draft.",
         },
         activeStageModifierIds = { "crosswind_table" },
@@ -49,6 +52,7 @@ local definitions = {
         opponent = {
           id = "side_pot_bruiser",
           name = "Side-Pot Bruiser",
+          enemyClass = "pit_boss",
           description = "A loud bettor who turns every good hit into more heat.",
         },
         activeStageModifierIds = { "side_pot" },
@@ -60,6 +64,7 @@ local definitions = {
         opponent = {
           id = "crowd_favorite",
           name = "Crowd Favorite",
+          enemyClass = "fortune_teller",
           description = "A smiling regular with the room on their side.",
         },
         activeStageModifierIds = { "crowd_favorite" },
@@ -76,6 +81,7 @@ local definitions = {
     opponent = {
       id = "build_check_hustler",
       name = "Build-Check Hustler",
+      enemyClass = "smuggler",
       description = "A harder mark who punishes loose coin choices.",
       hp = 11,
     },
@@ -88,6 +94,7 @@ local definitions = {
         opponent = {
           id = "house_lights_hustler",
           name = "House-Lights Hustler",
+          enemyClass = "magician",
           description = "A polished opponent who thrives under bright pressure.",
         },
         activeStageModifierIds = { "bright_lights", "side_pot" },
@@ -99,6 +106,7 @@ local definitions = {
         opponent = {
           id = "long_game_grinder",
           name = "Long-Game Grinder",
+          enemyClass = "showman",
           description = "A stubborn table fixture built to survive one more flip.",
         },
         activeStageModifierIds = { "crosswind_table", "side_pot" },
@@ -115,7 +123,8 @@ local definitions = {
     opponent = {
       id = "final_table_boss",
       name = "The Final Table",
-      description = "The house's last obstacle: no attacks, just a chip wall to break.",
+      enemyClass = "showman",
+      description = "The house's last obstacle: no attacks, just an HP wall to break.",
       hp = 14,
     },
     bossModifierIds = { "loaded_ledger" },
@@ -127,6 +136,7 @@ local definitions = {
         opponent = {
           id = "heads_embargo_boss",
           name = "Heads Embargo",
+          enemyClass = "pit_boss",
           description = "A boss who taxes every Heads-heavy plan.",
         },
         bossModifierIds = { "heads_embargo", "loaded_ledger" },
@@ -138,6 +148,7 @@ local definitions = {
         opponent = {
           id = "tails_embargo_boss",
           name = "Tails Embargo",
+          enemyClass = "card_shark",
           description = "A boss who taxes every Tails-heavy plan.",
         },
         bossModifierIds = { "tails_embargo", "stacked_deck" },

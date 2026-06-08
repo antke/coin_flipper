@@ -24,8 +24,8 @@ local COIN_TAG_SCORES = {
   score = 4,
   match = 3,
   weight = 2,
-  multiplier = 2,
-  economy = 1,
+  score_scaling = 2,
+  influence = 1,
 }
 
 local OFFER_TYPE_SCORES = {
@@ -36,10 +36,10 @@ local OFFER_TYPE_SCORES = {
 local OFFER_TAG_SCORES = {
   score = 4,
   match = 3,
-  multiplier = 3,
+  score_scaling = 3,
   weight = 2,
-  economy = 1,
-  shop = 1,
+  influence = 1,
+  black_market = 1,
 }
 
 local function hasTag(definition, tag)
@@ -132,7 +132,7 @@ local function buildDraftCandidates(runState)
   local candidates = {}
 
   for _, definition in ipairs(Coins.getAll()) do
-    if definition.id ~= "regular_dollar" and Coins.isUnlocked(definition, runState.unlockedCoinIds) then
+    if definition.draftEligible ~= false and Coins.isUnlocked(definition, runState.unlockedCoinIds) then
       table.insert(candidates, definition.id)
     end
   end

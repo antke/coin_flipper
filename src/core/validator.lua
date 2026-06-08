@@ -36,6 +36,8 @@ local VALID_META_STATE_KEYS = {
   unlockedCoinIds = true,
   unlockedUpgradeIds = true,
   purchasedMetaUpgradeIds = true,
+  equippedTattooIds = true,
+  tattooLoadoutLimit = true,
   runRecords = true,
   effectiveValues = true,
   modifiers = true,
@@ -75,6 +77,7 @@ local VALID_RUN_RECORD_STAGE_KEYS = {
   stageType = true,
   variantName = true,
   opponentName = true,
+  enemyClass = true,
   status = true,
   stageScore = true,
   targetScore = true,
@@ -198,6 +201,7 @@ local VALID_REPLAY_STAGE_KEYS = {
 local VALID_REPLAY_REWARD_KEYS = {
   options = true,
   choice = true,
+  generation = true,
 }
 
 local VALID_REPLAY_REWARD_OPTION_KEYS = {
@@ -206,6 +210,15 @@ local VALID_REPLAY_REWARD_OPTION_KEYS = {
   name = true,
   rarity = true,
   description = true,
+  rewardSource = true,
+  enemyClass = true,
+  enemyClassLabel = true,
+  rewardPoolCategories = true,
+  wildcard = true,
+  wildcardChance = true,
+  wildcardCap = true,
+  trickCategory = true,
+  trickTags = true,
 }
 
 local VALID_REPLAY_ENCOUNTER_KEYS = {
@@ -235,16 +248,30 @@ local VALID_REPLAY_BATCH_KEYS = {
   roundIndex = true,
   stageId = true,
   call = true,
+  dealtHand = true,
   resolutionEntries = true,
+  selectedSlots = true,
+  boardSlots = true,
   forcedResults = true,
+  refillEvent = true,
 }
 
 local VALID_REPLAY_RESOLUTION_ENTRY_KEYS = {
   coinId = true,
   instanceId = true,
+  dealtIndex = true,
   originalDrawIndex = true,
   slotIndex = true,
+  selectedSlotIndex = true,
+  boardSlotIndex = true,
+  overloadSlotIndex = true,
   resolutionIndex = true,
+  smuggled = true,
+  smuggledBy = true,
+  foretold = true,
+  foretoldResult = true,
+  foretoldBy = true,
+  foretoldRngRoll = true,
   sleightUsed = true,
 }
 
@@ -562,6 +589,18 @@ local function validateBatchSnapshot(batch)
   end
 
   if batch.trace then
+    local hasSleightMoves = #(batch.trace.sleightMoves or {}) > 0
+    local sleightPhaseOrder = HookRegistry.getPhaseOrder("after_flip_before_score")
+    local function allowHistoricalSlotMismatch(entry)
+      if not hasSleightMoves then
+        return false
+      end
+
+      local phaseName = entry and (entry.phase or (entry._trace and entry._trace.phase))
+      local phaseOrder = HookRegistry.getPhaseOrder(phaseName)
+      return phaseOrder ~= nil and sleightPhaseOrder ~= nil and phaseOrder <= sleightPhaseOrder
+    end
+
     if batch.trace.batchId ~= nil and batch.trace.batchId ~= batch.batchId then
       return false, "batch trace batchId mismatch"
     end
@@ -612,11 +651,11 @@ local function validateBatchSnapshot(batch)
           return false, string.format("batch trace triggeredSources[%d].resolutionIndex must be positive integer", index)
         end
 
-        if source.slotIndex ~= resolvedCoin.slotIndex then
+        if source.slotIndex ~= resolvedCoin.slotIndex and not allowHistoricalSlotMismatch(source) then
           return false, string.format("batch trace triggeredSources[%d].slotIndex mismatch", index)
         end
 
-        if source.resolutionIndex ~= resolvedCoin.resolutionIndex then
+        if source.resolutionIndex ~= resolvedCoin.resolutionIndex and not allowHistoricalSlotMismatch(source) then
           return false, string.format("batch trace triggeredSources[%d].resolutionIndex mismatch", index)
         end
       end
@@ -638,11 +677,11 @@ local function validateBatchSnapshot(batch)
           return false, string.format("batch trace actions[%d].resolutionIndex must be positive integer", index)
         end
 
-        if action.slotIndex ~= resolvedCoin.slotIndex then
+        if action.slotIndex ~= resolvedCoin.slotIndex and not allowHistoricalSlotMismatch(action) then
           return false, string.format("batch trace actions[%d].slotIndex mismatch", index)
         end
 
-        if action.resolutionIndex ~= resolvedCoin.resolutionIndex then
+        if action.resolutionIndex ~= resolvedCoin.resolutionIndex and not allowHistoricalSlotMismatch(action) then
           return false, string.format("batch trace actions[%d].resolutionIndex mismatch", index)
         end
       end
@@ -662,11 +701,11 @@ local function validateBatchSnapshot(batch)
           return false, string.format("batch trace actions[%d]._trace.resolutionIndex must be positive integer", index)
         end
 
-        if action._trace.slotIndex ~= resolvedCoin.slotIndex then
+        if action._trace.slotIndex ~= resolvedCoin.slotIndex and not allowHistoricalSlotMismatch(action._trace) then
           return false, string.format("batch trace actions[%d]._trace.slotIndex mismatch", index)
         end
 
-        if action._trace.resolutionIndex ~= resolvedCoin.resolutionIndex then
+        if action._trace.resolutionIndex ~= resolvedCoin.resolutionIndex and not allowHistoricalSlotMismatch(action._trace) then
           return false, string.format("batch trace actions[%d]._trace.resolutionIndex mismatch", index)
         end
       end
@@ -1026,6 +1065,10 @@ local function validateRunRecord(record, index)
       return false, string.format("runRecords[%d].stageHistory[%d] variantName must be a non-empty string when present", index, stageIndex)
     end
 
+    if stageRecord.enemyClass ~= nil and (type(stageRecord.enemyClass) ~= "string" or stageRecord.enemyClass == "") then
+      return false, string.format("runRecords[%d].stageHistory[%d] enemyClass must be a non-empty string when present", index, stageIndex)
+    end
+
     if not VALID_STAGE_STATUSES[stageRecord.status] then
       return false, string.format("runRecords[%d].stageHistory[%d] has invalid status %s", index, stageIndex, tostring(stageRecord.status))
     end
@@ -1204,8 +1247,61 @@ function Validator.validateMetaStatePayload(metaStateTable)
   end
 
   local expectedPurchasedEffectiveValues = {}
+  local expectedEquippedEffectiveValues = {}
   local expectedUnlockedCoinIds = {}
   local expectedUnlockedUpgradeIds = {}
+  local purchasedMetaUpgradeIndex = {}
+
+  for _, metaUpgradeId in ipairs(metaStateTable.purchasedMetaUpgradeIds or {}) do
+    purchasedMetaUpgradeIndex[metaUpgradeId] = true
+  end
+
+  if metaStateTable.tattooLoadoutLimit ~= nil and not isNonNegativeInteger(metaStateTable.tattooLoadoutLimit) then
+    return false, "metaState tattooLoadoutLimit must be a non-negative integer"
+  end
+
+  local tattooLoadoutLimit = metaStateTable.tattooLoadoutLimit or MetaUpgrades.getEquipLimit()
+  local equippedTattooIds = metaStateTable.equippedTattooIds
+
+  if equippedTattooIds ~= nil then
+    ok, errorMessage = validateIdList(equippedTattooIds, "metaState equippedTattooIds", MetaUpgrades.getById)
+    if not ok then
+      return false, errorMessage
+    end
+
+    if #equippedTattooIds > tattooLoadoutLimit then
+      return false, "metaState equippedTattooIds exceeds tattooLoadoutLimit"
+    end
+
+    local equippedIndex = {}
+    for _, metaUpgradeId in ipairs(equippedTattooIds) do
+      if equippedIndex[metaUpgradeId] then
+        return false, "metaState equippedTattooIds contains duplicate ids"
+      end
+
+      equippedIndex[metaUpgradeId] = true
+
+      if not purchasedMetaUpgradeIndex[metaUpgradeId] then
+        return false, string.format("metaState equippedTattooIds contains unpurchased Tattoo %s", tostring(metaUpgradeId))
+      end
+
+      if not MetaUpgrades.isEquipEligible(MetaUpgrades.getById(metaUpgradeId)) then
+        return false, string.format("metaState equippedTattooIds contains non-equip-eligible Tattoo %s", tostring(metaUpgradeId))
+      end
+    end
+  else
+    equippedTattooIds = {}
+
+    for _, metaUpgradeId in ipairs(metaStateTable.purchasedMetaUpgradeIds or {}) do
+      if #equippedTattooIds >= tattooLoadoutLimit then
+        break
+      end
+
+      if MetaUpgrades.isEquipEligible(MetaUpgrades.getById(metaUpgradeId)) then
+        table.insert(equippedTattooIds, metaUpgradeId)
+      end
+    end
+  end
 
   for _, metaUpgradeId in ipairs(metaStateTable.purchasedMetaUpgradeIds or {}) do
     local definition = MetaUpgrades.getById(metaUpgradeId)
@@ -1217,6 +1313,17 @@ function Validator.validateMetaStatePayload(metaStateTable)
       )
       Utils.appendAll(expectedUnlockedCoinIds, definition.unlockCoinIds or {})
       Utils.appendAll(expectedUnlockedUpgradeIds, definition.unlockUpgradeIds or {})
+    end
+  end
+
+  for _, metaUpgradeId in ipairs(equippedTattooIds or {}) do
+    local definition = MetaUpgrades.getById(metaUpgradeId)
+
+    if definition then
+      EffectiveValueSystem.mergeEffectiveValueTables(
+        expectedEquippedEffectiveValues,
+        EffectiveValueSystem.getDefinitionEffectiveValues(definition)
+      )
     end
   end
 
@@ -1248,9 +1355,9 @@ function Validator.validateMetaStatePayload(metaStateTable)
   end
 
   if metaStateTable.effectiveValues ~= nil then
-    for key, expectedEntry in pairs(expectedPurchasedEffectiveValues) do
+    for key, expectedEntry in pairs(expectedEquippedEffectiveValues) do
       if not valuesDeepEqual(metaStateTable.effectiveValues[key], expectedEntry) then
-        return false, string.format("metaState effectiveValues missing purchased effect %s", tostring(key))
+        return false, string.format("metaState effectiveValues missing equipped Tattoo effect %s", tostring(key))
       end
     end
   end
@@ -1933,6 +2040,10 @@ function Validator.validateReplayTranscriptPayload(transcript)
         return false, string.format("replay transcript stage %d reward options must be a table", index)
       end
 
+      if stageEntry.reward.generation ~= nil and type(stageEntry.reward.generation) ~= "table" then
+        return false, string.format("replay transcript stage %d reward generation must be a table", index)
+      end
+
       local seenRewardOptionKeys = {}
       for optionIndex, option in ipairs(stageEntry.reward.options or {}) do
         for key in pairs(option or {}) do
@@ -2129,6 +2240,22 @@ function Validator.validateReplayTranscriptPayload(transcript)
         return false, string.format("replay transcript stage %d batch %d call must be heads or tails", index, batchIndex)
       end
 
+      if batchEntry.dealtHand ~= nil and type(batchEntry.dealtHand) ~= "table" then
+        return false, string.format("replay transcript stage %d batch %d dealtHand must be a table", index, batchIndex)
+      end
+
+      if batchEntry.selectedSlots ~= nil and type(batchEntry.selectedSlots) ~= "table" then
+        return false, string.format("replay transcript stage %d batch %d selectedSlots must be a table", index, batchIndex)
+      end
+
+      if batchEntry.boardSlots ~= nil and type(batchEntry.boardSlots) ~= "table" then
+        return false, string.format("replay transcript stage %d batch %d boardSlots must be a table", index, batchIndex)
+      end
+
+      if batchEntry.refillEvent ~= nil and type(batchEntry.refillEvent) ~= "table" then
+        return false, string.format("replay transcript stage %d batch %d refillEvent must be a table", index, batchIndex)
+      end
+
       if batchEntry.resolutionEntries ~= nil then
         if type(batchEntry.resolutionEntries) ~= "table" then
           return false, string.format("replay transcript stage %d batch %d resolutionEntries must be a table", index, batchIndex)
@@ -2208,6 +2335,46 @@ function Validator.validateReplayTranscriptPayload(transcript)
           end
 
           seenSlotIndices[entry.slotIndex] = true
+
+          if entry.dealtIndex ~= nil and not isPositiveInteger(entry.dealtIndex) then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d dealtIndex must be positive integer", index, batchIndex, resolutionIndex)
+          end
+
+          if entry.selectedSlotIndex ~= nil and not isPositiveInteger(entry.selectedSlotIndex) then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d selectedSlotIndex must be positive integer", index, batchIndex, resolutionIndex)
+          end
+
+          if entry.boardSlotIndex ~= nil and not isPositiveInteger(entry.boardSlotIndex) then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d boardSlotIndex must be positive integer", index, batchIndex, resolutionIndex)
+          end
+
+          if entry.overloadSlotIndex ~= nil and not isPositiveInteger(entry.overloadSlotIndex) then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d overloadSlotIndex must be positive integer", index, batchIndex, resolutionIndex)
+          end
+
+          if entry.smuggled ~= nil and type(entry.smuggled) ~= "boolean" then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d smuggled must be boolean", index, batchIndex, resolutionIndex)
+          end
+
+          if entry.smuggledBy ~= nil and type(entry.smuggledBy) ~= "string" then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d smuggledBy must be a string", index, batchIndex, resolutionIndex)
+          end
+
+          if entry.foretold ~= nil and type(entry.foretold) ~= "boolean" then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d foretold must be boolean", index, batchIndex, resolutionIndex)
+          end
+
+          if entry.foretoldResult ~= nil and not VALID_COIN_RESULTS[entry.foretoldResult] then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d foretoldResult must be heads or tails", index, batchIndex, resolutionIndex)
+          end
+
+          if entry.foretoldBy ~= nil and type(entry.foretoldBy) ~= "string" then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d foretoldBy must be a string", index, batchIndex, resolutionIndex)
+          end
+
+          if entry.foretoldRngRoll ~= nil and type(entry.foretoldRngRoll) ~= "number" then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d foretoldRngRoll must be numeric", index, batchIndex, resolutionIndex)
+          end
 
           if not isPositiveInteger(entry.resolutionIndex) then
             return false, string.format("replay transcript stage %d batch %d resolution entry %d resolutionIndex must be positive integer", index, batchIndex, resolutionIndex)

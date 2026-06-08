@@ -7,13 +7,13 @@ return {
     return {
       runOptions = {
         seed = 4,
-        starterCollection = { "regular_dollar", "heads_cache", "heads_loaded_penny" },
+        starterCollection = { "copper_weighted_coin", "copper_marked_coin", "copper_lucky_coin" },
         ownedUpgradeIds = { "heads_varnish", "echo_cache" },
       },
       initialLoadout = {
-        [1] = "regular_dollar",
-        [2] = "heads_cache",
-        [3] = "heads_loaded_penny",
+        [1] = "copper_weighted_coin",
+        [2] = "copper_marked_coin",
+        [3] = "copper_lucky_coin",
       },
     }
   end,

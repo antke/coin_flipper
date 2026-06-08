@@ -79,7 +79,7 @@ function AnalyticsSystem.buildPostStageReport(runState, stageRecord, lastBatchRe
   if stageRecord.stageType == "boss" and stageRecord.status == "cleared" and stageRecord.runStatus == "won" then
     nextStepLine = "Victory reward follows."
   elseif stageRecord.runStatus == "active" then
-    nextStepLine = "Reward preview and shop follow."
+    nextStepLine = "Reward preview and Black Market follow."
   else
     nextStepLine = "Run summary follows."
   end
@@ -88,9 +88,9 @@ function AnalyticsSystem.buildPostStageReport(runState, stageRecord, lastBatchRe
     string.format("Stage: %s", stageRecord.stageLabel or stageRecord.stageId or "n/a"),
     string.format("Opponent: %s", stageRecord.opponentName or "n/a"),
     string.format("Status: %s", tostring(stageRecord.status or "n/a")),
-    string.format("Damage: %d / %d", stageRecord.stageScore or 0, stageRecord.targetScore or 0),
-    string.format("Chips: %d", stageRecord.shopPoints or runState.shopPoints or 0),
-    string.format("Shop Rerolls Ready: %d", stageRecord.shopRerollsRemaining or runState.shopRerollsRemaining or 0),
+    string.format("Score Applied to HP: %d / %d", stageRecord.stageScore or 0, stageRecord.targetScore or 0),
+    string.format("Influence: %d", stageRecord.shopPoints or runState.shopPoints or 0),
+    string.format("Black Market Rerolls Ready: %d", stageRecord.shopRerollsRemaining or runState.shopRerollsRemaining or 0),
     string.format("Loadout: %s", loadoutKey),
     string.format("Batches Resolved: %d", #stageBatches),
   }
@@ -98,7 +98,7 @@ function AnalyticsSystem.buildPostStageReport(runState, stageRecord, lastBatchRe
   local victoryReward = stageRecord.victoryShopPointReward
   if victoryReward and (victoryReward.total or 0) > 0 then
     table.insert(report.stageLines, 6, string.format(
-      "Victory Chips: +%d (base +%d, overkill +%d, flips +%d)",
+      "Victory Influence: +%d (base +%d, overkill +%d, flips +%d)",
       victoryReward.total or 0,
       victoryReward.base or 0,
       victoryReward.overkill or 0,
@@ -191,10 +191,10 @@ function AnalyticsSystem.buildSimulationReport(results)
     callDistribution = { heads = 0, tails = 0 },
     outcomeDistribution = { heads = 0, tails = 0 },
     stageStats = {},
-    shopOfferFrequency = {},
+    blackMarketOfferFrequency = {},
     purchaseFrequency = {},
     coinUsage = {},
-    upgradeUsage = {},
+    trickUsage = {},
     loadoutFrequency = {},
   }
 
@@ -233,7 +233,7 @@ function AnalyticsSystem.buildSimulationReport(results)
 
     for _, upgradeId in ipairs(runState.ownedUpgradeIds or {}) do
       local definition = Upgrades.getById(upgradeId)
-      local entry = ensureRateEntry(report.upgradeUsage, upgradeId, definition and definition.name or upgradeId)
+      local entry = ensureRateEntry(report.trickUsage, upgradeId, definition and definition.name or upgradeId)
       entry.runs = entry.runs + 1
       if won then
         entry.wins = entry.wins + 1
@@ -275,7 +275,7 @@ function AnalyticsSystem.buildSimulationReport(results)
     for _, visit in ipairs(history.shopVisits or {}) do
       for _, offerSet in ipairs(visit.offerSets or {}) do
         for _, offer in ipairs(offerSet.offers or {}) do
-          incrementCount(report.shopOfferFrequency, string.format("%s:%s", offer.type or "unknown", offer.contentId or "unknown"))
+          incrementCount(report.blackMarketOfferFrequency, string.format("%s:%s", offer.type or "unknown", offer.contentId or "unknown"))
         end
       end
     end
@@ -290,11 +290,11 @@ function AnalyticsSystem.buildSimulationReport(results)
   report.averageMetaReward = report.runCount > 0 and (report.totalMetaReward / report.runCount) or 0
   report.averageStageScorePerBatch = report.batchCount > 0 and (report.totalStageScoreDelta / report.batchCount) or 0
   report.sortedStageStats = toSortedKeyedList(report.stageStats, "attempts")
-  report.sortedShopOffers = toSortedKeyedList(report.shopOfferFrequency)
+  report.sortedBlackMarketOffers = toSortedKeyedList(report.blackMarketOfferFrequency)
   report.sortedPurchases = toSortedKeyedList(report.purchaseFrequency)
   report.sortedLoadouts = toSortedKeyedList(report.loadoutFrequency)
   report.sortedCoinUsage = toSortedKeyedList(report.coinUsage, "runs")
-  report.sortedUpgradeUsage = toSortedKeyedList(report.upgradeUsage, "runs")
+  report.sortedTrickUsage = toSortedKeyedList(report.trickUsage, "runs")
 
   return report
 end
@@ -313,8 +313,8 @@ function AnalyticsSystem.formatSimulationReport(report)
   for _, entry in ipairs(report.sortedStageStats or {}) do
     local stageData = entry.data
     local clearRate = stageData.attempts > 0 and ((stageData.clears / stageData.attempts) * 100) or 0
-    local averageDamage = stageData.attempts > 0 and (stageData.totalStageScore / stageData.attempts) or 0
-    table.insert(lines, string.format("- %s: clear %.1f%% (%d/%d), avg damage %.2f", stageData.stageLabel or stageData.stageId, clearRate, stageData.clears, stageData.attempts, averageDamage))
+    local averageScoreApplied = stageData.attempts > 0 and (stageData.totalStageScore / stageData.attempts) or 0
+    table.insert(lines, string.format("- %s: clear %.1f%% (%d/%d), avg score %.2f", stageData.stageLabel or stageData.stageId, clearRate, stageData.clears, stageData.attempts, averageScoreApplied))
   end
 
   local function appendTopSection(title, items, formatter)
@@ -326,7 +326,7 @@ function AnalyticsSystem.formatSimulationReport(report)
     end
   end
 
-  appendTopSection("Top Shop Offers:", report.sortedShopOffers or {}, function(item)
+  appendTopSection("Top Black Market Offers:", report.sortedBlackMarketOffers or {}, function(item)
     return string.format("- %s x%d", item.key, item.value)
   end)
 
@@ -344,7 +344,7 @@ function AnalyticsSystem.formatSimulationReport(report)
     return string.format("- %s: used in %d run(s), win rate %.1f%%", data.label or item.key, data.runs, winRate)
   end)
 
-  appendTopSection("Upgrade Win Rates:", report.sortedUpgradeUsage or {}, function(item)
+  appendTopSection("Trick Win Rates:", report.sortedTrickUsage or {}, function(item)
     local data = item.data
     local winRate = data.runs > 0 and ((data.wins / data.runs) * 100) or 0
     return string.format("- %s: owned in %d run(s), win rate %.1f%%", data.label or item.key, data.runs, winRate)

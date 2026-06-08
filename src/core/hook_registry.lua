@@ -8,18 +8,26 @@ local Utils = require("src.core.utils")
 local HookRegistry = {}
 
 HookRegistry.PHASES = {
+  "after_deal_before_selection",
   "after_hand_draw",
   "before_sleight",
   "after_sleight_return",
   "after_replacement_draw",
   "after_hand_reorder",
+  "after_call_before_flip",
   "before_hand_flip",
   "on_batch_start",
   "before_batch_validation",
   "before_coin_roll",
   "after_coin_roll",
+  "after_flip_before_score",
   "before_scoring",
+  "before_coin_score",
+  "after_coin_score",
   "after_scoring",
+  "luck_gain",
+  "luck_meter_full",
+  "after_all_effects",
   "before_stage_end_check",
   "on_batch_end",
   "before_shop_generation",
@@ -44,11 +52,13 @@ HookRegistry.SYSTEM_CONDITION_FLAG_KEYS = {
 }
 
 HookRegistry.PURSE_COIN_PHASES = {
+  after_deal_before_selection = true,
   after_hand_draw = true,
   before_sleight = true,
   after_sleight_return = true,
   after_replacement_draw = true,
   after_hand_reorder = true,
+  after_call_before_flip = true,
   before_hand_flip = true,
 }
 
@@ -58,11 +68,13 @@ local CALL_CONDITION_PHASES = {
   after_sleight_return = true,
   after_replacement_draw = true,
   after_hand_reorder = true,
+  after_call_before_flip = true,
   before_hand_flip = true,
   on_batch_start = true,
   before_batch_validation = true,
   before_coin_roll = true,
   after_coin_roll = true,
+  after_flip_before_score = true,
   before_scoring = true,
   after_scoring = true,
   before_stage_end_check = true,
@@ -80,6 +92,8 @@ HookRegistry.CONDITION_SCHEMAS = {
     phases = {
       before_coin_roll = true,
       after_coin_roll = true,
+      before_coin_score = true,
+      after_coin_score = true,
     },
     validate = function(value)
       return value == "heads" or value == "tails", "must be heads or tails"
@@ -89,9 +103,49 @@ HookRegistry.CONDITION_SCHEMAS = {
     phases = {
       before_coin_roll = true,
       after_coin_roll = true,
+      before_coin_score = true,
+      after_coin_score = true,
     },
     validate = function(value)
       return type(value) == "boolean", "must be boolean"
+    end,
+  },
+  foretold = {
+    phases = {
+      before_coin_roll = true,
+      after_coin_roll = true,
+      before_coin_score = true,
+      after_coin_score = true,
+    },
+    validate = function(value)
+      return type(value) == "boolean", "must be boolean"
+    end,
+  },
+  chained = {
+    phases = {
+      before_coin_roll = true,
+      after_coin_roll = true,
+      before_coin_score = true,
+      after_coin_score = true,
+    },
+    validate = function(value)
+      return type(value) == "boolean", "must be boolean"
+    end,
+  },
+  luck_gain_positive = {
+    phases = {
+      luck_gain = true,
+    },
+    validate = function(value)
+      return type(value) == "boolean", "must be boolean"
+    end,
+  },
+  luck_gain_source = {
+    phases = {
+      luck_gain = true,
+    },
+    validate = function(value)
+      return type(value) == "string" and value ~= "", "must be a non-empty string"
     end,
   },
   stage_type = {
@@ -101,14 +155,18 @@ HookRegistry.CONDITION_SCHEMAS = {
   },
   slot_index = {
     phases = {
+      after_deal_before_selection = true,
       after_hand_draw = true,
       before_sleight = true,
       after_sleight_return = true,
       after_replacement_draw = true,
       after_hand_reorder = true,
+      after_call_before_flip = true,
       before_hand_flip = true,
       before_coin_roll = true,
       after_coin_roll = true,
+      before_coin_score = true,
+      after_coin_score = true,
     },
     validate = function(value)
       return type(value) == "number" and math.floor(value) == value and value >= 1, "must be a positive integer"
@@ -227,6 +285,28 @@ local function matchesCondition(condition, context)
       local didMatch = context.currentCoin and (context.currentCoin.result == context.call) or false
 
       if didMatch ~= expectedValue then
+        return false
+      end
+    elseif key == "foretold" then
+      local isForetold = context.currentCoin and context.currentCoin.foretold == true or false
+
+      if isForetold ~= expectedValue then
+        return false
+      end
+    elseif key == "chained" then
+      local isChained = context.currentCoin and context.currentCoin.chained == true or false
+
+      if isChained ~= expectedValue then
+        return false
+      end
+    elseif key == "luck_gain_positive" then
+      local isPositive = context.currentLuckGainEvent and (context.currentLuckGainEvent.appliedAmount or 0) > 0 or false
+
+      if isPositive ~= expectedValue then
+        return false
+      end
+    elseif key == "luck_gain_source" then
+      if not context.currentLuckGainEvent or context.currentLuckGainEvent.source ~= expectedValue then
         return false
       end
     elseif key == "stage_type" then

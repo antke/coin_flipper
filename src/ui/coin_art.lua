@@ -28,21 +28,6 @@ local RARITY_PALETTES = {
 }
 
 local FACE_PATTERNS = {
-  regular_dollar = {
-    "0000010000000",
-    "0000111000000",
-    "0001010100000",
-    "0011111100000",
-    "0010100000000",
-    "0001111000000",
-    "0000010100000",
-    "0011111100000",
-    "0001010100000",
-    "0000111000000",
-    "0000010000000",
-    "0000000000000",
-    "0000000000000",
-  },
   match_spark = {
     "0000001000000",
     "0000011100000",
@@ -88,21 +73,6 @@ local FACE_PATTERNS = {
     "0000001000000",
     "0000000000000",
   },
-  lucky_miss = {
-    "0001100011000",
-    "0010010100100",
-    "0100000000010",
-    "0100000000010",
-    "0100100010010",
-    "0011000111100",
-    "0000000000000",
-    "0000100010000",
-    "0000010100000",
-    "0000001000000",
-    "0000010100000",
-    "0000100010000",
-    "0000000000000",
-  },
   boss_biter = {
     "0101000101000",
     "1111101111100",
@@ -117,21 +87,6 @@ local FACE_PATTERNS = {
     "0100100100100",
     "1001001001000",
     "0000000000000",
-  },
-  cross_catch = {
-    "1000000000001",
-    "0100000000010",
-    "0010000000100",
-    "0001000001000",
-    "0000100010000",
-    "0000010100000",
-    "0000001000000",
-    "0000010100000",
-    "0000100010000",
-    "0001000001000",
-    "0010000000100",
-    "0100000000010",
-    "1000000000001",
   },
   heads_banker = {
     "0000011100000",
@@ -223,36 +178,6 @@ local FACE_PATTERNS = {
     "0010001000000",
     "0001110000000",
   },
-  heads_cache = {
-    "0000011100000",
-    "0000101010000",
-    "0000100010000",
-    "0000011100000",
-    "0000000000000",
-    "0011111111100",
-    "0010000000100",
-    "0010111110100",
-    "0010100010100",
-    "0010111110100",
-    "0010000000100",
-    "0011111111100",
-    "0000000000000",
-  },
-  tails_cache = {
-    "0000111100000",
-    "0000011000000",
-    "0000011000000",
-    "0000011000000",
-    "0000011000000",
-    "0000000000000",
-    "0011111111100",
-    "0010000000100",
-    "0010111110100",
-    "0010100010100",
-    "0010111110100",
-    "0010000000100",
-    "0011111111100",
-  },
   perfect_penny = {
     "0000001000000",
     "0000011100000",
@@ -268,51 +193,6 @@ local FACE_PATTERNS = {
     "0000100010000",
     "0001000001000",
   },
-  heads_anchor = {
-    "0000011100000",
-    "0000101010000",
-    "0000100010000",
-    "0000011100000",
-    "0000001000000",
-    "0000001000000",
-    "0001111110000",
-    "0000001000000",
-    "0100001000010",
-    "0100001000010",
-    "0010010100100",
-    "0001100011000",
-    "0000000000000",
-  },
-  tails_anchor = {
-    "0000111100000",
-    "0000011000000",
-    "0000011000000",
-    "0000011000000",
-    "0000011000000",
-    "0000001000000",
-    "0001111110000",
-    "0000001000000",
-    "0100001000010",
-    "0100001000010",
-    "0010010100100",
-    "0001100011000",
-    "0000000000000",
-  },
-  pocket_refund = {
-    "0001111110000",
-    "0010000011000",
-    "0100000001000",
-    "0100111001000",
-    "0101000101000",
-    "0101000101000",
-    "0100111001000",
-    "0100000001000",
-    "0011111111000",
-    "0000001000000",
-    "0000010000000",
-    "0000100000000",
-    "0001110000000",
-  },
   fresh_mint = {
     "0000001000000",
     "0000011100000",
@@ -327,111 +207,6 @@ local FACE_PATTERNS = {
     "0000001000000",
     "0000010100000",
     "0000100010000",
-  },
-  opening_penny = {
-    "0001111111000",
-    "0010000000100",
-    "0100000000010",
-    "0100000000010",
-    "0100000000010",
-    "0100000000010",
-    "0100000000010",
-    "0100011100010",
-    "0100010100010",
-    "0100011100010",
-    "0010000000100",
-    "0001111111000",
-    "0000000000000",
-  },
-  slider_cent = {
-    "0000001000000",
-    "0000011000000",
-    "0000111111110",
-    "0000011000000",
-    "0000001000000",
-    "0000000000000",
-    "0111111111000",
-    "0000000110000",
-    "0000001110000",
-    "0000011000000",
-    "0000110000000",
-    "0011111111100",
-    "0000000000000",
-  },
-  commitment_chip = {
-    "0000011100000",
-    "0001100011000",
-    "0010000000100",
-    "0100011100010",
-    "0100100010010",
-    "1001001001001",
-    "1001011101001",
-    "1001001001001",
-    "0100100010010",
-    "0100011100010",
-    "0010000000100",
-    "0001100011000",
-    "0000011100000",
-  },
-  left_lift = {
-    "0000010000000",
-    "0000110000000",
-    "0001111111110",
-    "0000110000000",
-    "0000010000000",
-    "0000000000000",
-    "0000011100000",
-    "0000111110000",
-    "0001111111000",
-    "0011111111100",
-    "0000010000000",
-    "0000010000000",
-    "0000000000000",
-  },
-  right_drift = {
-    "0000000100000",
-    "0000000110000",
-    "0111111111000",
-    "0000000110000",
-    "0000000100000",
-    "0000000000000",
-    "0000011100000",
-    "0000111110000",
-    "0001111111000",
-    "0011111111100",
-    "0000001000000",
-    "0000001000000",
-    "0000000000000",
-  },
-  glass_nickel = {
-    "0000001000000",
-    "0000010100000",
-    "0000100010000",
-    "0001000001000",
-    "0010001000100",
-    "0100010000010",
-    "1000101010001",
-    "0100000100010",
-    "0010001000100",
-    "0001010001000",
-    "0000100010000",
-    "0000010100000",
-    "0000001000000",
-  },
-  moon_mint = {
-    "0000011110000",
-    "0001110001000",
-    "0011000000000",
-    "0110000000000",
-    "0110000000000",
-    "1100000000000",
-    "1100000000000",
-    "0110000000000",
-    "0110000000000",
-    "0011000000000",
-    "0001110001000",
-    "0000011110000",
-    "0000000000000",
   },
   sun_stamp = {
     "1000010000100",
@@ -522,8 +297,32 @@ local function getFaceKey(definition)
     return definition.art.face
   end
 
-  if hasTag(definition, "economy") or hasTag(definition, "shop") then
-    return "heads_cache"
+  if hasTag(definition, "bent") then
+    return "bent"
+  end
+
+  if hasTag(definition, "blank") then
+    return "blank"
+  end
+
+  if hasTag(definition, "hollow") then
+    return "hollow"
+  end
+
+  if hasTag(definition, "marked") then
+    return "marked"
+  end
+
+  if hasTag(definition, "fate") or hasTag(definition, "luck_meter") then
+    return "lucky"
+  end
+
+  if hasTag(definition, "loaded") or hasTag(definition, "reliable") then
+    return "weighted"
+  end
+
+  if hasTag(definition, "influence") or hasTag(definition, "payout") or hasTag(definition, "black_market") then
+    return "lucky"
   end
 
   if hasTag(definition, "weight") then
@@ -535,7 +334,7 @@ local function getFaceKey(definition)
       return "heads"
     end
 
-    return "regular_dollar"
+    return "weighted"
   end
 
   if hasTag(definition, "boss") then
@@ -554,7 +353,7 @@ local function getFaceKey(definition)
     return "match_spark"
   end
 
-  return "regular_dollar"
+  return "blank"
 end
 
 local function getRimType(definition)
@@ -566,24 +365,24 @@ local function getRimType(definition)
     return "boss"
   end
 
-  if hasTag(definition, "neighbor") or hasTag(definition, "sleight") or hasTag(definition, "draw") or hasTag(definition, "reorder") or hasTag(definition, "flip") then
+  if hasTag(definition, "hollow") or hasTag(definition, "neighbor") or hasTag(definition, "sleight") or hasTag(definition, "draw") or hasTag(definition, "reorder") or hasTag(definition, "flip") then
     return "motion"
   end
 
-  if hasTag(definition, "weight") then
+  if hasTag(definition, "loaded") or hasTag(definition, "weight") then
     return "weight"
   end
 
-  if hasTag(definition, "perfect") or hasTag(definition, "multiplier") then
+  if hasTag(definition, "bent") or hasTag(definition, "fate") or hasTag(definition, "perfect") or hasTag(definition, "score_scaling") then
     return "combo"
   end
 
-  if hasTag(definition, "safety") or hasTag(definition, "miss") or hasTag(definition, "counter") then
+  if hasTag(definition, "marked") or hasTag(definition, "safety") or hasTag(definition, "miss") or hasTag(definition, "counter") then
     return "safety"
   end
 
-  if hasTag(definition, "economy") or hasTag(definition, "shop") then
-    return "economy"
+  if hasTag(definition, "influence") or hasTag(definition, "payout") or hasTag(definition, "black_market") then
+    return "influence"
   end
 
   return "score"
@@ -834,13 +633,36 @@ local function chain(ctx, x, y)
 end
 
 local FACE_DRAWERS = {
-  regular_dollar = function(ctx)
-    line(ctx, 10, 3, 10, 17, 2)
-    block(ctx, 7, 4, 7, 2)
-    block(ctx, 6, 6, 3, 2)
-    block(ctx, 7, 9, 7, 2)
-    block(ctx, 12, 11, 3, 2)
-    block(ctx, 6, 14, 8, 2)
+  bent = function(ctx)
+    chain(ctx, 5, 5)
+    line(ctx, 5, 15, 14, 12, 2)
+    line(ctx, 14, 12, 16, 15, 2)
+  end,
+  blank = function(ctx)
+    block(ctx, 5, 8, 11, 2)
+    block(ctx, 7, 13, 7, 1)
+  end,
+  hollow = function(ctx)
+    diamond(ctx, 7, 3)
+    block(ctx, 9, 8, 3, 5)
+    block(ctx, 8, 9, 5, 3)
+  end,
+  marked = function(ctx)
+    line(ctx, 5, 5, 15, 15, 2)
+    line(ctx, 15, 5, 5, 15, 2)
+    block(ctx, 8, 8, 5, 5)
+  end,
+  lucky = function(ctx)
+    star(ctx, 8, 3)
+    line(ctx, 6, 14, 10, 17, 2)
+    line(ctx, 10, 17, 15, 10, 2)
+  end,
+  weighted = function(ctx)
+    block(ctx, 5, 5, 11, 2)
+    block(ctx, 9, 7, 3, 8)
+    block(ctx, 6, 15, 9, 2)
+    line(ctx, 7, 9, 4, 13, 1)
+    line(ctx, 13, 9, 16, 13, 1)
   end,
   match_spark = function(ctx) spark(ctx, 7, 3) end,
   heads_hunter = function(ctx)
@@ -858,14 +680,6 @@ local FACE_DRAWERS = {
     cell(ctx, 16, 8)
     cell(ctx, 14, 7)
   end,
-  lucky_miss = function(ctx)
-    line(ctx, 5, 5, 5, 12, 2)
-    line(ctx, 15, 5, 15, 12, 2)
-    line(ctx, 5, 12, 10, 16, 2)
-    line(ctx, 15, 12, 10, 16, 2)
-    block(ctx, 7, 7, 2, 2)
-    block(ctx, 13, 3, 2, 2)
-  end,
   boss_biter = function(ctx)
     block(ctx, 4, 4, 13, 2)
     block(ctx, 5, 15, 11, 2)
@@ -874,11 +688,6 @@ local FACE_DRAWERS = {
       line(ctx, x + 1, 14, x, 10, 1)
     end
     block(ctx, 7, 9, 7, 2)
-  end,
-  cross_catch = function(ctx)
-    line(ctx, 4, 4, 16, 16, 2)
-    line(ctx, 16, 4, 4, 16, 2)
-    block(ctx, 8, 8, 5, 5)
   end,
   heads_banker = function(ctx) head(ctx, 3, 3); bag(ctx, 12, 11) end,
   tails_banker = function(ctx) tail(ctx, 4, 3); bag(ctx, 12, 11) end,
@@ -897,22 +706,10 @@ local FACE_DRAWERS = {
     star(ctx, 8, 14)
   end,
   tails_echo = function(ctx) tail(ctx, 4, 3); line(ctx, 12, 7, 17, 12, 1); line(ctx, 11, 11, 17, 17, 1); line(ctx, 14, 5, 19, 10, 1) end,
-  heads_cache = function(ctx) head(ctx, 3, 3); cache(ctx, 11, 11) end,
-  tails_cache = function(ctx) tail(ctx, 4, 3); cache(ctx, 11, 11) end,
   perfect_penny = function(ctx) star(ctx, 8, 4); line(ctx, 6, 13, 9, 16, 2); line(ctx, 9, 16, 16, 8, 2) end,
-  heads_anchor = function(ctx) head(ctx, 8, 2); anchor(ctx, 6, 11) end,
-  tails_anchor = function(ctx) tail(ctx, 8, 2); anchor(ctx, 6, 11) end,
-  pocket_refund = function(ctx) cache(ctx, 5, 5); arrow(ctx, 7, 13, "left") end,
   fresh_mint = function(ctx) star(ctx, 8, 3); line(ctx, 10, 11, 10, 18, 2); line(ctx, 7, 14, 10, 11, 1); line(ctx, 13, 14, 10, 11, 1) end,
-  opening_penny = function(ctx) block(ctx, 5, 4, 11, 13); block(ctx, 7, 6, 7, 9); star(ctx, 8, 8) end,
-  slider_cent = function(ctx) arrow(ctx, 3, 4, "right"); line(ctx, 5, 13, 16, 13, 2); line(ctx, 7, 16, 18, 16, 2) end,
-  commitment_chip = function(ctx) diamond(ctx, 7, 3); line(ctx, 6, 14, 15, 14, 2); line(ctx, 8, 17, 13, 17, 2) end,
-  left_lift = function(ctx) arrow(ctx, 5, 3, "left"); arrow(ctx, 6, 11, "up") end,
-  right_drift = function(ctx) arrow(ctx, 8, 3, "right"); arrow(ctx, 6, 11, "up") end,
   right_hand_charm = function(ctx) head(ctx, 3, 5); line(ctx, 9, 10, 14, 10, 2); arrow(ctx, 13, 7, "right") end,
   edge_bet = function(ctx) star(ctx, 2, 5); star(ctx, 16, 5); line(ctx, 3, 15, 17, 15, 2) end,
-  glass_nickel = function(ctx) diamond(ctx, 7, 3); line(ctx, 10, 3, 8, 16, 1); line(ctx, 13, 7, 6, 14, 1); line(ctx, 12, 11, 16, 17, 1) end,
-  moon_mint = function(ctx) moon(ctx, 7, 4); bag(ctx, 11, 13) end,
   sun_stamp = function(ctx)
     line(ctx, 10, 2, 10, 18, 1)
     line(ctx, 2, 10, 18, 10, 1)
@@ -976,7 +773,7 @@ local function drawRimMarks(rimType, x, y, size, scale, palette, alpha)
   local color = palette.shine
   local softAlpha = 0.82 * alpha
 
-  if rimType == "economy" then
+  if rimType == "influence" then
     for index = 0, 3 do
       local markX = x + ((index * 4 + 2) * scale)
       drawRimMark(markX, y + (2 * scale), 2 * scale, 2 * scale, color, softAlpha)
@@ -1037,7 +834,7 @@ function CoinArt.draw(coinOrId, x, y, size, options)
   local palette = CoinArt.getPalette(definition)
   local scale = size / 16
   local faceKey = getFaceKey(definition)
-  local pattern = FACE_PATTERNS[faceKey] or FACE_PATTERNS.regular_dollar
+  local pattern = FACE_PATTERNS[faceKey] or FACE_PATTERNS.blank
   local rimType = getRimType(definition)
   local alpha = options.alpha or 1.0
 

@@ -25,8 +25,8 @@ local COIN_TAG_SCORES = {
   score = 4,
   match = 3,
   weight = 2,
-  multiplier = 2,
-  economy = 1,
+  score_scaling = 2,
+  influence = 1,
 }
 
 local function hasTag(definition, tag)
@@ -62,8 +62,12 @@ local function copyBatchCall(batch)
     roundIndex = batch.roundIndex,
     stageId = batch.stageId,
     call = batch.call,
+    dealtHand = Utils.clone(batch.dealtHand or {}),
+    selectedSlots = Utils.clone(batch.selectedSlots or {}),
+    boardSlots = Utils.clone(batch.boardSlots or {}),
     resolutionEntries = Utils.clone(batch.resolutionEntries or {}),
     forcedResults = Utils.clone(batch.forcedResults or {}),
+    refillEvent = Utils.clone(batch.refillEvent or {}),
   }
 end
 
@@ -71,7 +75,7 @@ local function buildDraftCandidates(runState)
   local candidates = {}
 
   for _, definition in ipairs(Coins.getAll()) do
-    if definition.id ~= "regular_dollar" and Coins.isUnlocked(definition, runState.unlockedCoinIds) then
+    if definition.draftEligible ~= false and Coins.isUnlocked(definition, runState.unlockedCoinIds) then
       table.insert(candidates, definition.id)
     end
   end
@@ -114,8 +118,12 @@ local function isDefaultStarterPurse(starterPurse)
   end
 
   local counts = {
-    heads_loaded_penny = 0,
-    tails_loaded_penny = 0,
+    copper_bent_coin = 0,
+    copper_blank_coin = 0,
+    copper_hollow_coin = 0,
+    copper_marked_coin = 0,
+    copper_lucky_coin = 0,
+    copper_weighted_coin = 0,
   }
 
   for _, coinId in ipairs(starterPurse) do
@@ -126,7 +134,12 @@ local function isDefaultStarterPurse(starterPurse)
     counts[coinId] = counts[coinId] + 1
   end
 
-  return counts.heads_loaded_penny == 5 and counts.tails_loaded_penny == 5
+  return counts.copper_bent_coin == 2
+    and counts.copper_blank_coin == 2
+    and counts.copper_hollow_coin == 2
+    and counts.copper_marked_coin == 2
+    and counts.copper_lucky_coin == 1
+    and counts.copper_weighted_coin == 1
 end
 
 local function replayInitialDraftIfNeeded(runState, bootstrap, rng)
@@ -163,7 +176,10 @@ local function buildActionSignature(action)
     op = action.op,
     amount = action.amount,
     value = action.value,
+    chance = action.chance,
+    headsChance = action.headsChance,
     side = action.side,
+    target = action.target,
     flag = action.flag,
     coinId = action.coinId,
     instanceId = action.instanceId,
@@ -176,8 +192,83 @@ local function buildActionSignature(action)
     reason = action.reason,
     delta = action.delta,
     applyMultiplier = action.applyMultiplier,
+    persistent = action.persistent,
     slotIndex = action.slotIndex,
+    selectedSlotIndex = action.selectedSlotIndex,
+    dealtIndex = action.dealtIndex,
+    boardSlotIndex = action.boardSlotIndex,
+    overloadSlotIndex = action.overloadSlotIndex,
     resolutionIndex = action.resolutionIndex,
+    smuggled = action.smuggled,
+    smuggledBy = action.smuggledBy,
+    smuggledInstanceId = action.smuggledInstanceId,
+    smuggledCoinId = action.smuggledCoinId,
+    forged = action.forged,
+    forgedBy = action.forgedBy,
+    forgeMode = action.forgeMode,
+    forgeScope = action.forgeScope,
+    forgedCoinId = action.forgedCoinId,
+    sourceCoinId = action.sourceCoinId,
+    sourceInstanceId = action.sourceInstanceId,
+    sourceSlotIndex = action.sourceSlotIndex,
+    sourceResolutionIndex = action.sourceResolutionIndex,
+    targetCoinId = action.targetCoinId,
+    targetInstanceId = action.targetInstanceId,
+    targetSlotIndex = action.targetSlotIndex,
+    targetResolutionIndex = action.targetResolutionIndex,
+    spotlightCoinId = action.spotlightCoinId,
+    spotlightInstanceId = action.spotlightInstanceId,
+    spotlightSlotIndex = action.spotlightSlotIndex,
+    spotlightResolutionIndex = action.spotlightResolutionIndex,
+    scoreCreditCoinId = action.scoreCreditCoinId,
+    scoreCreditInstanceId = action.scoreCreditInstanceId,
+    scoreCreditSlotIndex = action.scoreCreditSlotIndex,
+    scoreCreditResolutionIndex = action.scoreCreditResolutionIndex,
+    redirectedCredit = action.redirectedCredit,
+    redirectedCreditBy = action.redirectedCreditBy,
+    redirectMode = action.redirectMode,
+    redirectScope = action.redirectScope,
+    packetId = action.packetId,
+    packetCoinId = action.packetCoinId,
+    packetInstanceId = action.packetInstanceId,
+    packetSlotIndex = action.packetSlotIndex,
+    packetSelectedSlotIndex = action.packetSelectedSlotIndex,
+    packetResolutionIndex = action.packetResolutionIndex,
+    packetFinalScoreContribution = action.packetFinalScoreContribution,
+    prestigeReplay = action.prestigeReplay,
+    prestigeReplayBy = action.prestigeReplayBy,
+    prestigeScale = action.prestigeScale,
+    rawReplayedScore = action.rawReplayedScore,
+    replayedScore = action.replayedScore,
+    replayMode = action.replayMode,
+    replayScope = action.replayScope,
+    chosenPacketIndex = action.chosenPacketIndex,
+    scale = action.scale,
+    chainChance = action.chainChance,
+    maxChainDepth = action.maxChainDepth,
+    maxTriggers = action.maxTriggers,
+    chainTriggered = action.chainTriggered,
+    chainLinkCount = action.chainLinkCount,
+    chainDepth = action.chainDepth,
+    chainRolls = Utils.clone(action.chainRolls or nil),
+    chained = action.chained,
+    chainedBy = action.chainedBy,
+    chainedCoinId = action.chainedCoinId,
+    chainedInstanceId = action.chainedInstanceId,
+    chainedSlotIndex = action.chainedSlotIndex,
+    chainedResolutionIndex = action.chainedResolutionIndex,
+    identitySourceCoinId = action.identitySourceCoinId,
+    identitySourceInstanceId = action.identitySourceInstanceId,
+    failedSlotIndex = action.failedSlotIndex,
+    successSlotIndex = action.successSlotIndex,
+    failedResolutionIndex = action.failedResolutionIndex,
+    successResolutionIndex = action.successResolutionIndex,
+    failedInstanceId = action.failedInstanceId,
+    successInstanceId = action.successInstanceId,
+    failedCoinId = action.failedCoinId,
+    successCoinId = action.successCoinId,
+    foretoldResult = action.foretoldResult,
+    foretoldRngRoll = action.foretoldRngRoll,
     trace = action._trace and buildTriggeredSourceSignature(action._trace) or nil,
   }
 end
@@ -220,11 +311,46 @@ local function buildBatchSignature(batch)
     table.insert(coinRolls, {
       coinId = coinRoll.coinId,
       slotIndex = coinRoll.slotIndex,
+      selectedSlotIndex = coinRoll.selectedSlotIndex,
+      dealtIndex = coinRoll.dealtIndex,
+      boardSlotIndex = coinRoll.boardSlotIndex,
+      overloadSlotIndex = coinRoll.overloadSlotIndex,
+      smuggled = coinRoll.smuggled,
+      smuggledBy = coinRoll.smuggledBy,
       resolutionIndex = coinRoll.resolutionIndex,
       headsWeight = coinRoll.headsWeight,
       tailsWeight = coinRoll.tailsWeight,
       rngRoll = coinRoll.rngRoll,
       result = coinRoll.result,
+      foretold = coinRoll.foretold,
+      foretoldResult = coinRoll.foretoldResult,
+      foretoldBy = coinRoll.foretoldBy,
+      foretoldRngRoll = coinRoll.foretoldRngRoll,
+      forged = coinRoll.forged,
+      forgedBy = coinRoll.forgedBy,
+      forgedCoinId = coinRoll.forgedCoinId,
+      identitySourceCoinId = coinRoll.identitySourceCoinId,
+      identitySourceInstanceId = coinRoll.identitySourceInstanceId,
+      spotlight = coinRoll.spotlight,
+      spotlightBy = coinRoll.spotlightBy,
+      redirectedCredit = coinRoll.redirectedCredit,
+      redirectedCreditBy = coinRoll.redirectedCreditBy,
+      redirectedCreditTargetCoinId = coinRoll.redirectedCreditTargetCoinId,
+      redirectedCreditTargetInstanceId = coinRoll.redirectedCreditTargetInstanceId,
+      redirectedCreditTargetSlotIndex = coinRoll.redirectedCreditTargetSlotIndex,
+      redirectedCreditTargetResolutionIndex = coinRoll.redirectedCreditTargetResolutionIndex,
+      spotlightCoinId = coinRoll.spotlightCoinId,
+      spotlightInstanceId = coinRoll.spotlightInstanceId,
+      chained = coinRoll.chained,
+      chainedBy = coinRoll.chainedBy,
+      chainDepth = coinRoll.chainDepth,
+      chainLinkIndex = coinRoll.chainLinkIndex,
+      chainSourceCoinId = coinRoll.chainSourceCoinId,
+      chainSourceInstanceId = coinRoll.chainSourceInstanceId,
+      chainSourceSlotIndex = coinRoll.chainSourceSlotIndex,
+      chainSourceResolutionIndex = coinRoll.chainSourceResolutionIndex,
+      chainRootCoinId = coinRoll.chainRootCoinId,
+      chainRootInstanceId = coinRoll.chainRootInstanceId,
     })
   end
 
@@ -241,6 +367,10 @@ local function buildBatchSignature(batch)
     roundIndex = batch.roundIndex,
     stageId = batch.stageId,
     call = batch.call,
+    dealtHand = Utils.clone(batch.dealtHand or {}),
+    selectedSlots = Utils.clone(batch.selectedSlots or {}),
+    boardSlots = Utils.clone(batch.boardSlots or {}),
+    refillEvent = Utils.clone(batch.refillEvent or {}),
     results = table.concat(results, "|"),
     status = batch.trace and batch.trace.stageStatusAfter or nil,
     stageScoreAfter = batch.trace and batch.trace.stageScoreAfter or nil,
@@ -250,6 +380,15 @@ local function buildBatchSignature(batch)
     coinRolls = coinRolls,
     triggeredSources = triggeredSources,
     actions = actions,
+    luck = Utils.clone(batch.trace and batch.trace.luck or {}),
+    sleightMoves = Utils.clone(batch.trace and batch.trace.sleightMoves or {}),
+    smugglingMoves = Utils.clone(batch.trace and batch.trace.smugglingMoves or {}),
+    forgedIdentities = Utils.clone(batch.trace and batch.trace.forgedIdentities or {}),
+    redirectedScoreCredits = Utils.clone(batch.trace and batch.trace.redirectedScoreCredits or {}),
+    prestigeReplays = Utils.clone(batch.trace and batch.trace.prestigeReplays or {}),
+    chainLinks = Utils.clone(batch.trace and batch.trace.chainLinks or {}),
+    purseHookHistory = Utils.clone(batch.trace and batch.trace.purseHookHistory or {}),
+    foretoldResults = Utils.clone(batch.trace and batch.trace.foretoldResults or {}),
     queuedActions = Utils.clone(batch.trace and batch.trace.queuedActions or {}),
     forcedResults = Utils.clone(batch.trace and batch.trace.forcedResults or {}),
     temporaryEffectsGranted = Utils.clone(batch.trace and batch.trace.temporaryEffectsGranted or {}),
@@ -282,6 +421,7 @@ local function buildOutcomeSignature(runState)
     purchases = {},
     batchSignatures = {},
     shopActions = {},
+    luck = Utils.clone(runState.luck or {}),
   }
 
   for _, stageRecord in ipairs(runState.history.stageResults or {}) do
@@ -486,6 +626,7 @@ local function buildStageTranscript(runState, stageRecord, batchPointer, shopPoi
     stageEntry.reward = {
       options = Utils.clone(stageRecord.rewardOptions or {}),
       choice = Utils.clone(stageRecord.rewardChoice or nil),
+      generation = Utils.clone(stageRecord.rewardGeneration or nil),
     }
   end
 
@@ -739,6 +880,10 @@ local function replayRewardChoice(runState, stageRecord, rng, rewardTranscript, 
 
   if not valuesEqual(rewardTranscript.options or {}, stageRecord.rewardOptions or {}) then
     return false, "reward_options_mismatch"
+  end
+
+  if rewardTranscript.generation ~= nil and not valuesEqual(rewardTranscript.generation, stageRecord.rewardGeneration or {}) then
+    return false, "reward_generation_mismatch"
   end
 
   if rewardTranscript.choice == nil then
@@ -1042,6 +1187,66 @@ function ReplaySystem.replayTranscript(transcript)
           mismatches = {
             string.format(
               "Resolved batch %s slot metadata did not match transcript for stage %s round %s",
+              tostring(batchResult.batchId),
+              tostring(stageState.stageId),
+              tostring(runState.roundIndex)
+            ),
+          },
+        }
+      end
+
+      if batchInput.dealtHand ~= nil and not valuesEqual(batchInput.dealtHand, batchResult.batch.dealtHand or {}) then
+        return {
+          ok = false,
+          error = "batch_dealt_hand_mismatch",
+          mismatches = {
+            string.format(
+              "Resolved batch %s dealt-hand metadata did not match transcript for stage %s round %s",
+              tostring(batchResult.batchId),
+              tostring(stageState.stageId),
+              tostring(runState.roundIndex)
+            ),
+          },
+        }
+      end
+
+      if batchInput.selectedSlots ~= nil and not valuesEqual(batchInput.selectedSlots, batchResult.batch.selectedSlots or {}) then
+        return {
+          ok = false,
+          error = "batch_selected_slots_mismatch",
+          mismatches = {
+            string.format(
+              "Resolved batch %s selected-slot metadata did not match transcript for stage %s round %s",
+              tostring(batchResult.batchId),
+              tostring(stageState.stageId),
+              tostring(runState.roundIndex)
+            ),
+          },
+        }
+      end
+
+      if batchInput.boardSlots ~= nil and not valuesEqual(batchInput.boardSlots, batchResult.batch.boardSlots or {}) then
+        return {
+          ok = false,
+          error = "batch_board_slots_mismatch",
+          mismatches = {
+            string.format(
+              "Resolved batch %s board-slot metadata did not match transcript for stage %s round %s",
+              tostring(batchResult.batchId),
+              tostring(stageState.stageId),
+              tostring(runState.roundIndex)
+            ),
+          },
+        }
+      end
+
+      if batchInput.refillEvent ~= nil and not valuesEqual(batchInput.refillEvent, batchResult.batch.refillEvent or {}) then
+        return {
+          ok = false,
+          error = "batch_refill_event_mismatch",
+          mismatches = {
+            string.format(
+              "Resolved batch %s refill metadata did not match transcript for stage %s round %s",
               tostring(batchResult.batchId),
               tostring(stageState.stageId),
               tostring(runState.roundIndex)

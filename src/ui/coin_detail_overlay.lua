@@ -12,16 +12,16 @@ local RARITY_COLORS = {
 }
 
 local TYPE_TAG_COLORS = {
-  attunement = Theme.colors.highlight,
   basic = Theme.colors.mutedText,
   combo = Theme.colors.highlight,
-  economy = Theme.colors.warning,
+  influence = Theme.colors.warning,
   heads = { 0.94, 0.46, 0.25, 1.0 },
   motion = Theme.colors.accent,
   neighbor = Theme.colors.accent,
   odds = Theme.colors.success,
   perfect = Theme.colors.highlight,
   safety = Theme.colors.success,
+  score_scaling = Theme.colors.highlight,
   tails = { 0.45, 0.62, 1.0, 1.0 },
 }
 

@@ -80,11 +80,11 @@ local function runTargetedQueueScenario(baseSeed)
     local metaState = MetaState.new()
     local runState, metaProjection = RunInitializer.createNewRun(metaState, {
       seed = seed,
-      starterCollection = { "heads_loaded_penny" },
+      starterCollection = { "copper_weighted_coin" },
       ownedUpgradeIds = { "heads_varnish", "echo_cache" },
     })
     local stageState = RunInitializer.createStageForCurrentRound(runState)
-    local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "heads_loaded_penny" })
+    local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "copper_weighted_coin" })
     assert(selection, errorMessage)
 
     local rng = RNG.new(seed)
@@ -120,10 +120,10 @@ local function runTargetedForcedResultScenario(seed)
   local metaState = MetaState.new()
   local runState, metaProjection = RunInitializer.createNewRun(metaState, {
     seed = seed,
-    starterCollection = { "regular_dollar" },
+    starterCollection = { "copper_blank_coin" },
   })
   local stageState = RunInitializer.createStageForCurrentRound(runState)
-  local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "regular_dollar" })
+  local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "copper_blank_coin" })
   assert(selection, errorMessage)
 
   local rng = RNG.new(seed)
@@ -161,10 +161,10 @@ local function runForcedResultLeakScenario(seed)
   local metaState = MetaState.new()
   local runState = RunInitializer.createNewRun(metaState, {
     seed = seed,
-    starterCollection = { "regular_dollar" },
+    starterCollection = { "copper_blank_coin" },
   })
   local stageState = RunInitializer.createStageForCurrentRound(runState)
-  local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "regular_dollar" })
+  local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "copper_blank_coin" })
   assert(selection, errorMessage)
 
   table.insert(runState.pendingForcedCoinResults, "heads")

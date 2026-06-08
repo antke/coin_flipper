@@ -7,6 +7,7 @@ local PurseView = require("src.ui.purse_view")
 local ShopSystem = require("src.systems.shop_system")
 local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
+local Upgrades = require("src.content.upgrades")
 
 local ShopState = {}
 ShopState.__index = ShopState
@@ -29,6 +30,28 @@ function ShopState.new()
   }, ShopState)
 end
 
+local function getTrickMetadataLine(contentId)
+  local definition = Upgrades.getById(contentId)
+  local trick = definition and definition.trick or nil
+
+  if not trick then
+    return nil
+  end
+
+  local category = trick.category and Terminology.getTagLabel(trick.category) or nil
+  local tier = trick.tier and string.format("Tier %d", trick.tier) or nil
+
+  if category and tier then
+    return string.format("Trick: %s, %s", category, tier)
+  end
+
+  if category then
+    return string.format("Trick: %s", category)
+  end
+
+  return tier and string.format("Trick: %s", tier) or nil
+end
+
 function ShopState:canBuyOffer(app, offer)
   return offer and not offer.purchased and app.runState.shopPoints >= offer.price
 end
@@ -37,7 +60,7 @@ function ShopState:tryBuyOffer(app, offerIndex)
   local offer = app.shopOffers and app.shopOffers[offerIndex] or nil
 
   if not offer then
-    self.statusMessage = "That shop offer is no longer available."
+    self.statusMessage = "That Black Market offer is no longer available."
     return false, "offer_not_found"
   end
 
@@ -47,7 +70,7 @@ function ShopState:tryBuyOffer(app, offerIndex)
   end
 
   if app.runState.shopPoints < offer.price then
-    self.statusMessage = "Not enough chips for that offer."
+    self.statusMessage = "Not enough Influence for that offer."
     return false, "not_enough_shop_points"
   end
 
@@ -69,7 +92,7 @@ end
 
 function ShopState:tryReroll(app)
   if not self:canReroll(app) then
-    self.statusMessage = "You cannot reroll the shop right now."
+    self.statusMessage = "You cannot reroll the Black Market right now."
     return false, "cannot_reroll"
   end
 
@@ -77,7 +100,7 @@ function ShopState:tryReroll(app)
 
   if ok then
     local traceMessages = app.lastShopGenerationTrace and app.lastShopGenerationTrace.messages or {}
-    self.statusMessage = traceMessages[1] or string.format("Rerolled shop offers using a %s reroll.", result)
+    self.statusMessage = traceMessages[1] or string.format("Rerolled Black Market offers using a %s reroll.", result)
   else
     self.statusMessage = result
   end
@@ -285,7 +308,7 @@ function ShopState:buildFooterButtons(app, layout)
       y = y,
       width = buttonWidth,
       height = buttonHeight,
-      label = "Reroll Shop",
+      label = "Reroll Market",
       variant = "warning",
       disabled = not canReroll,
       onClick = function()
@@ -646,10 +669,10 @@ function ShopState:draw(app)
 
   love.graphics.setFont(app.fonts.heading)
   Theme.applyColor(Theme.colors.text)
-  love.graphics.print("Shop", layout.padding, layout.padding)
+  love.graphics.print("Black Market", layout.padding, layout.padding)
   love.graphics.setFont(app.fonts.body)
   Theme.applyColor(Theme.colors.mutedText)
-  love.graphics.print(string.format("Chips: %d", app.runState.shopPoints), layout.padding, layout.padding + 30)
+  love.graphics.print(string.format("Influence: %d", app.runState.shopPoints), layout.padding, layout.padding + 30)
 
   local infoLines = {
     string.format("Pouch: %d coin(s)", #(app.runState.coinInstances or {})),
@@ -692,7 +715,7 @@ function ShopState:draw(app)
       Theme.applyColor(Theme.colors.highlight)
       love.graphics.rectangle("line", contentArea.x, contentArea.y, artSize, artSize, 10, 10)
       love.graphics.setFont(app.fonts.heading)
-      love.graphics.printf("UP", contentArea.x, contentArea.y + math.floor((artSize - Theme.spacing.lineHeight) / 2), artSize, "center")
+      love.graphics.printf("TR", contentArea.x, contentArea.y + math.floor((artSize - Theme.spacing.lineHeight) / 2), artSize, "center")
       textX = contentArea.x + artSize + Theme.spacing.itemGap
       textWidth = contentArea.width - artSize - Theme.spacing.itemGap
     end
@@ -700,13 +723,18 @@ function ShopState:draw(app)
     local lines = {
       string.format("%s", offer.name),
       string.format("Rarity: %s", offer.rarity),
-      string.format("Price: %d chips", offer.price),
+      string.format("Price: %d Influence", offer.price),
       "",
       Terminology.getMechanicRichText(app:getOfferDescription(offer)),
     }
 
     if offer.type == "coin" then
       table.insert(lines, 4, "Adds +1 coin instance to your pouch.")
+    else
+      local trickMetadataLine = getTrickMetadataLine(offer.contentId)
+      if trickMetadataLine then
+        table.insert(lines, 4, trickMetadataLine)
+      end
     end
 
     Layout.drawWrappedLines(lines, textX, textY, textWidth, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height - (buttonHeight + 8))

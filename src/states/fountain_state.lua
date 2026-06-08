@@ -147,7 +147,7 @@ end
 
 function FountainState:enter(app)
   local session = app:getFountainSession()
-  self.statusMessage = session and session.message or "Sacrifice up to one coin, or continue to the shop."
+  self.statusMessage = session and session.message or "Sacrifice up to one coin, or continue to the Black Market."
 end
 
 function FountainState:drawInfo(app, layout)

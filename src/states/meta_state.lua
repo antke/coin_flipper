@@ -13,18 +13,42 @@ local SCROLL_BUTTON_HEIGHT = 24
 
 local function formatPurchaseError(errorCode)
   if errorCode == "already_purchased" then
-    return "That upgrade has already been purchased."
+    return "That Tattoo has already been purchased."
   end
 
   if errorCode == "not_enough_meta_points" then
-    return "Not enough meta points for that upgrade yet."
+    return "Not enough Reputation for that Tattoo yet."
   end
 
   if errorCode == "unknown_meta_upgrade" then
-    return "The selected meta upgrade could not be found."
+    return "The selected Tattoo could not be found."
   end
 
   return tostring(errorCode)
+end
+
+local function formatEquipError(errorCode)
+  if errorCode == "not_purchased" then
+    return "Purchase that Tattoo before equipping it."
+  end
+
+  if errorCode == "tattoo_not_equip_eligible" then
+    return "That Tattoo unlocks content passively and does not use a loadout slot."
+  end
+
+  if errorCode == "already_equipped" then
+    return "That Tattoo is already equipped."
+  end
+
+  if errorCode == "tattoo_loadout_full" then
+    return "Tattoo loadout is full. Unequip another Tattoo first."
+  end
+
+  if errorCode == "not_equipped" then
+    return "That Tattoo is not equipped."
+  end
+
+  return formatPurchaseError(errorCode)
 end
 
 function MetaState.new()
@@ -113,7 +137,7 @@ function MetaState:tryPurchaseSelectedUpgrade(app)
   local selected = self:getSelectedOption(app)
 
   if not selected then
-    self.statusMessage = "No meta upgrade is currently selected."
+    self.statusMessage = "No Tattoo is currently selected."
     return false, "no_selection"
   end
 
@@ -128,7 +152,27 @@ function MetaState:tryPurchaseSelectedUpgrade(app)
   end
 
   local ok, result = app:purchaseMetaUpgrade(selected.id)
-  self.statusMessage = ok and string.format("Purchased %s for %d meta point(s).", result.name, result.cost or 0) or formatPurchaseError(result)
+  self.statusMessage = ok and string.format("Purchased %s for %d Reputation.", result.name, result.cost or 0) or formatPurchaseError(result)
+  return ok, result
+end
+
+function MetaState:tryToggleSelectedTattoo(app)
+  local selected = self:getSelectedOption(app)
+
+  if not selected then
+    self.statusMessage = "No Tattoo is currently selected."
+    return false, "no_selection"
+  end
+
+  local ok, result
+  if selected.equipped then
+    ok, result = app:unequipMetaTattoo(selected.id)
+    self.statusMessage = ok and string.format("Unequipped %s.", selected.name) or formatEquipError(result)
+  else
+    ok, result = app:equipMetaTattoo(selected.id)
+    self.statusMessage = ok and string.format("Equipped %s.", selected.name) or formatEquipError(result)
+  end
+
   return ok, result
 end
 
@@ -187,7 +231,7 @@ function MetaState:buildOptionButtons(app, x, y, width, height)
   for index = startIndex, endIndex do
     local option = options[index]
 
-    local status = option.purchased and "owned" or string.format("cost %d", option.cost)
+    local status = option.equipped and "equipped" or (option.purchased and "owned" or string.format("cost %d", option.cost))
     table.insert(buttons, {
       x = x,
       y = currentY,
@@ -227,7 +271,7 @@ function MetaState:buildActionButtons(app, x, y, width)
   local options = app:getMetaUpgradeOptions()
   local selected = options[self.selectedIndex]
   local allowStartRun = app:canStartRunFromMeta()
-  local buttonCount = allowStartRun and 6 or 5
+  local buttonCount = allowStartRun and 7 or 6
   local gap = Theme.spacing.itemGap
   local buttonWidth = math.floor((width - (gap * (buttonCount - 1))) / buttonCount)
   local buttonHeight = 42
@@ -251,6 +295,18 @@ function MetaState:buildActionButtons(app, x, y, width)
       y = y,
       width = buttonWidth,
       height = buttonHeight,
+      label = selected and selected.equipped and "Unequip" or "Equip",
+      variant = "primary",
+      disabled = not selected or (not selected.equipped and not selected.canEquip) or selected.equipEligible == false,
+      onClick = function()
+        return self:tryToggleSelectedTattoo(app)
+      end,
+    },
+    {
+      x = x + ((buttonWidth + gap) * 2),
+      y = y,
+      width = buttonWidth,
+      height = buttonHeight,
       label = "Save Now",
       variant = "default",
       onClick = function()
@@ -258,7 +314,7 @@ function MetaState:buildActionButtons(app, x, y, width)
       end,
     },
     {
-      x = x + ((buttonWidth + gap) * 2),
+      x = x + ((buttonWidth + gap) * 3),
       y = y,
       width = buttonWidth,
       height = buttonHeight,
@@ -270,7 +326,7 @@ function MetaState:buildActionButtons(app, x, y, width)
     },
   }
 
-  local nextX = x + (buttonWidth * 3) + (gap * 3)
+  local nextX = x + (buttonWidth * 4) + (gap * 4)
 
   table.insert(buttons, {
     x = nextX,
@@ -324,8 +380,8 @@ function MetaState:enter(app, payload)
   self.optionScrollOffset = 1
   self.selectedIndex = Utils.clamp(self.selectedIndex, 1, math.max(1, #options))
   self.statusMessage = app:canStartRunFromMeta()
-    and "Review upgrades, invest meta points, then start the next run or return to summary."
-    or "Use arrows or click an upgrade row, then purchase with the button or Enter."
+    and "Review Tattoos, invest Reputation, then start the next run or return to summary."
+    or "Use arrows or click a Tattoo row, then purchase with the button or Enter."
 end
 
 function MetaState:keypressed(app, key)
@@ -348,6 +404,11 @@ function MetaState:keypressed(app, key)
 
   if key == "s" then
     self:saveNow(app)
+    return
+  end
+
+  if key == "e" then
+    self:tryToggleSelectedTattoo(app)
     return
   end
 
@@ -377,24 +438,24 @@ function MetaState:draw(app)
   local layout = self:getLayout(app)
 
   love.graphics.setFont(app.fonts.title)
-  Layout.centeredText("Meta Progression", 70, app.fonts.title, Theme.colors.text)
+  Layout.centeredText("Reputation & Tattoos", 70, app.fonts.title, Theme.colors.text)
 
   Panel.draw(layout.padding, layout.topPanelY, layout.leftPanelWidth, layout.topPanelHeight, "Persistent Progress")
   Panel.draw(layout.padding + layout.leftPanelWidth + layout.gap, layout.topPanelY, layout.rightPanelWidth, layout.topPanelHeight, "Save + Next Run Projection")
-  Panel.draw(layout.padding, layout.bottomPanelY, layout.leftPanelWidth, layout.bottomPanelHeight, "Meta Upgrade Catalog")
-  Panel.draw(layout.padding + layout.leftPanelWidth + layout.gap, layout.bottomPanelY, layout.rightPanelWidth, layout.bottomPanelHeight, "Selected Upgrade")
+  Panel.draw(layout.padding, layout.bottomPanelY, layout.leftPanelWidth, layout.bottomPanelHeight, "Tattoo Catalog")
+  Panel.draw(layout.padding + layout.leftPanelWidth + layout.gap, layout.bottomPanelY, layout.rightPanelWidth, layout.bottomPanelHeight, "Selected Tattoo")
 
   local statsContent = Panel.getContentArea(layout.padding, layout.topPanelY, layout.leftPanelWidth, layout.topPanelHeight, "Persistent Progress")
   local projectionContent = Panel.getContentArea(layout.padding + layout.leftPanelWidth + layout.gap, layout.topPanelY, layout.rightPanelWidth, layout.topPanelHeight, "Save + Next Run Projection")
-  local listContent = Panel.getContentArea(layout.padding, layout.bottomPanelY, layout.leftPanelWidth, layout.bottomPanelHeight, "Meta Upgrade Catalog")
-  local detailContent = Panel.getContentArea(layout.padding + layout.leftPanelWidth + layout.gap, layout.bottomPanelY, layout.rightPanelWidth, layout.bottomPanelHeight, "Selected Upgrade")
+  local listContent = Panel.getContentArea(layout.padding, layout.bottomPanelY, layout.leftPanelWidth, layout.bottomPanelHeight, "Tattoo Catalog")
+  local detailContent = Panel.getContentArea(layout.padding + layout.leftPanelWidth + layout.gap, layout.bottomPanelY, layout.rightPanelWidth, layout.bottomPanelHeight, "Selected Tattoo")
 
   local statusLines = app:getMetaStatusLines()
   local projectionLines = {
     string.format("Save Status: %s", app.metaSaveStatus and app.metaSaveStatus.message or "unknown"),
   }
 
-  local detailLines = selected and app:getMetaUpgradeDetailLines(selected.id) or { "No upgrade selected." }
+  local detailLines = selected and app:getMetaUpgradeDetailLines(selected.id) or { "No Tattoo selected." }
 
   local actionButtonY = detailContent.y + detailContent.height - 46
   local actionButtons = self:buildActionButtons(app, detailContent.x, actionButtonY, detailContent.width)
@@ -417,8 +478,8 @@ function MetaState:mousepressed(app, x, y, button)
   end
 
   local layout = self:getLayout(app)
-  local listContent = Panel.getContentArea(layout.padding, layout.bottomPanelY, layout.leftPanelWidth, layout.bottomPanelHeight, "Meta Upgrade Catalog")
-  local detailContent = Panel.getContentArea(layout.padding + layout.leftPanelWidth + layout.gap, layout.bottomPanelY, layout.rightPanelWidth, layout.bottomPanelHeight, "Selected Upgrade")
+  local listContent = Panel.getContentArea(layout.padding, layout.bottomPanelY, layout.leftPanelWidth, layout.bottomPanelHeight, "Tattoo Catalog")
+  local detailContent = Panel.getContentArea(layout.padding + layout.leftPanelWidth + layout.gap, layout.bottomPanelY, layout.rightPanelWidth, layout.bottomPanelHeight, "Selected Tattoo")
   local actionButtonY = detailContent.y + detailContent.height - 46
 
   if Button.handleMousePressed(self:buildOptionButtons(app, listContent.x, listContent.y, listContent.width, listContent.height), x, y) then

@@ -107,12 +107,18 @@ function BossRewardState:buildRewardButtons(app, area)
   self.rewardButtons = {}
 
   for index, option in ipairs(app:getRewardPreviewOptionCards()) do
+    local optionName = option.name or option.contentId or "Unknown"
+    local optionLabel = option.displayType and string.format("%s — %s", option.displayType, optionName) or optionName
+    if option.wildcard then
+      optionLabel = optionLabel .. " (Wildcard)"
+    end
+
     table.insert(self.rewardButtons, {
       x = area.x,
       y = area.y + ((index - 1) * (buttonHeight + gap)),
       width = area.width,
       height = buttonHeight,
-      label = string.format("%d. %s", index, option.name or option.contentId or "Unknown"),
+      label = string.format("%d. %s", index, optionLabel),
       variant = option.selected and "success" or "default",
       focused = option.selected == true,
       disabled = session and session.claimed == true,

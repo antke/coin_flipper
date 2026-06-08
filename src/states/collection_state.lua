@@ -15,13 +15,34 @@ CollectionState.__index = CollectionState
 
 local CATEGORIES = {
   { id = "coins", label = "Coins" },
-  { id = "upgrades", label = "Upgrades" },
-  { id = "meta_upgrades", label = "Meta Upgrades" },
+  { id = "upgrades", label = "Tricks" },
+  { id = "meta_upgrades", label = "Tattoos" },
 }
 
 local ENTRY_BUTTON_HEIGHT = 30
 local ENTRY_BUTTON_GAP = 6
 local SCROLL_BUTTON_HEIGHT = 24
+
+local function getTrickMetadataLine(definition)
+  local trick = definition and definition.trick or nil
+
+  if not trick then
+    return nil
+  end
+
+  local category = trick.category and Terminology.getTagLabel(trick.category) or nil
+  local tier = trick.tier and string.format("Tier %d", trick.tier) or nil
+
+  if category and tier then
+    return string.format("Trick: %s, %s", category, tier)
+  end
+
+  if category then
+    return string.format("Trick: %s", category)
+  end
+
+  return tier and string.format("Trick: %s", tier) or nil
+end
 
 local function getVisibleRowCount(height)
   return math.max(1, math.floor((height + ENTRY_BUTTON_GAP) / (ENTRY_BUTTON_HEIGHT + ENTRY_BUTTON_GAP)))
@@ -64,7 +85,7 @@ function CollectionState:getCategory()
 end
 
 function CollectionState:getBackLabel()
-  return self.returnState == "meta" and "Back to Meta" or "Back to Menu"
+  return self.returnState == "meta" and "Back to Tattoos" or "Back to Menu"
 end
 
 function CollectionState:getBackEvent()
@@ -107,17 +128,24 @@ function CollectionState:getEntries(app)
       local unlockSource = definition.unlockedByDefault ~= false
         and "Available by default"
         or (#(UPGRADE_UNLOCK_SOURCES[definition.id] or {}) > 0 and ("Unlock via: " .. table.concat(UPGRADE_UNLOCK_SOURCES[definition.id], ", ")) or "Unlock through progression")
+      local detailLines = {
+        Terminology.getMechanicRichText(definition.description),
+        "",
+        string.format("Rarity: %s", definition.rarity or "unknown"),
+      }
+      local trickMetadataLine = getTrickMetadataLine(definition)
+
+      if trickMetadataLine then
+        table.insert(detailLines, trickMetadataLine)
+      end
+
+      table.insert(detailLines, unlocked and "Unlocked" or unlockSource)
 
       table.insert(entries, {
         id = definition.id,
         name = definition.name,
         status = unlocked and "Unlocked" or "Locked",
-        detailLines = {
-          Terminology.getMechanicRichText(definition.description),
-          "",
-          string.format("Rarity: %s", definition.rarity or "unknown"),
-          unlocked and "Unlocked" or unlockSource,
-        },
+        detailLines = detailLines,
       })
     end
 
@@ -127,15 +155,20 @@ function CollectionState:getEntries(app)
   local entries = {}
   for _, definition in ipairs(MetaUpgrades.getAll()) do
     local purchased = Utils.contains(app.metaState.purchasedMetaUpgradeIds, definition.id)
+    local equipped = Utils.contains(app.metaState.equippedTattooIds, definition.id)
     local detailLines = {
       Terminology.getMechanicRichText(definition.description),
       "",
-      string.format("Cost: %d meta point(s)", definition.cost or 0),
-      string.format("Status: %s", purchased and "Purchased" or "Available"),
+      string.format("Cost: %d Reputation", definition.cost or 0),
+      string.format("Status: %s", equipped and "Equipped" or (purchased and "Purchased" or "Available")),
     }
 
+    if MetaUpgrades.isEquipEligible(definition) then
+      table.insert(detailLines, string.format("Tattoo Loadout: %d/%d", #(app.metaState.equippedTattooIds or {}), app.metaState.tattooLoadoutLimit or MetaUpgrades.getEquipLimit()))
+    end
+
     if #(definition.unlockCoinIds or {}) > 0 or #(definition.unlockUpgradeIds or {}) > 0 then
-      table.insert(detailLines, string.format("Unlocks: %d coin(s), %d upgrade(s)", #(definition.unlockCoinIds or {}), #(definition.unlockUpgradeIds or {})))
+      table.insert(detailLines, string.format("Unlocks: %d coin(s), %d Trick(s)", #(definition.unlockCoinIds or {}), #(definition.unlockUpgradeIds or {})))
     end
 
     local effectLines = app:getEffectiveValueLines(EffectiveValueSystem.getDefinitionEffectiveValues(definition))
@@ -148,7 +181,7 @@ function CollectionState:getEntries(app)
     table.insert(entries, {
       id = definition.id,
       name = definition.name,
-      status = purchased and "Purchased" or "Available",
+      status = equipped and "Equipped" or (purchased and "Purchased" or "Available"),
       detailLines = detailLines,
     })
   end
@@ -161,8 +194,9 @@ function CollectionState:getSummaryLines(app)
   local unlockedUpgradeCount = #(Upgrades.getUnlockedIds(app.metaState.unlockedUpgradeIds or {}) or {})
   return {
     string.format("Unlocked Coins: %d/%d", unlockedCoinCount, #(Coins.getAll() or {})),
-    string.format("Unlocked Upgrades: %d/%d", unlockedUpgradeCount, #(Upgrades.getAll() or {})),
-    string.format("Purchased Meta Upgrades: %d/%d", #(app.metaState.purchasedMetaUpgradeIds or {}), #(MetaUpgrades.getAll() or {})),
+    string.format("Unlocked Tricks: %d/%d", unlockedUpgradeCount, #(Upgrades.getAll() or {})),
+    string.format("Purchased Tattoos: %d/%d", #(app.metaState.purchasedMetaUpgradeIds or {}), #(MetaUpgrades.getAll() or {})),
+    string.format("Equipped Tattoos: %d/%d", #(app.metaState.equippedTattooIds or {}), app.metaState.tattooLoadoutLimit or MetaUpgrades.getEquipLimit()),
   }
 end
 

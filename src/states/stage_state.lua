@@ -283,14 +283,31 @@ function StageState:startReveal(app, batchResult)
   local coins = {}
 
   for _, coinState in ipairs(batchResult.perCoin or {}) do
-    table.insert(coins, {
-      coinId = coinState.coinId,
-      slotIndex = coinState.slotIndex,
-      resolutionIndex = coinState.resolutionIndex,
-      result = coinState.result,
-      forcedResult = coinState.forcedResult,
-      didMatch = coinState.result == batchResult.call,
-    })
+      table.insert(coins, {
+        coinId = coinState.coinId,
+        slotIndex = coinState.slotIndex,
+        resolutionIndex = coinState.resolutionIndex,
+        result = coinState.result,
+        forcedResult = coinState.forcedResult,
+        foretold = coinState.foretold == true,
+        foretoldResult = coinState.foretoldResult,
+        foretoldBy = coinState.foretoldBy,
+        smuggled = coinState.smuggled == true,
+        smuggledBy = coinState.smuggledBy,
+        boardSlotIndex = coinState.boardSlotIndex,
+        overloadSlotIndex = coinState.overloadSlotIndex,
+        forged = coinState.forged == true,
+        forgedBy = coinState.forgedBy,
+        forgedCoinId = coinState.forgedCoinId,
+        spotlight = coinState.spotlight == true,
+        spotlightBy = coinState.spotlightBy,
+        redirectedCredit = coinState.redirectedCredit == true,
+        redirectedCreditBy = coinState.redirectedCreditBy,
+        chained = coinState.chained == true,
+        chainedBy = coinState.chainedBy,
+        chainDepth = coinState.chainDepth,
+        didMatch = coinState.result == batchResult.call,
+      })
   end
 
   self.reveal = {
@@ -496,7 +513,7 @@ function StageState:tryResolveBatch(app)
   end
 
   self.statusMessage = string.format(
-    "Resolved %s %d. Damage %d/%d. Flips remaining: %d.",
+    "Resolved %s %d. Score applied to HP: %d/%d. Flips remaining: %d.",
     Terminology.getTermLower("flip"),
     batchResult.batchId,
     app.stageState.stageScore,
@@ -574,7 +591,7 @@ function StageState:tryMoveSlot(app, slotIndex, direction)
   end
 
   local ok, result = app:moveHandSlot(slotIndex, direction)
-  self.statusMessage = ok and "Reordered hand." or tostring(result)
+  self.statusMessage = ok and "Reordered Flip Slots." or tostring(result)
 
   if ok and app.audioSystem then
     app.audioSystem:playCue("coin_whoosh")
@@ -619,7 +636,7 @@ function StageState:tryMoveSlotTo(app, fromSlotIndex, toSlotIndex)
     end
   end
 
-  self.statusMessage = "Reordered hand."
+  self.statusMessage = "Reordered Flip Slots."
   return true
 end
 
@@ -651,7 +668,7 @@ function StageState:buildButtons(app, x, y, width, height)
       y = y,
       width = buttonWidth,
       height = buttonHeight,
-      label = fatedActive and "TWIST OF FATE" or "FLIP HAND",
+      label = fatedActive and "TWIST OF FATE" or "FLIP SLOTS",
       variant = fatedActive and "warning" or "success",
       focused = fatedActive,
       glow = fatedActive,
@@ -853,8 +870,8 @@ end
 function StageState:getHelpDialogLines(app)
   local lines = {
     "You are trying to defeat the opponent before flips run out.",
-    "Review the drawn hand, pick HEADS or TAILS, then flip the hand in order.",
-    string.format("Matches and effects deal %s. %s come from coins and victory rewards.", Terminology.getTermLower("stage_score"), Terminology.getTermPlural("chip")),
+    "Review dealt coins, arrange your Flip Slots, pick HEADS or TAILS, then flip the slots in order.",
+    "Matches and effects create Score that is applied to opponent HP. Influence comes from coins and victory rewards.",
     "",
     "Current Breakdown:",
   }
@@ -866,9 +883,9 @@ function StageState:getHelpDialogLines(app)
   table.insert(lines, "")
   table.insert(lines, "Controls:")
   table.insert(lines, "- Click HEADS or TAILS: choose the call")
-  table.insert(lines, "- Flip Hand / Enter: resolve the current hand")
-  table.insert(lines, "- Sleight: replace a hand slot once before flipping")
-  table.insert(lines, "- Drag coins in the hand: reorder the hand")
+  table.insert(lines, "- Flip Slots / Enter: resolve the selected Flip Slots")
+  table.insert(lines, "- Sleight: replace a Flip Slot once before flipping")
+  table.insert(lines, "- Drag coins in Flip Slots: reorder the slots")
   table.insert(lines, "- P: inspect pouch")
   table.insert(lines, "- L: inspect flip log")
   table.insert(lines, "- Space / Enter: skip reveal")
@@ -1070,7 +1087,7 @@ function StageState:drawScorePanel(app, area)
   love.graphics.setFont(app.fonts.small)
   Theme.applyColor(Theme.colors.mutedText)
   love.graphics.printf(opponentName, contentArea.x, contentArea.y + app.fonts.title:getHeight() + 8, math.max(1, contentArea.width), "center")
-  love.graphics.printf(string.format("HP left • dealt %d/%d", stage.stageScore, stage.targetScore), contentArea.x, contentArea.y + app.fonts.title:getHeight() + 25, math.max(1, contentArea.width), "center")
+  love.graphics.printf(string.format("HP left • score %d/%d", stage.stageScore, stage.targetScore), contentArea.x, contentArea.y + app.fonts.title:getHeight() + 25, math.max(1, contentArea.width), "center")
 end
 
 function StageState:drawStageSummary(app, area)
@@ -1078,7 +1095,7 @@ function StageState:drawStageSummary(app, area)
   local luckMeter, luckProgress = self:getDisplayedLuckMeter(app)
   local fatedActive = luckMeter and luckMeter.fatedFlipActive == true
   local stats = {
-    { label = "Chips", value = tostring(app.runState and app.runState.shopPoints or 0), color = Theme.colors.text },
+    { label = "Influence", value = tostring(app.runState and app.runState.shopPoints or 0), color = Theme.colors.text },
     { label = "Flips", value = tostring(stage.flipsRemaining), color = Theme.colors.text },
     { label = "Call", value = app.selectedCall and string.upper(app.selectedCall) or "-", color = Theme.colors.text },
     { label = "Luck", kind = "progress", progress = luckProgress, color = fatedActive and Theme.colors.warning or Theme.colors.text },
@@ -1173,6 +1190,23 @@ function StageState:getVisibleCoinStates(app)
         resolutionIndex = coinState.resolutionIndex,
         result = coinState.result,
         forcedResult = coinState.forcedResult,
+        foretold = coinState.foretold == true,
+        foretoldResult = coinState.foretoldResult,
+        foretoldBy = coinState.foretoldBy,
+        smuggled = coinState.smuggled == true,
+        smuggledBy = coinState.smuggledBy,
+        boardSlotIndex = coinState.boardSlotIndex,
+        overloadSlotIndex = coinState.overloadSlotIndex,
+        forged = coinState.forged == true,
+        forgedBy = coinState.forgedBy,
+        forgedCoinId = coinState.forgedCoinId,
+        spotlight = coinState.spotlight == true,
+        spotlightBy = coinState.spotlightBy,
+        redirectedCredit = coinState.redirectedCredit == true,
+        redirectedCreditBy = coinState.redirectedCreditBy,
+        chained = coinState.chained == true,
+        chainedBy = coinState.chainedBy,
+        chainDepth = coinState.chainDepth,
         didMatch = coinState.result == batchResult.call,
         scoreContribution = baseScoreContribution or (coinState.result == batchResult.call and 1 or 0),
       })
@@ -1190,6 +1224,23 @@ function StageState:getVisibleCoinStates(app)
         coinId = coinId,
         instanceId = slot.instanceId,
         slotIndex = slotIndex,
+        foretold = slot.foretold == true,
+        foretoldResult = slot.foretoldResult,
+        foretoldBy = slot.foretoldBy,
+        smuggled = slot.smuggled == true,
+        smuggledBy = slot.smuggledBy,
+        boardSlotIndex = slot.boardSlotIndex,
+        overloadSlotIndex = slot.overloadSlotIndex,
+        forged = slot.forged == true,
+        forgedBy = slot.forgedBy,
+        forgedCoinId = slot.forgedCoinId,
+        spotlight = slot.spotlight == true,
+        spotlightBy = slot.spotlightBy,
+        redirectedCredit = slot.redirectedCredit == true,
+        redirectedCreditBy = slot.redirectedCreditBy,
+        chained = slot.chained == true,
+        chainedBy = slot.chainedBy,
+        chainDepth = slot.chainDepth,
         sleightUsed = slot.sleightUsed == true,
         cannotSleight = definition and definition.cannotSleight == true,
         cannotReorder = definition and definition.cannotReorder == true,
@@ -1505,7 +1556,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
   if #coins == 0 then
     love.graphics.setFont(app.fonts.body)
     Theme.applyColor(Theme.colors.mutedText)
-    love.graphics.printf("No hand drawn.", x, y + math.floor(height / 2) - 10, width, "center")
+    love.graphics.printf("No Flip Slots selected.", x, y + math.floor(height / 2) - 10, width, "center")
     self.handCardRects = {}
     self.coinRowVisuals = {}
     self.coinRowJitters = {}
@@ -1515,7 +1566,7 @@ function StageState:drawCoinRow(app, x, y, width, height)
   love.graphics.setFont(app.fonts.small)
   Theme.applyColor(Theme.colors.mutedText)
 
-  local title = call and string.format("Last flip: %s", string.upper(call)) or "Current hand"
+  local title = call and string.format("Last flip: %s", string.upper(call)) or "Flip Slots"
   local titleHeight = 20
   love.graphics.printf(title, x, y, width, "center")
 
@@ -1718,6 +1769,11 @@ function StageState:drawCoinRow(app, x, y, width, height)
     setColorWithAlpha(Theme.colors.mutedText, labelAlpha)
     love.graphics.printf(app:getCoinName(coin.coinId), cardDrawX + 4, labelY, activeCardWidth - 8, "center")
 
+    if not hasResult and (coin.foretoldResult == "heads" or coin.foretoldResult == "tails") then
+      setColorWithAlpha(Theme.colors.warning, labelAlpha)
+      love.graphics.printf("SEEN " .. string.upper(coin.foretoldResult), cardDrawX + 8, labelY + 18, activeCardWidth - 16, "center")
+    end
+
     CoinArt.draw(coin.coinId, coinDrawX, coinDrawY, animatedCoinSize, {
       side = artSide,
       selected = artSelected,
@@ -1749,6 +1805,21 @@ function StageState:drawCoinRow(app, x, y, width, height)
         if coin.forcedResult then
           Theme.applyColor(Theme.colors.warning)
           love.graphics.printf("FORCED", cardDrawX + 8, labelY + 36, activeCardWidth - 16, "center")
+        elseif coin.forged then
+          Theme.applyColor(Theme.colors.warning)
+          love.graphics.printf("FORGED", cardDrawX + 8, labelY + 36, activeCardWidth - 16, "center")
+        elseif coin.spotlight then
+          Theme.applyColor(Theme.colors.warning)
+          love.graphics.printf("SPOTLIGHT", cardDrawX + 8, labelY + 36, activeCardWidth - 16, "center")
+        elseif coin.redirectedCredit then
+          Theme.applyColor(Theme.colors.warning)
+          love.graphics.printf("REDIRECTED", cardDrawX + 8, labelY + 36, activeCardWidth - 16, "center")
+        elseif coin.chained then
+          Theme.applyColor(Theme.colors.warning)
+          love.graphics.printf("CHAINED", cardDrawX + 8, labelY + 36, activeCardWidth - 16, "center")
+        elseif coin.smuggled then
+          Theme.applyColor(Theme.colors.warning)
+          love.graphics.printf("SMUGGLED", cardDrawX + 8, labelY + 36, activeCardWidth - 16, "center")
         end
       end
     else
@@ -2030,7 +2101,7 @@ function StageState:enter(app, payload, previousName)
   elseif app:isFatedFlipActive() then
     self.statusMessage = "TWIST OF FATE ready: choose a call. All coins will land on it."
   else
-    self.statusMessage = "Review your hand, then pick HEADS or TAILS."
+    self.statusMessage = "Review dealt coins, arrange your Flip Slots, then pick HEADS or TAILS."
   end
 end
 
@@ -2155,7 +2226,7 @@ function StageState:drawRevealOverlay(app)
   local statsY = contentArea.y + 56
   local hpRemaining = math.max(0, (reveal.targetScore or 0) - (reveal.stageScore or 0))
   local statsLines = {
-    string.format("Damage dealt this flip: %+d", reveal.stageDelta),
+    string.format("Score applied this flip: %+d", reveal.stageDelta),
     string.format("Opponent HP: %d/%d", hpRemaining, reveal.targetScore),
     string.format("%s: %d", Terminology.getTermPlural("chip"), reveal.shopPoints or 0),
     string.format("Flips remaining: %d", reveal.flipsRemaining),
@@ -2305,7 +2376,7 @@ function StageState:keypressed(app, key)
       end
 
       local ok, result = app:debugGrantNextUpgrade()
-      self.statusMessage = ok and string.format("Dev: granted upgrade %s.", app:getUpgradeName(result)) or tostring(result)
+      self.statusMessage = ok and string.format("Dev: granted Trick %s.", app:getUpgradeName(result)) or tostring(result)
       return
     end
 
@@ -2431,9 +2502,9 @@ function StageState:draw(app)
 
   Panel.draw(controlsArea.x, controlsArea.y, controlsArea.width, controlsArea.height)
 
-  Panel.draw(gameArea.x, gameArea.y, gameArea.width, gameArea.height, "Hand")
+  Panel.draw(gameArea.x, gameArea.y, gameArea.width, gameArea.height, "Flip Slots")
 
-  local coinRowArea = Panel.getContentArea(gameArea.x, gameArea.y, gameArea.width, gameArea.height, "Hand")
+  local coinRowArea = Panel.getContentArea(gameArea.x, gameArea.y, gameArea.width, gameArea.height, "Flip Slots")
 
   local hoveredCoinId = self:drawCoinRow(app, coinRowArea.x, coinRowArea.y, coinRowArea.width, coinRowArea.height)
 

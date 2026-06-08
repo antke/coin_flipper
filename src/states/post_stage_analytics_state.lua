@@ -18,7 +18,7 @@ function PostStageAnalyticsState:buildButtons(app)
   if destination == "reward_preview" then
     label = "Continue to Reward Preview"
   elseif destination == "shop" then
-    label = "Continue to Shop"
+    label = "Continue to Black Market"
   elseif destination == "boss_reward" then
     label = "Continue to Victory Reward"
   end
@@ -66,7 +66,7 @@ function PostStageAnalyticsState:draw(app)
     string.format("Stage: %s", stageRecord.stageLabel or stageRecord.stageId or "n/a"),
     string.format("Opponent: %s", stageRecord.opponentName or "n/a"),
     string.format("Status: %s", tostring(stageRecord.status or "n/a")),
-    string.format("Damage: %d / %d", stageRecord.stageScore or 0, stageRecord.targetScore or 0),
+    string.format("Score Applied to HP: %d / %d", stageRecord.stageScore or 0, stageRecord.targetScore or 0),
     app:getPostStageReviewFollowupLine(),
   }
 

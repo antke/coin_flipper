@@ -34,9 +34,9 @@ return {
 
   assert = function(env, A)
     local offers = A.truthy(env.shopFlow and env.shopFlow.offers, "shop offers missing")
-    A.equal(env.runState.maxActiveCoinSlots, 4, "max active coin slots")
-    A.equal(env.runState.shopPoints, 2 + (env.stageRecord.stageClearShopPoints or 0), "starting shop points plus clear reward")
-    A.equal(env.runState.shopRerollsRemaining, 1, "starting shop rerolls")
+    A.equal(env.runState.maxActiveCoinSlots, 4, "max Flip Slots")
+    A.equal(env.runState.shopPoints, 2 + (env.stageRecord.stageClearShopPoints or 0), "starting Influence plus clear reward")
+    A.equal(env.runState.shopRerollsRemaining, 1, "starting Black Market rerolls")
     A.equal(#offers, 3, "shop offer count")
 
     for _, offer in ipairs(offers) do
@@ -47,8 +47,8 @@ return {
       end
     end
 
-    A.notContains(offers, { contentId = "cashback_badge" }, "owned cashback badge should not be re-offered")
-    A.notContains(offers, { contentId = "showcase_rack" }, "owned showcase rack should not be re-offered")
+    A.notContains(offers, { contentId = "cashback_badge" }, "owned Kickback Mark should not be re-offered")
+    A.notContains(offers, { contentId = "showcase_rack" }, "owned Backroom Display should not be re-offered")
     A.equal(#(env.shopSession.offerSets or {}), 1, "shop offer set history count")
     A.equal(#(env.shopSession.generationTraces or {}), 1, "shop generation trace count")
   end,

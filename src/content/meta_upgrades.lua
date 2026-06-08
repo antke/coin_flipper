@@ -1,66 +1,101 @@
 local definitions = {
   {
     id = "meta_shop_efficiency_1",
-    name = "Merchant's Favor I",
-    description = "+10% Chip gain in runs.",
+    name = "Favor Ink I",
+    description = "When equipped, +10% Influence gain in runs.",
     cost = 2,
-    tags = { "meta", "economy" },
+    tags = { "tattoo", "influence", "payout" },
+    tattoo = {
+      category = "influence",
+      tags = { "influence", "payout" },
+      tier = 1,
+    },
     effectiveValues = {
       ["economy.shopPointMultiplier"] = 1.10,
     },
   },
   {
     id = "meta_bonus_slot_1",
-    name = "Extra Pouch",
-    description = "+1 max active coin slot in runs.",
+    name = "Wide Pouch Tattoo",
+    description = "When equipped, +1 max Flip Slot in runs.",
     cost = 4,
-    tags = { "meta", "slots" },
+    tags = { "tattoo", "flip_slot", "pouch" },
+    tattoo = {
+      category = "pouch",
+      tags = { "pouch", "flip_slot" },
+      tier = 1,
+    },
     effectiveValues = {
       ["run.maxActiveCoinSlots"] = 1,
     },
   },
   {
     id = "meta_bonus_points_1",
-    name = "Traveler's Change",
-    description = "+2 extra starting Chips in runs.",
+    name = "Traveler's Mark",
+    description = "When equipped, +2 extra starting Influence in runs.",
     cost = 2,
-    tags = { "meta", "economy" },
+    tags = { "tattoo", "influence", "opening" },
+    tattoo = {
+      category = "opening",
+      tags = { "opening", "influence" },
+      tier = 1,
+    },
     effectiveValues = {
       ["run.startingShopPoints"] = 2,
     },
   },
   {
     id = "meta_bonus_reroll_1",
-    name = "Spare Voucher",
-    description = "+1 free shop reroll per run.",
+    name = "Spare Voucher Ink",
+    description = "When equipped, +1 Free Reroll per run.",
     cost = 3,
-    tags = { "meta", "shop" },
+    tags = { "tattoo", "black_market", "reroll" },
+    tattoo = {
+      category = "black_market",
+      tags = { "black_market", "reroll" },
+      tier = 1,
+    },
     effectiveValues = {
       ["run.startingShopRerolls"] = 1,
     },
   },
   {
     id = "meta_unlock_merchant_tools",
-    name = "Merchant Toolbelt",
-    description = "Unlock Cashback Badge, Showcase Rack, and Recovery Coupon for future shops.",
+    name = "Merchant Toolbelt Tattoo",
+    description = "Unlock Kickback Mark, Backroom Display, and Recovery Voucher for future Black Markets.",
     cost = 4,
-    tags = { "meta", "unlock", "shop" },
+    tags = { "tattoo", "unlock", "black_market" },
+    tattoo = {
+      category = "unlock",
+      tags = { "unlock", "black_market" },
+      tier = 1,
+    },
     unlockUpgradeIds = { "cashback_badge", "showcase_rack", "recovery_coupon" },
   },
   {
     id = "meta_unlock_tactical_notes",
-    name = "Tactical Notes",
-    description = "Unlock Echo Cache and Rainy Day Fund for future runs and shops.",
+    name = "Tactical Notes Tattoo",
+    description = "Unlock Echo Wager and Rainy Day Voucher for future runs and Black Markets.",
     cost = 5,
-    tags = { "meta", "unlock", "strategy" },
+    tags = { "tattoo", "unlock", "strategy" },
+    tattoo = {
+      category = "unlock",
+      tags = { "unlock", "strategy" },
+      tier = 1,
+    },
     unlockUpgradeIds = { "echo_cache", "rainy_day_fund" },
   },
   {
     id = "meta_shop_quality_1",
-    name = "Curated Stock",
-    description = "Future shops favor uncommon and rare offers.",
+    name = "Curated Stock Tattoo",
+    description = "When equipped, future Black Markets favor uncommon and rare offers.",
     cost = 4,
-    tags = { "meta", "shop", "quality" },
+    tags = { "tattoo", "black_market", "quality" },
+    tattoo = {
+      category = "black_market",
+      tags = { "black_market", "quality" },
+      tier = 1,
+    },
     effectiveValues = {
       ["shop.rarityWeight.uncommon"] = 1.35,
       ["shop.rarityWeight.rare"] = 1.20,
@@ -68,10 +103,15 @@ local definitions = {
   },
   {
     id = "meta_bonus_starter_1",
-    name = "Expanded Roll Case",
-    description = "+1 starting coin in future runs.",
+    name = "Expanded Roll Case Tattoo",
+    description = "When equipped, +1 starting coin in future runs.",
     cost = 4,
-    tags = { "meta", "opening", "collection" },
+    tags = { "tattoo", "opening", "collection" },
+    tattoo = {
+      category = "opening",
+      tags = { "opening", "collection" },
+      tier = 1,
+    },
     effectiveValues = {
       ["run.startingCollectionSize"] = 1,
     },
@@ -85,6 +125,7 @@ for _, definition in ipairs(definitions) do
 end
 
 local MetaUpgrades = {}
+local TATTOO_EQUIP_LIMIT = 3
 
 function MetaUpgrades.getAll()
   return definitions
@@ -92,6 +133,14 @@ end
 
 function MetaUpgrades.getById(id)
   return byId[id]
+end
+
+function MetaUpgrades.getEquipLimit()
+  return TATTOO_EQUIP_LIMIT
+end
+
+function MetaUpgrades.isEquipEligible(definition)
+  return definition ~= nil and (definition.effectiveValues ~= nil or definition.runModifiers ~= nil)
 end
 
 return MetaUpgrades

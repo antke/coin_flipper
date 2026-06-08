@@ -17,6 +17,15 @@ local function serializeRewardOption(option)
     name = option.name,
     rarity = option.rarity,
     description = option.description,
+    rewardSource = option.rewardSource,
+    enemyClass = option.enemyClass,
+    enemyClassLabel = option.enemyClassLabel,
+    rewardPoolCategories = Utils.clone(option.rewardPoolCategories),
+    wildcard = option.wildcard,
+    wildcardChance = option.wildcardChance,
+    wildcardCap = option.wildcardCap,
+    trickCategory = option.trickCategory,
+    trickTags = Utils.clone(option.trickTags),
   }
 end
 
@@ -126,6 +135,7 @@ function RunHistorySystem.recordStageRewardPreview(stageRecord, session)
 
   stageRecord.rewardChoice = nil
   stageRecord.rewardOptions = {}
+  stageRecord.rewardGeneration = Utils.clone(session and session.generation or nil)
 
   for _, option in ipairs(session and session.options or {}) do
     table.insert(stageRecord.rewardOptions, serializeRewardOption(option))
@@ -239,6 +249,7 @@ function RunHistorySystem.finalizeStage(runState, stageState, metaState)
     variantName = stageState.variantName,
     opponentId = stageState.opponent and stageState.opponent.id or nil,
     opponentName = stageState.opponent and stageState.opponent.name or nil,
+    enemyClass = stageState.opponent and stageState.opponent.enemyClass or nil,
     opponentHp = stageState.targetScore,
     status = stageState.stageStatus,
     stageScore = stageState.stageScore,

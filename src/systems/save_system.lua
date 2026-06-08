@@ -340,6 +340,8 @@ function SaveSystem.normalizeMetaStateForSave(metaState)
     unlockedCoinIds = Utils.copyArray(metaState.unlockedCoinIds or {}),
     unlockedUpgradeIds = Utils.copyArray(metaState.unlockedUpgradeIds or {}),
     purchasedMetaUpgradeIds = Utils.copyArray(metaState.purchasedMetaUpgradeIds or {}),
+    equippedTattooIds = Utils.copyArray(metaState.equippedTattooIds or {}),
+    tattooLoadoutLimit = metaState.tattooLoadoutLimit,
     runRecords = Utils.clone(metaState.runRecords or {}),
     effectiveValues = Utils.clone(metaState.effectiveValues or {}),
     stats = Utils.clone(metaState.stats or {}),

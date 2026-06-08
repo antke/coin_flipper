@@ -31,7 +31,7 @@ function RecordsState:getBackLabel()
   if self.returnState == "summary" then
     return "Back to Summary"
   elseif self.returnState == "meta" then
-    return "Back to Meta"
+    return "Back to Tattoos"
   end
 
   return "Back to Menu"
@@ -285,7 +285,7 @@ function RecordsState:draw(app)
     string.format("Result: %s", tostring(record.resultType or record.runStatus or "n/a")),
     string.format("Final Stage: %s", tostring(record.finalStageLabel or "n/a")),
     string.format("Total Score: %s", tostring(record.runTotalScore or 0)),
-    string.format("Meta Reward Earned: %s", tostring(record.metaRewardEarned or 0)),
+    string.format("Reputation Earned: %s", tostring(record.metaRewardEarned or 0)),
   } or { "No run record selected." }
 
   love.graphics.setFont(app.fonts.body)

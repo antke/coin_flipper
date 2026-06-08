@@ -16,16 +16,16 @@ local RARITY_COLORS = {
 }
 
 local TYPE_TAG_COLORS = {
-  attunement = Theme.colors.highlight,
   basic = Theme.colors.mutedText,
   combo = Theme.colors.highlight,
-  economy = Theme.colors.warning,
+  influence = Theme.colors.warning,
   heads = { 0.94, 0.46, 0.25, 1.0 },
   motion = Theme.colors.accent,
   neighbor = Theme.colors.accent,
   odds = Theme.colors.success,
   perfect = Theme.colors.highlight,
   safety = Theme.colors.success,
+  score_scaling = Theme.colors.highlight,
   tails = { 0.45, 0.62, 1.0, 1.0 },
 }
 
@@ -196,7 +196,13 @@ local function drawPouchCell(app, card, x, y, width, metrics, options)
 
   if options.showZones then
     Theme.applyColor(Theme.colors.mutedText)
-    love.graphics.printf(string.format("avail %d | hand %d | spent %d", card.available or 0, card.hand or 0, card.exhausted or 0), x, countY + app.fonts.small:getHeight() + Theme.scale(4), width, "center")
+    love.graphics.printf(
+      string.format("avail %d | dealt %d | slots %d | used %d", card.available or 0, card.dealt or 0, card.selected or card.hand or 0, card.exhausted or 0),
+      x,
+      countY + app.fonts.small:getHeight() + Theme.scale(4),
+      width,
+      "center"
+    )
   end
 
   return hovered
@@ -278,7 +284,7 @@ function PurseView.draw(app, area, stageState, options)
   local scrollOffset = math.max(0, math.min(options.scrollOffset or 0, metrics.maxScrollOffset))
   local headerLines = {
     string.format("Pouch: %d coin(s)", summary.purseSize or 0),
-    string.format("Hand size: %d", summary.handSize or 0),
+    string.format("Deal: %d", summary.dealSize or summary.handSize or 0),
   }
 
   if options.note then

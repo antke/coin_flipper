@@ -76,6 +76,7 @@ function SummarySystem.buildRunRecord(runState, resultType, stageState)
       stageType = stageRecord.stageType,
       variantName = stageRecord.variantName,
       opponentName = stageRecord.opponentName,
+      enemyClass = stageRecord.enemyClass,
       status = stageRecord.status,
       stageScore = stageRecord.stageScore,
       targetScore = stageRecord.targetScore,

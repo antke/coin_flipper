@@ -92,7 +92,7 @@ function MenuState:buildButtons(app)
       y = buttonY,
       width = buttonWidth,
       height = buttonHeight,
-      label = "Meta Progression",
+      label = "Tattoos",
       variant = "default",
       onClick = function()
         return app.stateGraph:request("open_meta")
@@ -164,7 +164,7 @@ function MenuState:buildButtons(app)
       y = buttonY,
       width = buttonWidth,
       height = buttonHeight,
-      label = "Meta Progression",
+      label = "Tattoos",
       variant = "default",
       onClick = function()
         return app.stateGraph:request("open_meta")

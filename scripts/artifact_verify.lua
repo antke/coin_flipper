@@ -103,11 +103,15 @@ runCheck("current_meta_save_roundtrip", function()
   assert(artifact, artifactError)
   assert(artifact.artifactType == SaveSystem.SAVE_ARTIFACT_TYPE)
   assert(artifact.version == SaveSystem.SAVE_VERSION)
+  assert(artifact.metaState.equippedTattooIds[1] == "meta_bonus_slot_1")
+  assert(artifact.metaState.tattooLoadoutLimit == 3)
 
   local decoded, decodeError = SaveSystem.decodeMetaStateString(encoded)
   assert(decoded, decodeError)
   assert(decoded.metaPoints == 4)
   assert(decoded.stats.runsStarted == 2)
+  assert(decoded.equippedTattooIds[1] == "meta_bonus_slot_1")
+  assert(decoded.tattooLoadoutLimit == 3)
   assert(decoded.effectiveValues["run.maxActiveCoinSlots"].value == 1)
 end)
 
@@ -144,6 +148,23 @@ runCheck("legacy_v1_meta_save_migrates", function()
   assert(decoded, decodeError)
   assert(decoded.effectiveValues["run.maxActiveCoinSlots"].value == 1)
   assert(decoded.stats.runsWon == 1)
+end)
+
+runCheck("legacy_purchased_tattoo_auto_equips", function()
+  local decoded, decodeError = SaveSystem.decodeMetaStateString(encodeTable({
+    metaPoints = 2,
+    purchasedMetaUpgradeIds = { "meta_bonus_slot_1", "meta_bonus_points_1", "meta_bonus_reroll_1", "meta_shop_quality_1" },
+  }))
+
+  assert(decoded, decodeError)
+  assert(#decoded.equippedTattooIds == 3)
+  assert(decoded.equippedTattooIds[1] == "meta_bonus_slot_1")
+  assert(decoded.equippedTattooIds[2] == "meta_bonus_points_1")
+  assert(decoded.equippedTattooIds[3] == "meta_bonus_reroll_1")
+  assert(decoded.effectiveValues["run.maxActiveCoinSlots"].value == 1)
+  assert(decoded.effectiveValues["run.startingShopPoints"].value == 2)
+  assert(decoded.effectiveValues["run.startingShopRerolls"].value == 1)
+  assert(decoded.effectiveValues["shop.rarityWeight.uncommon"] == nil)
 end)
 
 runCheck("invalid_meta_save_rejected", function()
@@ -235,7 +256,19 @@ runCheck("purchased_meta_effect_drift_rejected", function()
   }))
 
   assert(decoded == nil)
-  assert(type(decodeError) == "string" and decodeError:match("missing purchased effect"))
+  assert(type(decodeError) == "string" and decodeError:match("missing equipped Tattoo effect"))
+end)
+
+runCheck("unpurchased_equipped_tattoo_rejected", function()
+  local decoded, decodeError = SaveSystem.decodeMetaStateString(encodeTable({
+    metaPoints = 1,
+    purchasedMetaUpgradeIds = {},
+    equippedTattooIds = { "meta_bonus_slot_1" },
+    effectiveValues = {},
+  }))
+
+  assert(decoded == nil)
+  assert(type(decodeError) == "string" and decodeError:match("unpurchased Tattoo"))
 end)
 
 runCheck("invalid_transcript_rejected", function()
@@ -288,7 +321,7 @@ runCheck("transcript_trailing_stage_rejected", function()
 end)
 
 runCheck("active_run_encounter_roundtrip", function()
-  local result = SimulationSystem.simulateRun({ seed = 5 })
+  local result = SimulationSystem.simulateRun({ seed = 2 })
   local stageRecord = nil
   local stageHistoryIndex = nil
 
@@ -440,7 +473,7 @@ runCheck("active_run_encounter_roundtrip", function()
 end)
 
 runCheck("active_run_shop_snapshot", function()
-  local result = SimulationSystem.simulateRun({ seed = 5 })
+  local result = SimulationSystem.simulateRun({ seed = 2 })
   local stageRecord = nil
   local stageHistoryIndex = nil
   local shopVisit = nil

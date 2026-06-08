@@ -2,8 +2,9 @@ local definitions = {
   {
     id = "crosswind_table",
     name = "Crosswind Table",
-    description = "Each equipped coin gains +5% Tails chance before rolling.",
+    description = "Each coin in the flip gains +5% Tails chance before rolling.",
     tags = { "stage", "weight", "tails" },
+    enemyTrick = { category = "loaded", tags = { "loaded", "weight", "tails" }, timing = "before_flip" },
     triggers = {
       {
         hook = "before_coin_roll",
@@ -16,8 +17,9 @@ local definitions = {
   {
     id = "bright_lights",
     name = "Bright Lights",
-    description = "Each equipped coin gains +5% Heads chance before rolling.",
+    description = "Each coin in the flip gains +5% Heads chance before rolling.",
     tags = { "stage", "weight", "heads" },
+    enemyTrick = { category = "loaded", tags = { "loaded", "weight", "heads" }, timing = "before_flip" },
     triggers = {
       {
         hook = "before_coin_roll",
@@ -30,8 +32,9 @@ local definitions = {
   {
     id = "side_pot",
     name = "Side Pot",
-    description = "+1 extra Chip after each scored batch in this stage.",
-    tags = { "stage", "economy" },
+    description = "+1 extra Influence after each scoring flip in this stage.",
+    tags = { "stage", "payout", "influence" },
+    enemyTrick = { category = "misdirection", tags = { "misdirection", "payout" }, timing = "after_score" },
     triggers = {
       {
         hook = "after_scoring",
@@ -46,6 +49,7 @@ local definitions = {
     name = "Crowd Favorite",
     description = "Heads calls are worth 10% more score in this stage.",
     tags = { "stage", "heads", "score" },
+    enemyTrick = { category = "fate", tags = { "fate", "heads", "score_scaling" }, timing = "before_score" },
     triggers = {
       {
         hook = "before_scoring",

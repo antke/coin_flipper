@@ -61,7 +61,7 @@ end
 
 function EncounterState.new()
   return setmetatable({
-    statusMessage = "Choose one encounter option, then continue to the shop.",
+    statusMessage = "Choose one encounter option, then continue to the Black Market.",
     optionButtons = {},
     buttons = {},
   }, EncounterState)
@@ -192,10 +192,10 @@ function EncounterState:enter(app)
     elseif session.selectedIndex ~= nil and session.choices[session.selectedIndex] then
       self.statusMessage = string.format("Selected encounter option: %s.", session.choices[session.selectedIndex].label or session.choices[session.selectedIndex].id)
     else
-      self.statusMessage = "Choose one encounter option, then continue to the shop."
+      self.statusMessage = "Choose one encounter option, then continue to the Black Market."
     end
   else
-    self.statusMessage = "No encounter choices remain. Continue to the shop."
+    self.statusMessage = "No encounter choices remain. Continue to the Black Market."
   end
 end
 

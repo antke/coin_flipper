@@ -20,12 +20,30 @@ local function appendUniqueIds(target, values)
   end
 end
 
+local function rebuildEquippedTattooEffects(metaState)
+  metaState.effectiveValues = {}
+
+  for _, metaUpgradeId in ipairs(metaState.equippedTattooIds or {}) do
+    local definition = MetaUpgrades.getById(metaUpgradeId)
+
+    if definition then
+      EffectiveValueSystem.mergeEffectiveValueTables(metaState.effectiveValues, EffectiveValueSystem.getDefinitionEffectiveValues(definition))
+    end
+  end
+
+  metaState.modifiers = EffectiveValueSystem.buildLegacyModifierTableFromCanonicalEffectiveValues(metaState.effectiveValues, {})
+end
+
 function MetaProgressionSystem.getUpgradeOptions(metaState)
   local options = {}
 
   for _, definition in ipairs(MetaUpgrades.getAll()) do
     local purchased = Utils.contains(metaState.purchasedMetaUpgradeIds, definition.id)
+    local equipped = Utils.contains(metaState.equippedTattooIds, definition.id)
+    local equipEligible = MetaUpgrades.isEquipEligible(definition)
     local effectiveValues = EffectiveValueSystem.getDefinitionEffectiveValues(definition)
+    local equippedCount = #(metaState.equippedTattooIds or {})
+    local tattooLoadoutLimit = metaState.tattooLoadoutLimit or MetaUpgrades.getEquipLimit()
 
     table.insert(options, {
       id = definition.id,
@@ -37,7 +55,14 @@ function MetaProgressionSystem.getUpgradeOptions(metaState)
       runModifiers = EffectiveValueSystem.buildLegacyModifierTableFromCanonicalEffectiveValues(effectiveValues, {}),
       unlockCoinIds = Utils.copyArray(definition.unlockCoinIds or {}),
       unlockUpgradeIds = Utils.copyArray(definition.unlockUpgradeIds or {}),
+      tattoo = Utils.clone(definition.tattoo),
       purchased = purchased,
+      equipped = equipped,
+      equipEligible = equipEligible,
+      tattooLoadoutLimit = tattooLoadoutLimit,
+      equippedCount = equippedCount,
+      canEquip = purchased and equipEligible and not equipped and equippedCount < tattooLoadoutLimit,
+      canUnequip = equipped,
       affordable = purchased or (metaState.metaPoints >= (definition.cost or 0)),
     })
   end
@@ -72,11 +97,68 @@ function MetaProgressionSystem.purchase(metaState, metaUpgradeId)
 
   metaState.metaPoints = metaState.metaPoints - (result.cost or 0)
   table.insert(metaState.purchasedMetaUpgradeIds, metaUpgradeId)
-  EffectiveValueSystem.mergeEffectiveValueTables(metaState.effectiveValues, EffectiveValueSystem.getDefinitionEffectiveValues(result))
-  metaState.modifiers = EffectiveValueSystem.buildLegacyModifierTableFromCanonicalEffectiveValues(metaState.effectiveValues, {})
+
+  metaState.equippedTattooIds = metaState.equippedTattooIds or {}
+
+  if MetaUpgrades.isEquipEligible(result) and #metaState.equippedTattooIds < (metaState.tattooLoadoutLimit or MetaUpgrades.getEquipLimit()) then
+    table.insert(metaState.equippedTattooIds, metaUpgradeId)
+  end
+
+  rebuildEquippedTattooEffects(metaState)
   appendUniqueIds(metaState.unlockedCoinIds, result.unlockCoinIds)
   appendUniqueIds(metaState.unlockedUpgradeIds, result.unlockUpgradeIds)
   return true, result
+end
+
+function MetaProgressionSystem.canEquipTattoo(metaState, metaUpgradeId)
+  local definition = MetaUpgrades.getById(metaUpgradeId)
+
+  if not definition then
+    return false, "unknown_meta_upgrade"
+  end
+
+  if not Utils.contains(metaState.purchasedMetaUpgradeIds, metaUpgradeId) then
+    return false, "not_purchased"
+  end
+
+  if not MetaUpgrades.isEquipEligible(definition) then
+    return false, "tattoo_not_equip_eligible"
+  end
+
+  if Utils.contains(metaState.equippedTattooIds, metaUpgradeId) then
+    return false, "already_equipped"
+  end
+
+  if #(metaState.equippedTattooIds or {}) >= (metaState.tattooLoadoutLimit or MetaUpgrades.getEquipLimit()) then
+    return false, "tattoo_loadout_full"
+  end
+
+  return true, definition
+end
+
+function MetaProgressionSystem.equipTattoo(metaState, metaUpgradeId)
+  local ok, result = MetaProgressionSystem.canEquipTattoo(metaState, metaUpgradeId)
+
+  if not ok then
+    return false, result
+  end
+
+  metaState.equippedTattooIds = metaState.equippedTattooIds or {}
+  table.insert(metaState.equippedTattooIds, metaUpgradeId)
+  rebuildEquippedTattooEffects(metaState)
+  return true, result
+end
+
+function MetaProgressionSystem.unequipTattoo(metaState, metaUpgradeId)
+  metaState.equippedTattooIds = metaState.equippedTattooIds or {}
+
+  if not Utils.contains(metaState.equippedTattooIds, metaUpgradeId) then
+    return false, "not_equipped"
+  end
+
+  Utils.removeValue(metaState.equippedTattooIds, metaUpgradeId)
+  rebuildEquippedTattooEffects(metaState)
+  return true, MetaUpgrades.getById(metaUpgradeId)
 end
 
 function MetaProgressionSystem.calculateRunReward(runState, stageRecord)

@@ -2,8 +2,9 @@ local definitions = {
   {
     id = "loaded_ledger",
     name = "Loaded Ledger",
-    description = "Each equipped coin gains +6% Tails chance before rolling.",
+    description = "Each coin in the flip gains +6% Tails chance before rolling.",
     tags = { "boss", "weight", "tails" },
+    enemyTrick = { category = "loaded", tags = { "loaded", "weight", "tails" }, timing = "before_flip" },
     triggers = {
       {
         hook = "before_coin_roll",
@@ -18,6 +19,7 @@ local definitions = {
     name = "Heads Embargo",
     description = "Heads calls are worth 15% less score during this boss fight.",
     tags = { "boss", "heads", "score" },
+    enemyTrick = { category = "misdirection", tags = { "misdirection", "heads", "score_scaling" }, timing = "before_score" },
     triggers = {
       {
         hook = "before_scoring",
@@ -35,6 +37,7 @@ local definitions = {
     name = "Tails Embargo",
     description = "Tails calls are worth 15% less score during this boss fight.",
     tags = { "boss", "tails", "score" },
+    enemyTrick = { category = "misdirection", tags = { "misdirection", "tails", "score_scaling" }, timing = "before_score" },
     triggers = {
       {
         hook = "before_scoring",
@@ -50,8 +53,9 @@ local definitions = {
   {
     id = "stacked_deck",
     name = "Stacked Deck",
-    description = "Each equipped coin gains +6% Heads chance before rolling.",
+    description = "Each coin in the flip gains +6% Heads chance before rolling.",
     tags = { "boss", "weight", "heads" },
+    enemyTrick = { category = "loaded", tags = { "loaded", "weight", "heads" }, timing = "before_flip" },
     triggers = {
       {
         hook = "before_coin_roll",

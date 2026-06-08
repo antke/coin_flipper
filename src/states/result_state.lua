@@ -144,9 +144,9 @@ function ResultState:draw(app)
   local lines = {
     string.format("Stage: %s", result.stageLabel or "n/a"),
     string.format("Opponent: %s", result.opponentName or "n/a"),
-    string.format("Damage: %s / %s", tostring(result.stageScore or 0), tostring(result.targetScore or 0)),
+    string.format("Score Applied to HP: %s / %s", tostring(result.stageScore or 0), tostring(result.targetScore or 0)),
     string.format("Run Status: %s", tostring(result.runStatus or "active")),
-    string.format("Chips: %s", tostring(result.shopPoints or (app.runState and app.runState.shopPoints or 0))),
+    string.format("Influence: %s", tostring(result.shopPoints or (app.runState and app.runState.shopPoints or 0))),
     string.format("Next step: %s", destination),
   }
 
@@ -156,7 +156,7 @@ function ResultState:draw(app)
   end
 
   if (result.metaRewardEarned or 0) > 0 then
-    table.insert(lines, 6, string.format("Meta Reward Banked: %d", result.metaRewardEarned))
+    table.insert(lines, 6, string.format("Reputation Banked: %d", result.metaRewardEarned))
   end
 
   if isBossStage then

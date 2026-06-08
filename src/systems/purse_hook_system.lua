@@ -49,6 +49,12 @@ function PurseHookSystem.buildCoinState(runState, slot, slotIndex, overrides)
     slotIndex = overrides.slotIndex or slotIndex,
     originalDrawIndex = overrides.originalDrawIndex or (slot and slot.originalDrawIndex),
     resolutionIndex = overrides.resolutionIndex or overrides.slotIndex or slotIndex,
+    dealtIndex = overrides.dealtIndex or (slot and slot.dealtIndex),
+    selectedSlotIndex = overrides.selectedSlotIndex or (slot and slot.selectedSlotIndex),
+    foretold = slot and slot.foretold == true or false,
+    foretoldResult = slot and slot.foretoldResult or nil,
+    foretoldBy = slot and slot.foretoldBy or nil,
+    foretoldRngRoll = slot and slot.foretoldRngRoll or nil,
     flags = {},
   }
 end
@@ -58,6 +64,24 @@ function PurseHookSystem.buildHandCoinStates(runState, stageState)
 
   for slotIndex, slot in ipairs(stageState and stageState.purse and stageState.purse.handSlots or {}) do
     local coinState = PurseHookSystem.buildCoinState(runState, slot, slotIndex)
+
+    if coinState then
+      table.insert(eventCoins, coinState)
+    end
+  end
+
+  return eventCoins
+end
+
+function PurseHookSystem.buildDealtCoinStates(runState, stageState)
+  local eventCoins = {}
+
+  for dealtIndex, slot in ipairs(stageState and stageState.purse and stageState.purse.dealtHandSlots or {}) do
+    local coinState = PurseHookSystem.buildCoinState(runState, slot, dealtIndex, {
+      slotIndex = dealtIndex,
+      originalDrawIndex = slot and slot.originalDrawIndex or dealtIndex,
+      resolutionIndex = dealtIndex,
+    })
 
     if coinState then
       table.insert(eventCoins, coinState)
@@ -84,6 +108,7 @@ function PurseHookSystem.runImmediatePhase(runState, stageState, metaProjection,
     activeSources = HookRegistry.collectSources(runState, stageState, metaProjection or runState.metaProjection),
     purseEventCoins = eventCoins,
     scoreBreakdown = ScoreBreakdown.new(),
+    rng = options.rng,
     actionMetrics = {
       appliedCount = 0,
       maxAppliedCount = GameConfig.get("engine.maxAppliedActionsPerBatch"),
@@ -138,6 +163,25 @@ function PurseHookSystem.runAfterHandDraw(runState, stageState, metaProjection, 
     metaProjection,
     "after_hand_draw",
     PurseHookSystem.buildHandCoinStates(runState, stageState),
+    options
+  )
+end
+
+function PurseHookSystem.runAfterDealBeforeSelection(runState, stageState, metaProjection, options)
+  local purse = stageState and stageState.purse
+  local latestDraw = purse and purse.drawHistory and purse.drawHistory[#purse.drawHistory] or nil
+
+  if not latestDraw or latestDraw.afterDealBeforeSelectionApplied == true then
+    return nil
+  end
+
+  latestDraw.afterDealBeforeSelectionApplied = true
+  return PurseHookSystem.runImmediatePhase(
+    runState,
+    stageState,
+    metaProjection,
+    "after_deal_before_selection",
+    PurseHookSystem.buildDealtCoinStates(runState, stageState),
     options
   )
 end

@@ -38,7 +38,7 @@ end
 
 function RewardPreviewState.new()
   return setmetatable({
-    statusMessage = "Choose a reward, then continue to the shop.",
+    statusMessage = "Choose a reward, then continue to the Black Market.",
     rewardButtons = {},
     buttons = {},
   }, RewardPreviewState)
@@ -106,12 +106,18 @@ function RewardPreviewState:buildRewardButtons(app, area)
   self.rewardButtons = {}
 
   for index, option in ipairs(app:getRewardPreviewOptionCards()) do
+    local optionName = option.name or option.contentId or "Unknown"
+    local optionLabel = option.displayType and string.format("%s — %s", option.displayType, optionName) or optionName
+    if option.wildcard then
+      optionLabel = optionLabel .. " (Wildcard)"
+    end
+
     table.insert(self.rewardButtons, {
       x = area.x,
       y = area.y + ((index - 1) * (buttonHeight + gap)),
       width = area.width,
       height = buttonHeight,
-      label = string.format("%d. %s", index, option.name or option.contentId or "Unknown"),
+      label = string.format("%d. %s", index, optionLabel),
       variant = option.selected and "primary" or "default",
       focused = option.selected == true,
       disabled = session and session.claimed == true,
@@ -151,9 +157,9 @@ function RewardPreviewState:enter(app)
   local session = app:ensureRewardPreview()
 
   if session and #(session.options or {}) > 0 then
-    self.statusMessage = "Choose one reward, then continue to the shop."
+    self.statusMessage = "Choose one reward, then continue to the Black Market."
   else
-    self.statusMessage = "No reward options remain. Continue to the shop."
+    self.statusMessage = "No reward options remain. Continue to the Black Market."
   end
 end
 
@@ -205,11 +211,11 @@ function RewardPreviewState:draw(app)
 
   Panel.draw(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Choose Reward")
   Panel.draw(layout.padding, layout.bottomY, layout.columnWidth, layout.bottomHeight, "Projected Impact")
-  Panel.draw(layout.rightX, layout.bottomY, layout.rightWidth, layout.bottomHeight, stagePreview.title or "After the Shop")
+  Panel.draw(layout.rightX, layout.bottomY, layout.rightWidth, layout.bottomHeight, stagePreview.title or "After the Black Market")
 
   local rewardArea = Panel.getContentArea(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Choose Reward")
   local impactArea = Panel.getContentArea(layout.padding, layout.bottomY, layout.columnWidth, layout.bottomHeight, "Projected Impact")
-  local stageArea = Panel.getContentArea(layout.rightX, layout.bottomY, layout.rightWidth, layout.bottomHeight, stagePreview.title or "After the Shop")
+  local stageArea = Panel.getContentArea(layout.rightX, layout.bottomY, layout.rightWidth, layout.bottomHeight, stagePreview.title or "After the Black Market")
 
   local rewardLines = app:getRewardPreviewLines()
   table.insert(rewardLines, "")

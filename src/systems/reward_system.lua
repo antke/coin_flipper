@@ -6,6 +6,41 @@ local Utils = require("src.core.utils")
 
 local RewardSystem = {}
 
+local REWARD_OPTION_COUNT = 4
+local WILDCARD_CHANCE = 0.25
+local WILDCARD_CAP = 1
+
+local ENEMY_CLASS_POOLS = {
+  forger = {
+    label = "Forger",
+    categories = { "forgery" },
+  },
+  smuggler = {
+    label = "Smuggler",
+    categories = { "smuggle" },
+  },
+  card_shark = {
+    label = "Card Shark",
+    categories = { "prediction", "loaded" },
+  },
+  fortune_teller = {
+    label = "Fortune Teller",
+    categories = { "fate" },
+  },
+  pit_boss = {
+    label = "Pit Boss",
+    categories = { "misdirection" },
+  },
+  magician = {
+    label = "Magician",
+    categories = { "sleight" },
+  },
+  showman = {
+    label = "Showman",
+    categories = { "prestige", "chain" },
+  },
+}
+
 local function hashText(text)
   local hash = 2166136261
 
@@ -16,13 +51,24 @@ local function hashText(text)
   return hash
 end
 
-local function serializeDefinition(definition, contentType)
+local function serializeDefinition(definition, contentType, metadata)
+  metadata = metadata or {}
+
   return {
     type = contentType,
     contentId = definition.id,
     name = definition.name,
     rarity = definition.rarity,
     description = definition.description,
+    rewardSource = metadata.rewardSource,
+    enemyClass = metadata.enemyClass,
+    enemyClassLabel = metadata.enemyClassLabel,
+    rewardPoolCategories = Utils.clone(metadata.rewardPoolCategories),
+    wildcard = metadata.wildcard,
+    wildcardChance = metadata.wildcardChance,
+    wildcardCap = metadata.wildcardCap,
+    trickCategory = definition.trick and definition.trick.category or nil,
+    trickTags = definition.trick and Utils.clone(definition.trick.tags) or nil,
   }
 end
 
@@ -42,11 +88,49 @@ local function buildCoinCandidates(runState)
   return candidates
 end
 
-local function buildUpgradeCandidates(runState)
+local function buildCategoryIndex(categories)
+  if type(categories) ~= "table" then
+    return nil
+  end
+
+  local index = {}
+
+  for _, category in ipairs(categories) do
+    if type(category) == "string" and category ~= "" then
+      index[category] = true
+    end
+  end
+
+  return index
+end
+
+local function definitionMatchesCategories(definition, categoryIndex)
+  if not categoryIndex then
+    return true
+  end
+
+  local trick = definition and definition.trick or nil
+  if trick and categoryIndex[trick.category] then
+    return true
+  end
+
+  for _, tag in ipairs((trick and trick.tags) or definition.tags or {}) do
+    if categoryIndex[tag] then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function buildUpgradeCandidates(runState, categories)
   local candidates = {}
+  local categoryIndex = buildCategoryIndex(categories)
 
   for _, definition in ipairs(Upgrades.getAll()) do
-    if definition.rewardEligible ~= false and Upgrades.isUnlocked(definition, runState.unlockedUpgradeIds) then
+    if definition.rewardEligible ~= false
+      and definitionMatchesCategories(definition, categoryIndex)
+      and Upgrades.isUnlocked(definition, runState.unlockedUpgradeIds) then
       local ok = AcquisitionSystem.canGrantUpgrade(runState, definition.id)
 
       if ok then
@@ -56,6 +140,41 @@ local function buildUpgradeCandidates(runState)
   end
 
   return candidates
+end
+
+local function buildWildcardUpgradeCandidates(runState, categories)
+  local candidates = {}
+  local categoryIndex = buildCategoryIndex(categories)
+
+  for _, definition in ipairs(Upgrades.getAll()) do
+    if definition.rewardEligible ~= false
+      and not definitionMatchesCategories(definition, categoryIndex)
+      and Upgrades.isUnlocked(definition, runState.unlockedUpgradeIds) then
+      local ok = AcquisitionSystem.canGrantUpgrade(runState, definition.id)
+
+      if ok then
+        table.insert(candidates, definition)
+      end
+    end
+  end
+
+  return candidates
+end
+
+local function getEnemyClassPool(enemyClass)
+  if type(enemyClass) ~= "string" or enemyClass == "" then
+    return nil
+  end
+
+  return ENEMY_CLASS_POOLS[enemyClass]
+end
+
+local function getStageEnemyClass(stageRecord)
+  if type(stageRecord) ~= "table" then
+    return nil
+  end
+
+  return stageRecord.enemyClass or stageRecord.opponentEnemyClass or stageRecord.opponentClass
 end
 
 local function chooseDefinition(candidates, rng)
@@ -108,6 +227,101 @@ local function buildExtraCandidates(coinCandidates, upgradeCandidates)
   return candidates
 end
 
+local function buildRewardMetadata(enemyClass, classPool, rewardSource, wildcard)
+  return {
+    rewardSource = rewardSource,
+    enemyClass = enemyClass,
+    enemyClassLabel = classPool and classPool.label or nil,
+    rewardPoolCategories = classPool and Utils.copyArray(classPool.categories or {}) or nil,
+    wildcard = wildcard == true,
+    wildcardChance = WILDCARD_CHANCE,
+    wildcardCap = WILDCARD_CAP,
+  }
+end
+
+local function chooseEnemyClassTrickOptions(runState, rng, stageRecord)
+  local enemyClass = getStageEnemyClass(stageRecord)
+  local classPool = getEnemyClassPool(enemyClass)
+
+  if not classPool then
+    return {}, {
+      enemyClass = enemyClass,
+      enemyClassLabel = nil,
+      rewardPoolCategories = {},
+      wildcardChance = WILDCARD_CHANCE,
+      wildcardCap = WILDCARD_CAP,
+      wildcardOfferCount = 0,
+      classOfferCount = 0,
+      optionCount = 0,
+    }
+  end
+
+  local allUpgradeCandidates = buildUpgradeCandidates(runState)
+  local classUpgradeCandidates = buildUpgradeCandidates(runState, classPool.categories)
+  local wildcardUpgradeCandidates = buildWildcardUpgradeCandidates(runState, classPool.categories)
+  local options = {}
+  local wildcardCount = 0
+  local classOfferCount = 0
+
+  local function removeChosen(definition)
+    allUpgradeCandidates = removeDefinition(allUpgradeCandidates, definition.id)
+    classUpgradeCandidates = removeDefinition(classUpgradeCandidates, definition.id)
+    wildcardUpgradeCandidates = removeDefinition(wildcardUpgradeCandidates, definition.id)
+  end
+
+  while #options < REWARD_OPTION_COUNT and #allUpgradeCandidates > 0 do
+    local useWildcard = false
+
+    if classPool then
+      if #classUpgradeCandidates > 0
+        and #wildcardUpgradeCandidates > 0
+        and wildcardCount < WILDCARD_CAP
+        and rng
+        and rng.nextFloat
+        and rng:nextFloat() < WILDCARD_CHANCE then
+        useWildcard = true
+      end
+    end
+
+    local sourceCandidates = useWildcard and wildcardUpgradeCandidates or classUpgradeCandidates
+    local definition = chooseDefinition(sourceCandidates, rng)
+
+    if not definition and not useWildcard and wildcardCount < WILDCARD_CAP then
+      useWildcard = true
+      sourceCandidates = wildcardUpgradeCandidates
+      definition = chooseDefinition(sourceCandidates, rng)
+    end
+
+    if not definition then
+      break
+    end
+
+    local rewardSource = useWildcard and "wildcard" or "enemy_class"
+    local metadata = buildRewardMetadata(enemyClass, classPool, rewardSource, useWildcard)
+
+    table.insert(options, serializeDefinition(definition, "upgrade", metadata))
+    removeChosen(definition)
+
+    if useWildcard then
+      wildcardCount = wildcardCount + 1
+    else
+      classOfferCount = classOfferCount + 1
+    end
+
+  end
+
+  return options, {
+    enemyClass = enemyClass,
+    enemyClassLabel = classPool and classPool.label or nil,
+    rewardPoolCategories = classPool and Utils.copyArray(classPool.categories or {}) or {},
+    wildcardChance = WILDCARD_CHANCE,
+    wildcardCap = WILDCARD_CAP,
+    wildcardOfferCount = wildcardCount,
+    classOfferCount = classOfferCount,
+    optionCount = #options,
+  }
+end
+
 local function removeSerializedOption(candidates, option)
   local filtered = {}
 
@@ -138,10 +352,22 @@ function RewardSystem.createPreviewRng(runState, stageRecord)
 end
 
 function RewardSystem.buildPreviewForStage(runState, stageRecord)
-  return RewardSystem.buildPreview(runState, RewardSystem.createPreviewRng(runState, stageRecord))
+  return RewardSystem.buildPreview(runState, RewardSystem.createPreviewRng(runState, stageRecord), stageRecord)
 end
 
-function RewardSystem.buildPreview(runState, rng)
+function RewardSystem.buildPreview(runState, rng, stageRecord)
+  local classOptions, generation = chooseEnemyClassTrickOptions(runState, rng, stageRecord)
+
+  if #classOptions > 0 then
+    return {
+      options = classOptions,
+      selectedIndex = nil,
+      choice = nil,
+      claimed = false,
+      generation = generation,
+    }
+  end
+
   local options = {}
 
   local coinCandidates = buildCoinCandidates(runState)
@@ -183,6 +409,7 @@ function RewardSystem.buildPreview(runState, rng)
     selectedIndex = nil,
     choice = nil,
     claimed = false,
+    generation = generation,
   }
 end
 

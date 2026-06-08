@@ -1,29 +1,28 @@
 local Button = require("src.ui.button")
 local Layout = require("src.ui.layout")
 local Panel = require("src.ui.panel")
-local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
 
 local SECTIONS = {
   {
     title = "Run Objective",
     lines = {
-      "Call Heads or Tails, then flip your " .. Terminology.getTermPlural("active_coin") .. ".",
+      "Call Heads or Tails, then flip coins from your Pouch.",
       "Clear stages, improve the run, and beat the final boss.",
     },
   },
   {
     title = "Stage Loop",
     lines = {
-      "Loadout → Stage → Reward → Shop.",
-      "Meta progress persists after the run.",
+      "Pouch → Stage → Reward → Black Market.",
+      "Reputation and Tattoos persist after the run.",
     },
   },
   {
     title = "Resources",
     lines = {
       "Score clears stages before flips run out.",
-      "Chips buy coins and upgrades between stages.",
+      "Influence buys coins and Tricks between stages.",
     },
   },
   {

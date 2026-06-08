@@ -51,6 +51,24 @@ local function ensureTrace(context)
   return context.trace.luck
 end
 
+local function runLuckPhase(runState, context, phaseName, event)
+  if not context or not context.activeSources then
+    return
+  end
+
+  local HookRegistry = require("src.core.hook_registry")
+  local ActionQueue = require("src.core.action_queue")
+  local previousPhase = context.currentPhase
+  local previousLuckGainEvent = context.currentLuckGainEvent
+
+  context.currentPhase = phaseName
+  context.currentLuckGainEvent = event
+  local actions = HookRegistry.runPhase(phaseName, context.activeSources, context)
+  ActionQueue.applyAll(runState, context.stageState, context, actions)
+  context.currentLuckGainEvent = previousLuckGainEvent
+  context.currentPhase = previousPhase
+end
+
 local function snapshot(runState)
   local luck = LuckSystem.normalize(runState)
 
@@ -171,16 +189,21 @@ function LuckSystem.addLuck(runState, context, amount, options)
   local trace = LuckSystem.ensureTrace(context)
   local before = luck.value
   local suppressed = delta > 0 and not LuckSystem.canGeneratePositiveLuck(context, options)
+  local source = options and options.source or nil
+  local reason = options and options.reason or nil
 
   if suppressed then
     if trace then
+      local eventId = string.format("luck_%02d", #(trace.deltas or {}) + 1)
       table.insert(trace.deltas, {
+        eventId = eventId,
         amount = delta,
         appliedAmount = 0,
         before = before,
         after = before,
-        source = options and options.source or nil,
-        reason = options and options.reason or nil,
+        source = source,
+        reason = reason,
+        positive = false,
         suppressed = true,
       })
       trace.after = snapshot(runState)
@@ -191,20 +214,49 @@ function LuckSystem.addLuck(runState, context, amount, options)
 
   luck.value = Utils.clamp(luck.value + delta, 0, luck.max)
   luck.fatedFlipActive = luck.value >= luck.max
+  local appliedAmount = luck.value - before
+  local event = nil
 
   if trace then
-    table.insert(trace.deltas, {
+    event = {
+      eventId = string.format("luck_%02d", #(trace.deltas or {}) + 1),
       amount = delta,
-      appliedAmount = luck.value - before,
+      appliedAmount = appliedAmount,
       before = before,
       after = luck.value,
-      source = options and options.source or nil,
-      reason = options and options.reason or nil,
-    })
+      source = source,
+      reason = reason,
+      positive = appliedAmount > 0,
+      meterFilled = before < luck.max and luck.value >= luck.max,
+    }
+    table.insert(trace.deltas, event)
     trace.after = snapshot(runState)
   end
 
-  return luck.value - before, luck.value
+  event = event or {
+    amount = delta,
+    appliedAmount = appliedAmount,
+    before = before,
+    after = luck.value,
+    source = source,
+    reason = reason,
+    positive = appliedAmount > 0,
+    meterFilled = before < luck.max and luck.value >= luck.max,
+  }
+
+  if appliedAmount > 0 and context and context.luckGainHookActive ~= true and context.luckGainHookFired ~= true then
+    context.luckGainHookFired = true
+    context.luckGainHookActive = true
+    runLuckPhase(runState, context, "luck_gain", event)
+    context.luckGainHookActive = false
+  end
+
+  if event.meterFilled == true and context and context.luckMeterFullHookFired ~= true then
+    context.luckMeterFullHookFired = true
+    runLuckPhase(runState, context, "luck_meter_full", event)
+  end
+
+  return appliedAmount, luck.value
 end
 
 function LuckSystem.applyBaseMatchLuck(runState, context)

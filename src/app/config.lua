@@ -46,8 +46,8 @@ local GameConfig = {
 
   shop = {
     offerCount = 3,
-    guaranteedCoinOffers = 1,
-    guaranteedUpgradeOffers = 1,
+    guaranteedCoinOffers = 2,
+    guaranteedUpgradeOffers = 0,
     rerollCost = 1,
     rarityWeights = {
       common = 1.0,

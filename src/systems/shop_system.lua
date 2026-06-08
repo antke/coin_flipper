@@ -11,6 +11,8 @@ local Validator = require("src.core.validator")
 
 local ShopSystem = {}
 
+local MAX_BLACK_MARKET_TRICK_OFFERS = 1
+
 local function buildUnownedPool(runState, definitions, offerType)
   local pool = {}
   local ownedIndex = {}
@@ -24,7 +26,9 @@ local function buildUnownedPool(runState, definitions, offerType)
   end
 
   for _, definition in ipairs(definitions) do
-    if isUnlocked(definition, unlockedIds) and not ownedIndex[definition.id] then
+    local offerEligible = offerType ~= "upgrade" or definition.shopEligible == true
+
+    if offerEligible and isUnlocked(definition, unlockedIds) and not ownedIndex[definition.id] then
       table.insert(pool, {
         type = offerType,
         contentId = definition.id,
@@ -211,11 +215,14 @@ local function buildBaseOffers(runState, stageState, metaProjection, rng, offers
     end
   end
 
-  local mixedPool = {}
-  Utils.appendAll(mixedPool, coinPool)
-  Utils.appendAll(mixedPool, upgradePool)
-
   while #offers < (shopRules.offerCount + bonusOfferCount) do
+    local mixedPool = {}
+    Utils.appendAll(mixedPool, coinPool)
+
+    if countOffersByType(offers, "upgrade") < MAX_BLACK_MARKET_TRICK_OFFERS then
+      Utils.appendAll(mixedPool, upgradePool)
+    end
+
     local offer = takeRandomOffer(mixedPool, rng, usedIds, shopRules.rarityWeights)
 
     if not offer then

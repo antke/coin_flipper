@@ -9,14 +9,20 @@ local Utils = require("src.core.utils")
 local Validator = require("src.core.validator")
 
 local RunInitializer = {}
-local DEFAULT_STARTER_COLLECTION = { "heads_loaded_penny", "tails_loaded_penny" }
+local DEFAULT_STARTER_COLLECTION = {
+  "copper_bent_coin",
+  "copper_blank_coin",
+  "copper_hollow_coin",
+  "copper_marked_coin",
+  "copper_lucky_coin",
+  "copper_weighted_coin",
+}
 
 local function buildStarterPurse()
   local starterPurse = {}
 
-  for _ = 1, 5 do
-    table.insert(starterPurse, "heads_loaded_penny")
-    table.insert(starterPurse, "tails_loaded_penny")
+  for index = 1, 10 do
+    table.insert(starterPurse, DEFAULT_STARTER_COLLECTION[((index - 1) % #DEFAULT_STARTER_COLLECTION) + 1])
   end
 
   return starterPurse

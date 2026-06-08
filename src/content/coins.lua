@@ -1,315 +1,136 @@
 local definitions = {
   {
-    id = "regular_dollar",
-    name = "$ Coin",
+    id = "copper_bent_coin",
+    name = "Bent Coin",
     rarity = "common",
-    description = "A familiar casino token with two honest faces.",
-    tags = { "regular", "filler" },
-    typeTags = { "basic" },
+    archetype = "bent",
+    material = "copper",
+    materialRank = 1,
+    base_score = 1,
+    material_variants = {
+      copper = { id = "copper_bent_coin", materialRank = 1, base_score = 1 },
+    },
+    description = "A crooked build piece for Prestige and Chain Tricks.",
+    effectDescription = "No direct flip effect. Synergizes with Prestige and Chain Tricks.",
+    tags = { "prestige", "chain", "bent", "unstable" },
+    typeTags = { "prestige", "chain" },
+    mechanic_terms = { "resolution_packet", "prestige_replay", "chained_coin", "chain_depth" },
+    trick_synergy = { "prestige", "chain" },
     isStarter = true,
     triggers = {},
   },
   {
-    id = "heads_loaded_penny",
-    name = "Heads-Loaded Penny",
+    id = "copper_blank_coin",
+    name = "Blank Coin",
     rarity = "common",
-    description = "A crooked coin coin rigged for Heads.",
-    tags = { "starter", "cheat", "heads" },
-    typeTags = { "odds", "heads" },
+    archetype = "blank",
+    material = "copper",
+    materialRank = 1,
+    base_score = 1,
+    material_variants = {
+      copper = { id = "copper_blank_coin", materialRank = 1, base_score = 1 },
+    },
+    description = "An unstamped build piece for Forgery Tricks.",
+    effectDescription = "No direct flip effect. Synergizes with Forgery Tricks.",
+    tags = { "counterfeit", "blank", "forgery", "copyable" },
+    typeTags = { "forgery", "copyable" },
+    mechanic_terms = { "forged_identity", "forge_identity", "add_forged_identity" },
+    trick_synergy = { "forgery" },
     isStarter = true,
-    triggers = {
-      {
-        hook = "before_coin_roll",
-        effects = {
-          { op = "modify_coin_weight", side = "heads", amount = 0.35 },
-        },
-      },
-    },
+    triggers = {},
   },
   {
-    id = "tails_loaded_penny",
-    name = "Tails-Loaded Penny",
+    id = "copper_hollow_coin",
+    name = "Hollow Coin",
     rarity = "common",
-    description = "A crooked coin rigged for Tails.",
-    tags = { "starter", "cheat", "tails" },
-    typeTags = { "odds", "tails" },
+    archetype = "hollow",
+    material = "copper",
+    materialRank = 1,
+    base_score = 1,
+    material_variants = {
+      copper = { id = "copper_hollow_coin", materialRank = 1, base_score = 1 },
+    },
+    description = "A lightweight build piece for Smuggling Tricks.",
+    effectDescription = "No direct flip effect. Synergizes with Smuggling Tricks.",
+    tags = { "smuggle", "hollow", "contraband", "hand_overflow" },
+    typeTags = { "smuggle", "contraband" },
+    mechanic_terms = { "smuggle_coin_from_hand", "overloaded_board", "contraband_copy", "increase_refill_count" },
+    trick_synergy = { "smuggle" },
     isStarter = true,
-    triggers = {
-      {
-        hook = "before_coin_roll",
-        effects = {
-          { op = "modify_coin_weight", side = "tails", amount = 0.35 },
-        },
-      },
-    },
+    triggers = {},
   },
   {
-    id = "lucky_miss",
-    name = "Lucky Miss",
+    id = "copper_marked_coin",
+    name = "Marked Coin",
     rarity = "common",
-    description = "A scuffed fallback piece that pays off bad guesses.",
-    effectDescription = "+1 extra Chip when this coin misses your call.",
-    tags = { "starter", "economy", "miss" },
-    typeTags = { "economy", "safety" },
+    archetype = "marked",
+    material = "copper",
+    materialRank = 1,
+    base_score = 1,
+    material_variants = {
+      copper = { id = "copper_marked_coin", materialRank = 1, base_score = 1 },
+    },
+    description = "A readable build piece for Prediction and Foretold Tricks.",
+    effectDescription = "No direct flip effect. Synergizes with Foretold Tricks.",
+    tags = { "marked", "foretold", "read" },
+    typeTags = { "foretold", "read" },
+    mechanic_terms = { "foretell_coin_result", "foretold_result" },
+    trick_synergy = { "foretold", "prediction" },
     isStarter = true,
-    triggers = {
-      {
-        hook = "after_coin_roll",
-        condition = { match = false },
-        effects = {
-          { op = "add_shop_points", amount = 1 },
-        },
-      },
-    },
+    triggers = {},
   },
   {
-    id = "cross_catch",
-    name = "Cross Catch",
+    id = "copper_lucky_coin",
+    name = "Lucky Coin",
     rarity = "common",
-    description = "A cross-marked catcher's coin for Heads-side gambits.",
-    effectDescription = "On a Heads call, if this coin lands Tails, gain +2 extra Chips.",
-    tags = { "economy", "heads", "counter" },
-    typeTags = { "safety", "economy" },
-    triggers = {
-      {
-        hook = "after_coin_roll",
-        condition = { call = "heads", result = "tails" },
-        effects = {
-          { op = "add_shop_points", amount = 2 },
-        },
-      },
+    archetype = "lucky",
+    material = "copper",
+    materialRank = 1,
+    base_score = 1,
+    material_variants = {
+      copper = { id = "copper_lucky_coin", materialRank = 1, base_score = 1 },
     },
-  },
-  {
-    id = "heads_cache",
-    name = "Heads Cache",
-    rarity = "common",
-    description = "A warm pocket cache keyed to Heads.",
-    effectDescription = "+2 extra Chips when this coin matches a Heads call.",
-    tags = { "heads", "economy", "match" },
-    typeTags = { "economy", "heads" },
-    triggers = {
-      {
-        hook = "after_coin_roll",
-        condition = { call = "heads", result = "heads" },
-        effects = {
-          { op = "add_shop_points", amount = 2 },
-        },
-      },
-    },
-  },
-  {
-    id = "tails_cache",
-    name = "Tails Cache",
-    rarity = "common",
-    description = "A cool pocket cache keyed to Tails.",
-    effectDescription = "+2 extra Chips when this coin matches a Tails call.",
-    tags = { "tails", "economy", "match" },
-    typeTags = { "economy", "tails" },
-    triggers = {
-      {
-        hook = "after_coin_roll",
-        condition = { call = "tails", result = "tails" },
-        effects = {
-          { op = "add_shop_points", amount = 2 },
-        },
-      },
-    },
-  },
-  {
-    id = "heads_anchor",
-    name = "Heads Anchor",
-    rarity = "common",
-    description = "A heavy anchor coin that drifts toward Heads over time.",
-    effectDescription = "On each Heads match, permanently gains +5% Heads chance.",
-    tags = { "heads", "weight", "attunement" },
-    typeTags = { "attunement", "heads" },
-    triggers = {
-      {
-        hook = "after_coin_roll",
-        condition = { call = "heads", result = "heads" },
-        effects = {
-          { op = "modify_coin_weight", side = "heads", amount = 0.05, persistent = true },
-        },
-      },
-    },
-  },
-  {
-    id = "tails_anchor",
-    name = "Tails Anchor",
-    rarity = "common",
-    description = "A heavy anchor coin that drifts toward Tails over time.",
-    effectDescription = "On each Tails match, permanently gains +5% Tails chance.",
-    tags = { "tails", "weight", "attunement" },
-    typeTags = { "attunement", "tails" },
-    triggers = {
-      {
-        hook = "after_coin_roll",
-        condition = { call = "tails", result = "tails" },
-        effects = {
-          { op = "modify_coin_weight", side = "tails", amount = 0.05, persistent = true },
-        },
-      },
-    },
-  },
-  {
-    id = "pocket_refund",
-    name = "Pocket Refund",
-    rarity = "common",
-    description = "A quick-return coin with a hidden rebate notch.",
-    effectDescription = "When this coin is returned to the pouch by Sleight, gain +1 extra Chip.",
-    tags = { "sleight", "economy" },
-    typeTags = { "economy", "motion" },
-    triggers = {
-      {
-        hook = "after_sleight_return",
-        effects = {
-          { op = "add_shop_points", amount = 1 },
-        },
-      },
-    },
-  },
-  {
-    id = "opening_penny",
-    name = "Opening Penny",
-    rarity = "common",
-    description = "A bright opener kept ready at the top of the pouch.",
-    effectDescription = "When this coin is drawn into a new hand, gain +1 extra Chip.",
-    tags = { "draw", "economy" },
-    typeTags = { "economy", "motion" },
-    triggers = {
-      {
-        hook = "after_hand_draw",
-        effects = {
-          { op = "add_shop_points", amount = 1 },
-        },
-      },
-    },
-  },
-  {
-    id = "slider_cent",
-    name = "Slider Cent",
-    rarity = "uncommon",
-    description = "A slick cent that rewards deft repositioning.",
-    effectDescription = "When this coin is moved by hand reordering, gain +1 extra Chip.",
-    tags = { "reorder", "economy" },
-    typeTags = { "economy", "motion" },
-    triggers = {
-      {
-        hook = "after_hand_reorder",
-        effects = {
-          { op = "add_shop_points", amount = 1 },
-        },
-      },
-    },
-  },
-  {
-    id = "commitment_chip",
-    name = "Commitment Chip",
-    rarity = "uncommon",
-    description = "A weighty chip made for decisive hands.",
-    effectDescription = "Before flipping the hand, apply a 1.10x score multiplier.",
-    tags = { "flip", "multiplier" },
-    typeTags = { "combo", "motion" },
-    triggers = {
-      {
-        hook = "before_hand_flip",
-        effects = {
-          { op = "apply_score_multiplier", value = 1.10 },
-        },
-      },
-    },
-  },
-  {
-    id = "left_lift",
-    name = "Left Lift",
-    rarity = "uncommon",
-    description = "A tilted coin that pulls fortune from the left.",
-    effectDescription = "Before rolling, the coin to the left gains +20% Heads chance.",
-    tags = { "neighbor", "heads", "weight" },
-    typeTags = { "odds", "neighbor", "heads" },
-    triggers = {
-      {
-        hook = "before_coin_roll",
-        effects = {
-          { op = "modify_coin_weight", side = "heads", amount = 0.20, target = "self_and_left_neighbor" },
-        },
-      },
-    },
-  },
-  {
-    id = "right_drift",
-    name = "Right Drift",
-    rarity = "uncommon",
-    description = "A drifting coin that tugs fate to the right.",
-    effectDescription = "Before rolling, the coin to the right gains +20% Tails chance.",
-    tags = { "neighbor", "tails", "weight" },
-    typeTags = { "odds", "neighbor", "tails" },
-    triggers = {
-      {
-        hook = "before_coin_roll",
-        effects = {
-          { op = "modify_coin_weight", side = "tails", amount = 0.20, target = "self_and_right_neighbor" },
-        },
-      },
-    },
-  },
-  {
-    id = "glass_nickel",
-    name = "Glass Nickel",
-    rarity = "rare",
-    description = "A brittle nickel that flashes brightest under pressure.",
-    effectDescription = "Each match primes a 1.15x score multiplier before base scoring.",
-    tags = { "match", "multiplier", "score" },
-    typeTags = { "combo" },
+    description = "A fate-touched build piece for Luck Meter Tricks.",
+    effectDescription = "+1 Luck Meter progress when this coin matches your call.",
+    tags = { "fate", "luck_meter", "fated_flip", "destiny" },
+    typeTags = { "fate", "luck_meter" },
+    mechanic_terms = { "luck_meter", "luck_gain", "fated_flip", "fated_flip_payoff" },
+    trick_synergy = { "luck_meter", "fated_flip" },
+    isStarter = true,
     triggers = {
       {
         hook = "after_coin_roll",
         condition = { match = true },
         effects = {
-          { op = "apply_score_multiplier", value = 1.15 },
+          { op = "add_luck", amount = 1, reason = "lucky_coin_match" },
         },
       },
     },
   },
   {
-    id = "moon_mint",
-    name = "Moon Mint",
-    rarity = "uncommon",
-    description = "A pale mint struck for the Tails side of the moon.",
-    effectDescription = "On a Tails match, gain +1 extra Chip.",
-    tags = { "tails", "weight", "economy" },
-    typeTags = { "odds", "economy", "tails" },
+    id = "copper_weighted_coin",
+    name = "Weighted Coin",
+    rarity = "common",
+    archetype = "weighted",
+    material = "copper",
+    materialRank = 1,
+    base_score = 1,
+    call_match_chance = 0.65,
+    material_variants = {
+      copper = { id = "copper_weighted_coin", materialRank = 1, base_score = 1, call_match_chance = 0.65 },
+    },
+    description = "A loaded build piece that leans toward your declared call.",
+    effectDescription = "65% chance to match your call.",
+    tags = { "loaded", "weight", "odds", "reliable" },
+    typeTags = { "loaded", "reliable" },
+    mechanic_terms = { "set_call_match_chance", "call_match_chance" },
+    trick_synergy = { "loaded" },
+    isStarter = true,
     triggers = {
       {
         hook = "before_coin_roll",
         effects = {
-          { op = "modify_coin_weight", side = "tails", amount = 0.15 },
-        },
-      },
-      {
-        hook = "after_coin_roll",
-        condition = { call = "tails", result = "tails" },
-        effects = {
-          { op = "add_shop_points", amount = 1 },
-        },
-      },
-    },
-  },
-  {
-    id = "fate_token",
-    name = "Fate Token",
-    rarity = "uncommon",
-    description = "An omen-stamped token that feeds the Luck Meter.",
-    effectDescription = "On a match, add +2 extra Luck Meter progress.",
-    tags = { "luck", "match" },
-    typeTags = { "luck", "combo" },
-    triggers = {
-      {
-        hook = "after_coin_roll",
-        condition = { match = true },
-        effects = {
-          { op = "add_luck", amount = 2, reason = "fate_token_match" },
+          { op = "add_weight", side = "call", amount = 0.15 },
         },
       },
     },
@@ -317,77 +138,13 @@ local definitions = {
 }
 
 local visualIdentities = {
-  regular_dollar = { face = "regular_dollar", rim = "score" },
-  heads_loaded_penny = { face = "heads", rim = "weight" },
-  tails_loaded_penny = { face = "tails", rim = "weight" },
-  lucky_miss = { face = "lucky_miss", rim = "safety" },
-  cross_catch = { face = "cross_catch", rim = "safety" },
-  heads_cache = { face = "heads_cache", rim = "economy" },
-  tails_cache = { face = "tails_cache", rim = "economy" },
-  heads_anchor = { face = "heads_anchor", rim = "weight" },
-  tails_anchor = { face = "tails_anchor", rim = "weight" },
-  pocket_refund = { face = "pocket_refund", rim = "motion" },
-  opening_penny = { face = "opening_penny", rim = "motion" },
-  slider_cent = { face = "slider_cent", rim = "motion" },
-  commitment_chip = { face = "commitment_chip", rim = "motion" },
-  left_lift = { face = "left_lift", rim = "motion" },
-  right_drift = { face = "right_drift", rim = "motion" },
-  glass_nickel = { face = "glass_nickel", rim = "combo" },
-  moon_mint = { face = "moon_mint", rim = "weight" },
-  fate_token = { face = "lucky_miss", rim = "combo" },
+  copper_bent_coin = { face = "bent", rim = "combo" },
+  copper_blank_coin = { face = "blank", rim = "score" },
+  copper_hollow_coin = { face = "hollow", rim = "motion" },
+  copper_marked_coin = { face = "marked", rim = "safety" },
+  copper_lucky_coin = { face = "lucky", rim = "combo" },
+  copper_weighted_coin = { face = "weighted", rim = "weight" },
 }
-
-local function coinHasTag(definition, tag)
-  for _, value in ipairs(definition.tags or {}) do
-    if value == tag then
-      return true
-    end
-  end
-
-  return false
-end
-
-local function effectsAddScore(effects)
-  for _, effect in ipairs(effects or {}) do
-    if effect.op == "add_stage_score" or effect.op == "add_run_score" then
-      return true
-    end
-
-    if effect.op == "queue_actions" and effectsAddScore(effect.actions) then
-      return true
-    end
-  end
-
-  return false
-end
-
-local function coinAddsScore(definition)
-  if definition.neighbor and (definition.neighbor.stageScore or definition.neighbor.runScore) then
-    return true
-  end
-
-  if definition.combo and (definition.combo.stageScore or definition.combo.runScore) then
-    return true
-  end
-
-  for _, trigger in ipairs(definition.triggers or {}) do
-    if effectsAddScore(trigger.effects) then
-      return true
-    end
-  end
-
-  return false
-end
-
-local activeDefinitions = {}
-
-for _, definition in ipairs(definitions) do
-  if not coinHasTag(definition, "boss") and not coinAddsScore(definition) then
-    table.insert(activeDefinitions, definition)
-  end
-end
-
-definitions = activeDefinitions
 
 local byId = {}
 
