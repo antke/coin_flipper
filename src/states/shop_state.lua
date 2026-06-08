@@ -53,7 +53,7 @@ local function getTrickMetadataLine(contentId)
 end
 
 function ShopState:canBuyOffer(app, offer)
-  return offer and not offer.purchased and app.runState.shopPoints >= offer.price
+  return offer and not offer.purchased and app.runState.influence >= offer.price
 end
 
 function ShopState:tryBuyOffer(app, offerIndex)
@@ -69,7 +69,7 @@ function ShopState:tryBuyOffer(app, offerIndex)
     return false, "offer_already_purchased"
   end
 
-  if app.runState.shopPoints < offer.price then
+  if app.runState.influence < offer.price then
     self.statusMessage = "Not enough Influence for that offer."
     return false, "not_enough_shop_points"
   end
@@ -672,7 +672,7 @@ function ShopState:draw(app)
   love.graphics.print("Black Market", layout.padding, layout.padding)
   love.graphics.setFont(app.fonts.body)
   Theme.applyColor(Theme.colors.mutedText)
-  love.graphics.print(string.format("Influence: %d", app.runState.shopPoints), layout.padding, layout.padding + 30)
+  love.graphics.print(string.format("Influence: %d", app.runState.influence), layout.padding, layout.padding + 30)
 
   local infoLines = {
     string.format("Pouch: %d coin(s)", #(app.runState.coinInstances or {})),

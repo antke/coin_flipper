@@ -60,7 +60,7 @@ local function resolveUntilStageEnd(env, step)
 end
 
 local function forceStageClearTestOnly(env, step)
-  env.stageState.stageScore = step.score or env.stageState.targetScore
+  env.stageState.scoreAppliedToHp = step.score or env.stageState.opponentHp
   env.stageState.stageStatus = "cleared"
   Common.assertRuntime(env, "fixtures.force_stage_clear_test_only", { history = true })
   return env.stageState

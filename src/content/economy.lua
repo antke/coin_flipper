@@ -41,7 +41,7 @@ function EconomyContent.resolveOfferPrice(offerType, definition)
 
   local basePrice = EconomyContent.shop.upgradeRarityPrices[rarity] or EconomyContent.shop.fallbackPrice
 
-  if offerType == "upgrade" then
+  if offerType == "trick" or offerType == "upgrade" then
     return basePrice + EconomyContent.shop.upgradePriceBonus
   end
 
@@ -63,7 +63,7 @@ function EconomyContent.calculateVictoryShopPointReward(stageState)
     }
   end
 
-  local overkillDamage = math.max(0, (stageState.stageScore or 0) - (stageState.targetScore or 0))
+  local overkillDamage = math.max(0, (stageState.scoreAppliedToHp or stageState.stageScore or 0) - (stageState.opponentHp or stageState.targetScore or 0))
   local overkillReward = math.floor(overkillDamage * rewards.overkillShopPointsPerDamage)
   overkillReward = math.min(rewards.overkillShopPointsCap, overkillReward)
 

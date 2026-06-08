@@ -131,8 +131,12 @@ function ShopFlowSystem.purchase(visit, offerIndex)
 end
 
 function ShopFlowSystem.findOfferIndex(visit, offerType, contentId)
+  local canonicalOfferType = offerType == "upgrade" and "trick" or offerType
+
   for index, offer in ipairs(visit.offers or {}) do
-    if not offer.purchased and offer.type == offerType and offer.contentId == contentId then
+    local canonicalCurrentType = offer.type == "upgrade" and "trick" or offer.type
+
+    if not offer.purchased and canonicalCurrentType == canonicalOfferType and offer.contentId == contentId then
       return index, offer
     end
   end

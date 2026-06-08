@@ -13,20 +13,24 @@ local ShopSystem = {}
 
 local MAX_BLACK_MARKET_TRICK_OFFERS = 1
 
+local function isTrickType(offerType)
+  return offerType == "trick" or offerType == "upgrade"
+end
+
 local function buildUnownedPool(runState, definitions, offerType)
   local pool = {}
   local ownedIndex = {}
   local isUnlocked = offerType == "coin" and Coins.isUnlocked or Upgrades.isUnlocked
-  local unlockedIds = offerType == "coin" and runState.unlockedCoinIds or runState.unlockedUpgradeIds
+  local unlockedIds = offerType == "coin" and runState.unlockedCoinIds or (runState.unlockedTrickIds or runState.unlockedUpgradeIds)
 
-  local ownedList = offerType == "coin" and {} or runState.ownedUpgradeIds
+  local ownedList = offerType == "coin" and {} or (runState.ownedTrickIds or runState.ownedUpgradeIds)
 
   for _, ownedId in ipairs(ownedList or {}) do
     ownedIndex[ownedId] = true
   end
 
   for _, definition in ipairs(definitions) do
-    local offerEligible = offerType ~= "upgrade" or definition.shopEligible == true
+    local offerEligible = not isTrickType(offerType) or definition.shopEligible == true
 
     if offerEligible and isUnlocked(definition, unlockedIds) and not ownedIndex[definition.id] then
       table.insert(pool, {
@@ -155,7 +159,7 @@ end
 local function buildPurchaseActions(offer, chargedPrice)
   local actions = {
     {
-      op = "add_shop_points",
+      op = "add_influence",
       amount = -chargedPrice,
       applyMultiplier = false,
       category = "purchase_cost",
@@ -175,7 +179,7 @@ local function buildPurchaseActions(offer, chargedPrice)
   if offer.type == "coin" then
     table.insert(actions, 2, { op = "grant_coin", coinId = offer.contentId })
   else
-    table.insert(actions, 2, { op = "grant_upgrade", upgradeId = offer.contentId })
+    table.insert(actions, 2, { op = "grant_trick", trickId = offer.contentId })
   end
 
   return actions
@@ -194,10 +198,10 @@ local function buildBaseOffers(runState, stageState, metaProjection, rng, offers
   end
 
   local coinPool = buildUnownedPool(runState, Coins.getAll(), "coin")
-  local upgradePool = buildUnownedPool(runState, Upgrades.getAll(), "upgrade")
+  local upgradePool = buildUnownedPool(runState, Upgrades.getAll(), "trick")
 
   local neededCoinOffers = math.max(0, shopRules.guaranteedCoinOffers - countOffersByType(offers, "coin"))
-  local neededUpgradeOffers = math.max(0, shopRules.guaranteedUpgradeOffers - countOffersByType(offers, "upgrade"))
+  local neededUpgradeOffers = math.max(0, shopRules.guaranteedUpgradeOffers - countOffersByType(offers, "trick") - countOffersByType(offers, "upgrade"))
 
   for _ = 1, neededCoinOffers do
     local offer = takeRandomOffer(coinPool, rng, usedIds, shopRules.rarityWeights)
@@ -219,7 +223,7 @@ local function buildBaseOffers(runState, stageState, metaProjection, rng, offers
     local mixedPool = {}
     Utils.appendAll(mixedPool, coinPool)
 
-    if countOffersByType(offers, "upgrade") < MAX_BLACK_MARKET_TRICK_OFFERS then
+    if (countOffersByType(offers, "trick") + countOffersByType(offers, "upgrade")) < MAX_BLACK_MARKET_TRICK_OFFERS then
       Utils.appendAll(mixedPool, upgradePool)
     end
 
@@ -275,7 +279,7 @@ function ShopSystem.purchaseOffer(runState, offer, stageState, metaProjection)
     return failPurchase(context.purchaseBlockReason or "purchase_blocked", context)
   end
 
-  if runState.shopPoints < offer.price then
+  if runState.influence < offer.price then
     return failPurchase("not_enough_shop_points", context)
   end
 
@@ -316,7 +320,7 @@ function ShopSystem.canReroll(runState, stageState, metaProjection)
     return true
   end
 
-  if runState.shopPoints < rerollCost then
+  if runState.influence < rerollCost then
     return false, "not_enough_shop_points"
   end
 
@@ -339,7 +343,7 @@ function ShopSystem.consumeReroll(runState, stageState, metaProjection)
     return "free"
   end
 
-  runState.shopPoints = runState.shopPoints - rerollCost
+  runState.influence = runState.influence - rerollCost
   Validator.assertRuntimeInvariants("shop_system.consumeReroll", runState, stageState)
   return "paid"
 end

@@ -11,9 +11,15 @@ EffectiveValueSystem.KNOWN_KEYS = {
     integer = true,
     min = 0,
   },
+  ["run.maxFlipSlots"] = {
+    defaultMode = "add",
+    basePath = "run.startingFlipSlots",
+    integer = true,
+    min = 1,
+  },
   ["run.maxActiveCoinSlots"] = {
     defaultMode = "add",
-    basePath = "run.startingCoinSlots",
+    basePath = "run.startingFlipSlots",
     integer = true,
     min = 1,
   },
@@ -29,6 +35,12 @@ EffectiveValueSystem.KNOWN_KEYS = {
     integer = true,
     min = 1,
   },
+  ["run.startingInfluence"] = {
+    defaultMode = "add",
+    basePath = "economy.startingInfluence",
+    integer = true,
+    min = 0,
+  },
   ["run.startingShopPoints"] = {
     defaultMode = "add",
     basePath = "economy.startingShopPoints",
@@ -39,6 +51,11 @@ EffectiveValueSystem.KNOWN_KEYS = {
     defaultMode = "add",
     basePath = "economy.startingShopRerolls",
     integer = true,
+    min = 0,
+  },
+  ["economy.influenceMultiplier"] = {
+    defaultMode = "multiply",
+    basePath = "economy.influenceMultiplier",
     min = 0,
   },
   ["economy.shopPointMultiplier"] = {
@@ -98,8 +115,12 @@ EffectiveValueSystem.KNOWN_KEYS = {
 }
 
 EffectiveValueSystem.LEGACY_MODIFIER_ALIASES = {
+  influenceMultiplier = {
+    path = "economy.influenceMultiplier",
+    mode = "multiply",
+  },
   shopPointMultiplier = {
-    path = "economy.shopPointMultiplier",
+    path = "economy.influenceMultiplier",
     mode = "multiply",
   },
   bonusStartingCoins = {
@@ -107,25 +128,31 @@ EffectiveValueSystem.LEGACY_MODIFIER_ALIASES = {
     mode = "add",
   },
   bonusCoinSlots = {
-    path = "run.maxActiveCoinSlots",
+    path = "run.maxFlipSlots",
     mode = "add",
   },
   bonusRerolls = {
     path = "run.startingShopRerolls",
     mode = "add",
   },
+  startingInfluence = {
+    path = "run.startingInfluence",
+    mode = "add",
+  },
   startingShopPoints = {
-    path = "run.startingShopPoints",
+    path = "run.startingInfluence",
     mode = "add",
   },
 }
 
 EffectiveValueSystem.BOOTSTRAP_RESOLVED_VALUE_ALIASES = {
   ["run.startingCollectionSize"] = { "startingCollectionSize" },
-  ["run.maxActiveCoinSlots"] = { "maxActiveCoinSlots" },
+  ["run.maxFlipSlots"] = { "maxFlipSlots", "maxActiveCoinSlots" },
+  ["run.maxActiveCoinSlots"] = { "maxActiveCoinSlots", "maxFlipSlots" },
   ["stage.flipsPerStage"] = { "baseFlipsPerStage" },
   ["purse.handSize"] = { "handSize" },
-  ["run.startingShopPoints"] = { "startingShopPoints" },
+  ["run.startingInfluence"] = { "startingInfluence", "startingShopPoints" },
+  ["run.startingShopPoints"] = { "startingShopPoints", "startingInfluence" },
   ["run.startingShopRerolls"] = { "startingShopRerolls" },
 }
 
@@ -489,10 +516,10 @@ function EffectiveValueSystem.resolveRunBootstrapValues(metaProjection, options)
   options = options or {}
 
   local bootstrapRunState = {
-    ownedUpgradeIds = Utils.copyArray(options.ownedUpgradeIds or {}),
+    ownedTrickIds = Utils.copyArray(options.ownedTrickIds or options.ownedUpgradeIds or {}),
     collectionCoinIds = Utils.copyArray(options.starterCollection or {}),
-    equippedCoinSlots = {},
-    maxActiveCoinSlots = 0,
+    flipSlots = {},
+    maxFlipSlots = 0,
     temporaryRunEffects = {},
     metaProjection = metaProjection,
   }
@@ -513,20 +540,28 @@ function EffectiveValueSystem.resolveRunBootstrapValues(metaProjection, options)
     end
   end
 
-  local maxActiveCoinSlots = options.maxActiveCoinSlots
+  local maxFlipSlots = options.maxFlipSlots
 
-  if maxActiveCoinSlots == nil then
-    maxActiveCoinSlots = getResolvedBootstrapOverride(options, "run.maxActiveCoinSlots")
+  if maxFlipSlots == nil then
+    maxFlipSlots = options.maxActiveCoinSlots
   end
 
-  if maxActiveCoinSlots == nil then
-    maxActiveCoinSlots = EffectiveValueSystem.getEffectiveValue("run.maxActiveCoinSlots", bootstrapRunState, nil, {
+  if maxFlipSlots == nil then
+    maxFlipSlots = getResolvedBootstrapOverride(options, "run.maxFlipSlots")
+  end
+
+  if maxFlipSlots == nil then
+    maxFlipSlots = getResolvedBootstrapOverride(options, "run.maxActiveCoinSlots")
+  end
+
+  if maxFlipSlots == nil then
+    maxFlipSlots = EffectiveValueSystem.getEffectiveValue("run.maxFlipSlots", bootstrapRunState, nil, {
       metaProjection = metaProjection,
     })
   end
 
-  bootstrapRunState.maxActiveCoinSlots = maxActiveCoinSlots
-  bootstrapRunState.equippedCoinSlots = Utils.copyArray(options.equippedCoinSlots or {})
+  bootstrapRunState.maxFlipSlots = maxFlipSlots
+  bootstrapRunState.flipSlots = Utils.copyArray(options.flipSlots or options.equippedCoinSlots or {})
 
   local baseFlipsPerStage = options.baseFlipsPerStage
   if baseFlipsPerStage == nil then
@@ -539,13 +574,21 @@ function EffectiveValueSystem.resolveRunBootstrapValues(metaProjection, options)
     })
   end
 
-  local startingShopPoints = options.startingShopPoints
-  if startingShopPoints == nil then
-    startingShopPoints = getResolvedBootstrapOverride(options, "run.startingShopPoints")
+  local startingInfluence = options.startingInfluence
+  if startingInfluence == nil then
+    startingInfluence = options.startingShopPoints
   end
 
-  if startingShopPoints == nil then
-    startingShopPoints = EffectiveValueSystem.getEffectiveValue("run.startingShopPoints", bootstrapRunState, nil, {
+  if startingInfluence == nil then
+    startingInfluence = getResolvedBootstrapOverride(options, "run.startingInfluence")
+  end
+
+  if startingInfluence == nil then
+    startingInfluence = getResolvedBootstrapOverride(options, "run.startingShopPoints")
+  end
+
+  if startingInfluence == nil then
+    startingInfluence = EffectiveValueSystem.getEffectiveValue("run.startingInfluence", bootstrapRunState, nil, {
       metaProjection = metaProjection,
     })
   end
@@ -574,9 +617,11 @@ function EffectiveValueSystem.resolveRunBootstrapValues(metaProjection, options)
 
   return {
     startingCollectionSize = startingCollectionSize,
-    maxActiveCoinSlots = maxActiveCoinSlots,
+    maxFlipSlots = maxFlipSlots,
+    maxActiveCoinSlots = maxFlipSlots,
     baseFlipsPerStage = baseFlipsPerStage,
-    startingShopPoints = startingShopPoints,
+    startingInfluence = startingInfluence,
+    startingShopPoints = startingInfluence,
     startingShopRerolls = startingShopRerolls,
     handSize = handSize,
   }

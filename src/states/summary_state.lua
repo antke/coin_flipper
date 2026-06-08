@@ -136,7 +136,7 @@ function SummaryState:draw(app)
 
   local stageHistoryLines = {}
   for _, stageRecord in ipairs(summary.stageHistory or {}) do
-    local line = string.format("- R%d %s => %s score to HP %d/%d", stageRecord.roundIndex, stageRecord.opponentName or stageRecord.stageLabel, stageRecord.status, stageRecord.stageScore, stageRecord.targetScore)
+    local line = string.format("- R%d %s => %s score to HP %d/%d", stageRecord.roundIndex, stageRecord.opponentName or stageRecord.stageLabel, stageRecord.status, stageRecord.scoreAppliedToHp or stageRecord.stageScore, stageRecord.opponentHp or stageRecord.targetScore)
     local victoryChipReward = stageRecord.victoryShopPointReward
 
     if victoryChipReward and (victoryChipReward.total or 0) > 0 then

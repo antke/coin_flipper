@@ -121,7 +121,7 @@ function BossWarningState:draw(app)
   local opponent = app.stageState and app.stageState.opponent or {}
   local keyLines = {
     string.format("Opponent: %s", opponent.name or "Boss"),
-    string.format("Opponent HP: %d", app.stageState and app.stageState.targetScore or 0),
+    string.format("Opponent HP: %d", app.stageState and (app.stageState.opponentHp or app.stageState.targetScore) or 0),
     string.format("Flips Available: %d", app.stageState and app.stageState.flipsRemaining or 0),
     string.format("Current Build: %s", app:getCurrentLoadoutKey()),
   }

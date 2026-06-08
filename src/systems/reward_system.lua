@@ -6,6 +6,10 @@ local Utils = require("src.core.utils")
 
 local RewardSystem = {}
 
+local function isTrickType(contentType)
+  return contentType == "trick" or contentType == "upgrade"
+end
+
 local REWARD_OPTION_COUNT = 4
 local WILDCARD_CHANCE = 0.25
 local WILDCARD_CAP = 1
@@ -130,7 +134,7 @@ local function buildUpgradeCandidates(runState, categories)
   for _, definition in ipairs(Upgrades.getAll()) do
     if definition.rewardEligible ~= false
       and definitionMatchesCategories(definition, categoryIndex)
-      and Upgrades.isUnlocked(definition, runState.unlockedUpgradeIds) then
+      and Upgrades.isUnlocked(definition, runState.unlockedTrickIds or runState.unlockedUpgradeIds) then
       local ok = AcquisitionSystem.canGrantUpgrade(runState, definition.id)
 
       if ok then
@@ -149,7 +153,7 @@ local function buildWildcardUpgradeCandidates(runState, categories)
   for _, definition in ipairs(Upgrades.getAll()) do
     if definition.rewardEligible ~= false
       and not definitionMatchesCategories(definition, categoryIndex)
-      and Upgrades.isUnlocked(definition, runState.unlockedUpgradeIds) then
+      and Upgrades.isUnlocked(definition, runState.unlockedTrickIds or runState.unlockedUpgradeIds) then
       local ok = AcquisitionSystem.canGrantUpgrade(runState, definition.id)
 
       if ok then
@@ -221,7 +225,7 @@ local function buildExtraCandidates(coinCandidates, upgradeCandidates)
   end
 
   for _, definition in ipairs(upgradeCandidates or {}) do
-    table.insert(candidates, serializeDefinition(definition, "upgrade"))
+    table.insert(candidates, serializeDefinition(definition, "trick"))
   end
 
   return candidates
@@ -299,7 +303,7 @@ local function chooseEnemyClassTrickOptions(runState, rng, stageRecord)
     local rewardSource = useWildcard and "wildcard" or "enemy_class"
     local metadata = buildRewardMetadata(enemyClass, classPool, rewardSource, useWildcard)
 
-    table.insert(options, serializeDefinition(definition, "upgrade", metadata))
+    table.insert(options, serializeDefinition(definition, "trick", metadata))
     removeChosen(definition)
 
     if useWildcard then
@@ -381,7 +385,7 @@ function RewardSystem.buildPreview(runState, rng, stageRecord)
 
   local upgradeDefinition = chooseDefinition(upgradeCandidates, rng)
   if upgradeDefinition then
-    table.insert(options, serializeDefinition(upgradeDefinition, "upgrade"))
+    table.insert(options, serializeDefinition(upgradeDefinition, "trick"))
     upgradeCandidates = removeDefinition(upgradeCandidates, upgradeDefinition.id)
   end
 
@@ -399,7 +403,7 @@ function RewardSystem.buildPreview(runState, rng, stageRecord)
 
     if extraOption.type == "coin" then
       coinCandidates = removeDefinition(coinCandidates, extraOption.contentId)
-    elseif extraOption.type == "upgrade" then
+    elseif isTrickType(extraOption.type) then
       upgradeCandidates = removeDefinition(upgradeCandidates, extraOption.contentId)
     end
   end
@@ -464,8 +468,8 @@ function RewardSystem.claimSelection(runState, session)
   local ok, result
   if option.type == "coin" then
     ok, result = AcquisitionSystem.grantCoin(runState, option.contentId)
-  elseif option.type == "upgrade" then
-    ok, result = AcquisitionSystem.grantUpgrade(runState, option.contentId)
+  elseif isTrickType(option.type) then
+    ok, result = AcquisitionSystem.grantTrick(runState, option.contentId)
   else
     return false, "invalid_reward_option_type"
   end
@@ -502,8 +506,8 @@ function RewardSystem.buildProjectedOutcome(runState, session)
 
     if option.type == "coin" then
       ok, errorMessage = AcquisitionSystem.grantCoin(projectedRunState, option.contentId)
-    elseif option.type == "upgrade" then
-      ok, errorMessage = AcquisitionSystem.grantUpgrade(projectedRunState, option.contentId)
+    elseif isTrickType(option.type) then
+      ok, errorMessage = AcquisitionSystem.grantTrick(projectedRunState, option.contentId)
     else
       return nil, "invalid_reward_option_type"
     end
@@ -519,14 +523,16 @@ function RewardSystem.buildProjectedOutcome(runState, session)
     projectedRunState = projectedRunState,
     collectionSizeBefore = #(runState.collectionCoinIds or {}),
     collectionSizeAfter = #(projectedRunState.collectionCoinIds or {}),
-    upgradeCountBefore = #(runState.ownedUpgradeIds or {}),
-    upgradeCountAfter = #(projectedRunState.ownedUpgradeIds or {}),
-    shopPointsBefore = runState.shopPoints or 0,
-    shopPointsAfter = projectedRunState.shopPoints or 0,
+    upgradeCountBefore = #(runState.ownedTrickIds or runState.ownedUpgradeIds or {}),
+    upgradeCountAfter = #(projectedRunState.ownedTrickIds or projectedRunState.ownedUpgradeIds or {}),
+    influenceBefore = runState.influence or 0,
+    influenceAfter = projectedRunState.influence or 0,
+    shopPointsBefore = runState.influence or 0,
+    shopPointsAfter = projectedRunState.influence or 0,
     shopRerollsBefore = runState.shopRerollsRemaining or 0,
     shopRerollsAfter = projectedRunState.shopRerollsRemaining or 0,
-    maxSlotsBefore = runState.maxActiveCoinSlots or 0,
-    maxSlotsAfter = projectedRunState.maxActiveCoinSlots or 0,
+    maxSlotsBefore = runState.maxFlipSlots or runState.maxActiveCoinSlots or 0,
+    maxSlotsAfter = projectedRunState.maxFlipSlots or projectedRunState.maxActiveCoinSlots or 0,
   }
 end
 

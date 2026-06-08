@@ -29,7 +29,7 @@ local COIN_TAG_SCORES = {
 }
 
 local OFFER_TYPE_SCORES = {
-  upgrade = 5,
+  trick = 5,
   coin = 3,
 }
 
@@ -121,7 +121,7 @@ local function chooseLoadoutSelection(runState, stageDefinition)
 
   local selection = {}
 
-  for slotIndex = 1, runState.maxActiveCoinSlots do
+  for slotIndex = 1, runState.maxFlipSlots do
     selection[slotIndex] = candidates[slotIndex] and candidates[slotIndex].coinId or nil
   end
 
@@ -257,7 +257,7 @@ local function choosePurchaseIndex(runState, offers, nextStageDefinition)
   local candidates = {}
 
   for index, offer in ipairs(offers or {}) do
-    if not offer.purchased and (offer.price or 0) <= (runState.shopPoints or 0) then
+    if not offer.purchased and (offer.price or 0) <= (runState.influence or 0) then
       table.insert(candidates, {
         index = index,
         score = scoreOfferForPurchase(offer, nextStageDefinition),
@@ -292,7 +292,7 @@ local function shouldReroll(runState, stageState, metaProjection, offers, reroll
   end
 
   for _, offer in ipairs(offers or {}) do
-    if not offer.purchased and (offer.price or 0) <= (runState.shopPoints or 0) then
+    if not offer.purchased and (offer.price or 0) <= (runState.influence or 0) then
       return false
     end
   end
@@ -343,7 +343,7 @@ local function chooseRewardOptionIndex(session)
   end
 
   for index, option in ipairs(session.options or {}) do
-    if option.type == "upgrade" then
+    if option.type == "trick" or option.type == "upgrade" then
       return index
     end
   end
@@ -374,7 +374,7 @@ local function chooseEncounterChoiceIndex(session)
   end
 
   for index, choice in ipairs(session.choices or {}) do
-    if choice.type == "upgrade" or choice.type == "coin" then
+    if choice.type == "trick" or choice.type == "upgrade" or choice.type == "coin" then
       return index
     end
   end
@@ -407,9 +407,9 @@ function SimulationSystem.simulateRun(options)
     seed = options.seed,
     startingCollectionSize = options.startingCollectionSize,
     starterCollection = options.starterCollection,
-    equippedCoinSlots = options.equippedCoinSlots,
-    persistedLoadoutSlots = options.persistedLoadoutSlots,
-    ownedUpgradeIds = options.ownedUpgradeIds,
+    flipSlots = options.flipSlots or options.equippedCoinSlots,
+    persistedFlipSlots = options.persistedFlipSlots or options.persistedLoadoutSlots,
+    ownedTrickIds = options.ownedTrickIds or options.ownedUpgradeIds,
   })
   local rng = RNG.new(runState.seed)
   simulateInitialDraft(runState, rng)
@@ -497,9 +497,9 @@ function SimulationSystem.simulateRuns(options)
       metaState = options.metaState,
       startingCollectionSize = options.startingCollectionSize,
       starterCollection = options.starterCollection,
-      equippedCoinSlots = options.equippedCoinSlots,
-      persistedLoadoutSlots = options.persistedLoadoutSlots,
-      ownedUpgradeIds = options.ownedUpgradeIds,
+      flipSlots = options.flipSlots or options.equippedCoinSlots,
+      persistedFlipSlots = options.persistedFlipSlots or options.persistedLoadoutSlots,
+      ownedTrickIds = options.ownedTrickIds or options.ownedUpgradeIds,
     }))
   end
 

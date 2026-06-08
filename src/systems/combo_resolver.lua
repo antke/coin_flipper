@@ -79,10 +79,12 @@ function ComboResolver.resolve(phaseName, source, context)
     })
   end
 
-  if combo.shopPoints and combo.shopPoints ~= 0 then
+  local influence = combo.influence or combo.shopPoints
+
+  if influence and influence ~= 0 then
     table.insert(actions, {
-      op = "add_shop_points",
-      amount = combo.shopPoints,
+      op = "add_influence",
+      amount = influence,
       category = "combo",
       label = combo.label or "Combo",
     })

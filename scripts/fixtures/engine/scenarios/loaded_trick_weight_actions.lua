@@ -15,7 +15,7 @@ return {
       runOptions = {
         seed = 7,
         starterCollection = { "copper_blank_coin", "copper_marked_coin", "copper_lucky_coin" },
-        ownedUpgradeIds = { "heads_varnish", "weighted_palm" },
+        ownedTrickIds = { "heads_varnish", "weighted_palm" },
       },
       initialLoadout = {
         [1] = "copper_blank_coin",

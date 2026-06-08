@@ -27,7 +27,7 @@ local definitions = {
           call = "heads",
         },
         effects = {
-          { op = "apply_score_multiplier", value = 0.85 },
+          { op = "apply_score_scaling", value = 0.85 },
         },
       },
     },
@@ -45,7 +45,7 @@ local definitions = {
           call = "tails",
         },
         effects = {
-          { op = "apply_score_multiplier", value = 0.85 },
+          { op = "apply_score_scaling", value = 0.85 },
         },
       },
     },

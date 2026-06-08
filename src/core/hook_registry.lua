@@ -40,6 +40,7 @@ HookRegistry.SOURCE_TYPE_PRECEDENCE = {
   ["boss modifier"] = 1,
   ["stage modifier"] = 2,
   ["meta modifier"] = 3,
+  trick = 4,
   ["run upgrade"] = 4,
   ["equipped coin"] = 5,
   ["temporary effect"] = 6,
@@ -177,7 +178,7 @@ HookRegistry.CONDITION_SCHEMAS = {
       after_shop_generation = true,
     },
     validate = function(value)
-      return value == "coin" or value == "upgrade", "must be coin or upgrade"
+      return value == "coin" or value == "trick" or value == "upgrade", "must be coin or Trick"
     end,
   },
   offer_rarity = {
@@ -202,7 +203,7 @@ HookRegistry.CONDITION_SCHEMAS = {
       after_purchase = true,
     },
     validate = function(value)
-      return value == "coin" or value == "upgrade", "must be coin or upgrade"
+      return value == "coin" or value == "trick" or value == "upgrade", "must be coin or Trick"
     end,
   },
   purchase_rarity = {
@@ -236,6 +237,10 @@ HookRegistry.CONDITION_SCHEMAS = {
 
 local phaseSet = {}
 local phaseOrder = {}
+
+local function canonicalContentType(contentType)
+  return contentType == "upgrade" and "trick" or contentType
+end
 
 for index, phaseName in ipairs(HookRegistry.PHASES) do
   phaseSet[phaseName] = true
@@ -318,7 +323,7 @@ local function matchesCondition(condition, context)
         return false
       end
     elseif key == "offer_type" then
-      if not context.currentOffer or context.currentOffer.type ~= expectedValue then
+      if not context.currentOffer or canonicalContentType(context.currentOffer.type) ~= canonicalContentType(expectedValue) then
         return false
       end
     elseif key == "offer_rarity" then
@@ -332,7 +337,7 @@ local function matchesCondition(condition, context)
     elseif key == "purchase_type" then
       local purchaseType = context.purchase and context.purchase.type or (context.currentOffer and context.currentOffer.type)
 
-      if purchaseType ~= expectedValue then
+      if canonicalContentType(purchaseType) ~= canonicalContentType(expectedValue) then
         return false
       end
     elseif key == "purchase_rarity" then
@@ -551,7 +556,7 @@ function HookRegistry.collectSources(runState, stageState, metaProjection)
     table.insert(sources, HookRegistry.buildSource("meta modifier", metaProjection.id or "meta_projection", metaProjection))
   end
 
-  collectFromIds(sources, runState and runState.ownedUpgradeIds, "run upgrade", Upgrades.getById)
+  collectFromIds(sources, runState and (runState.ownedTrickIds or runState.ownedUpgradeIds), "trick", Upgrades.getById)
 
   if runState then
     if stageState and stageState.purse and #(stageState.purse.handSlots or {}) > 0 then
@@ -568,8 +573,8 @@ function HookRegistry.collectSources(runState, stageState, metaProjection)
         end
       end
     else
-      for slotIndex = 1, runState.maxActiveCoinSlots do
-        local coinId = runState.equippedCoinSlots[slotIndex]
+      for slotIndex = 1, (runState.maxFlipSlots or runState.maxActiveCoinSlots or 0) do
+        local coinId = runState.flipSlots[slotIndex]
 
         if coinId then
           local definition = Coins.getById(coinId)

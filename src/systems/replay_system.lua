@@ -83,6 +83,34 @@ local function buildDraftCandidates(runState)
   return candidates
 end
 
+local function canonicalSourceType(sourceType)
+  if sourceType == "run upgrade" then
+    return "trick"
+  end
+
+  return sourceType
+end
+
+local function canonicalActionOp(op)
+  if op == "apply_score_multiplier" then
+    return "apply_score_scaling"
+  end
+
+  if op == "grant_upgrade" then
+    return "grant_trick"
+  end
+
+  if op == "add_shop_points" then
+    return "add_influence"
+  end
+
+  return op
+end
+
+local function canonicalContentType(contentType)
+  return contentType == "upgrade" and "trick" or contentType
+end
+
 local function generateDraftOffers(candidates, rng)
   local pool = Utils.clone(candidates)
   local offers = {}
@@ -163,7 +191,7 @@ local function buildTriggeredSourceSignature(source)
   return {
     phase = source and source.phase or nil,
     sourceId = source and source.sourceId or nil,
-    sourceType = source and source.sourceType or nil,
+    sourceType = canonicalSourceType(source and source.sourceType or nil),
     coinId = source and source.coinId or nil,
     instanceId = source and source.instanceId or nil,
     slotIndex = source and source.slotIndex or nil,
@@ -173,7 +201,7 @@ end
 
 local function buildActionSignature(action)
   return {
-    op = action.op,
+    op = canonicalActionOp(action.op),
     amount = action.amount,
     value = action.value,
     chance = action.chance,
@@ -183,9 +211,10 @@ local function buildActionSignature(action)
     flag = action.flag,
     coinId = action.coinId,
     instanceId = action.instanceId,
+    trickId = action.trickId or action.upgradeId,
     upgradeId = action.upgradeId,
     contentId = action.contentId,
-    offerType = action.offerType,
+    offerType = canonicalContentType(action.offerType),
     effectId = action.effectId,
     phase = action.phase,
     note = action.note,
@@ -373,9 +402,9 @@ local function buildBatchSignature(batch)
     refillEvent = Utils.clone(batch.refillEvent or {}),
     results = table.concat(results, "|"),
     status = batch.trace and batch.trace.stageStatusAfter or nil,
-    stageScoreAfter = batch.trace and batch.trace.stageScoreAfter or nil,
+    scoreAppliedToHpAfter = batch.trace and (batch.trace.scoreAppliedToHpAfter or batch.trace.stageScoreAfter) or nil,
     runScoreAfter = batch.trace and batch.trace.runScoreAfter or nil,
-    shopPointsAfter = batch.trace and batch.trace.shopPointsAfter or nil,
+    influenceAfter = batch.trace and (batch.trace.influenceAfter or batch.trace.shopPointsAfter) or nil,
     flipsRemainingAfter = batch.trace and batch.trace.flipsRemainingAfter or nil,
     coinRolls = coinRolls,
     triggeredSources = triggeredSources,
@@ -402,9 +431,10 @@ local function buildOutcomeSignature(runState)
   local signature = {
     runStatus = runState.runStatus,
     runTotalScore = runState.runTotalScore,
-    shopPoints = runState.shopPoints,
+    influence = runState.influence,
+    shopPoints = runState.influence,
     collectionCoinIds = Utils.copyArray(runState.collectionCoinIds),
-    ownedUpgradeIds = Utils.copyArray(runState.ownedUpgradeIds),
+    ownedTrickIds = Utils.copyArray(runState.ownedTrickIds or runState.ownedUpgradeIds),
     counters = Utils.clone(runState.counters),
     summary = {
       runStatus = summary.runStatus,
@@ -430,8 +460,10 @@ local function buildOutcomeSignature(runState)
       stageId = stageRecord.stageId,
       variantId = stageRecord.variantId,
       status = stageRecord.status,
-      stageScore = stageRecord.stageScore,
-      targetScore = stageRecord.targetScore,
+      scoreAppliedToHp = stageRecord.scoreAppliedToHp or stageRecord.stageScore,
+      opponentHp = stageRecord.opponentHp or stageRecord.targetScore,
+      stageScore = stageRecord.scoreAppliedToHp or stageRecord.stageScore,
+      targetScore = stageRecord.opponentHp or stageRecord.targetScore,
       runStatus = stageRecord.runStatus,
       metaRewardEarned = stageRecord.metaRewardEarned,
       rewardChoice = Utils.clone(stageRecord.rewardChoice or nil),
@@ -519,6 +551,17 @@ local function compareValues(path, expected, actual, mismatches, limit)
   end
 
   if type(expected) ~= "table" then
+    if string.match(path, "%.sourceType$") or path == "sourceType" then
+      expected = canonicalSourceType(expected)
+      actual = canonicalSourceType(actual)
+    elseif string.match(path, "%.op$") or path == "op" then
+      expected = canonicalActionOp(expected)
+      actual = canonicalActionOp(actual)
+    elseif string.match(path, "%.type$") or path == "type" or string.match(path, "%.offerType$") or path == "offerType" or string.match(path, "%.purchaseType$") or path == "purchaseType" then
+      expected = canonicalContentType(expected)
+      actual = canonicalContentType(actual)
+    end
+
     if expected ~= actual then
       table.insert(mismatches, string.format("%s mismatch: expected %s got %s", path, tostring(expected), tostring(actual)))
     end
@@ -573,7 +616,7 @@ local function buildStageTranscript(runState, stageRecord, batchPointer, shopPoi
 
   if loadoutCommit and loadoutCommit.stageId == stageRecord.stageId and loadoutCommit.roundIndex == stageRecord.roundIndex then
     stageEntry.loadout = {
-      slots = Loadout.cloneSlots(loadoutCommit.slots, runState.maxActiveCoinSlots),
+      slots = Loadout.cloneSlots(loadoutCommit.slots, runState.maxFlipSlots),
       canonicalKey = loadoutCommit.canonicalKey,
     }
     loadoutPointer = loadoutPointer + 1
@@ -1056,13 +1099,15 @@ function ReplaySystem.replayTranscript(transcript)
     startingCollectionSize = startingCollectionSize,
     starterCollection = normalizedTranscript.bootstrap.starterCollection,
     starterPurse = normalizedTranscript.bootstrap.starterPurse,
-    equippedCoinSlots = normalizedTranscript.bootstrap.equippedCoinSlots,
-    persistedLoadoutSlots = normalizedTranscript.bootstrap.persistedLoadoutSlots,
-    ownedUpgradeIds = normalizedTranscript.bootstrap.ownedUpgradeIds,
+    flipSlots = normalizedTranscript.bootstrap.flipSlots or normalizedTranscript.bootstrap.equippedCoinSlots,
+    persistedFlipSlots = normalizedTranscript.bootstrap.persistedFlipSlots or normalizedTranscript.bootstrap.persistedLoadoutSlots,
+    ownedTrickIds = normalizedTranscript.bootstrap.ownedTrickIds or normalizedTranscript.bootstrap.ownedUpgradeIds,
     resolvedValues = resolvedBootstrapValues,
-    maxActiveCoinSlots = getBootstrapResolvedValue(resolvedBootstrapValues, "run.maxActiveCoinSlots", "maxActiveCoinSlots"),
+    maxFlipSlots = getBootstrapResolvedValue(resolvedBootstrapValues, "run.maxFlipSlots", "maxFlipSlots")
+      or getBootstrapResolvedValue(resolvedBootstrapValues, "run.maxActiveCoinSlots", "maxActiveCoinSlots"),
     baseFlipsPerStage = getBootstrapResolvedValue(resolvedBootstrapValues, "stage.flipsPerStage", "baseFlipsPerStage"),
-    startingShopPoints = getBootstrapResolvedValue(resolvedBootstrapValues, "run.startingShopPoints", "startingShopPoints"),
+    startingInfluence = getBootstrapResolvedValue(resolvedBootstrapValues, "run.startingInfluence", "startingInfluence")
+      or getBootstrapResolvedValue(resolvedBootstrapValues, "run.startingShopPoints", "startingShopPoints"),
     startingShopRerolls = getBootstrapResolvedValue(resolvedBootstrapValues, "run.startingShopRerolls", "startingShopRerolls"),
   })
   local rng = RNG.new(runState.seed)
@@ -1113,7 +1158,7 @@ function ReplaySystem.replayTranscript(transcript)
     end
 
     if stageInput.loadout and stageInput.loadout.canonicalKey then
-      local actualCanonicalKey = Loadout.toCanonicalKey(committedSelection, runState.maxActiveCoinSlots)
+      local actualCanonicalKey = Loadout.toCanonicalKey(committedSelection, runState.maxFlipSlots)
 
       if actualCanonicalKey ~= stageInput.loadout.canonicalKey then
         return {

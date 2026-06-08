@@ -1,12 +1,16 @@
 local ScoreBreakdown = {}
 
 function ScoreBreakdown.new()
+  local scoreScalings = {}
+
   return {
     baseScore = 0,
+    preScoreScalingScore = 0,
     preMultiplierScore = 0,
     finalBaseScore = 0,
     additiveBonuses = {},
-    multipliers = {},
+    scoreScalings = scoreScalings,
+    multipliers = scoreScalings,
     conversions = {},
     shopPointChanges = {},
     scoreEvents = {},

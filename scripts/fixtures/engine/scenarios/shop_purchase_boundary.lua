@@ -6,7 +6,7 @@ return {
   setup = function()
     return {
       metaStateOptions = {
-        unlockedUpgradeIds = { "cashback_badge" },
+        unlockedTrickIds = { "cashback_badge" },
       },
       runOptions = {
         seed = 12,
@@ -25,8 +25,8 @@ return {
       op = "create_shop_visit",
       reason = "fixture_injected",
       offers = {
-        { type = "upgrade", contentId = "cashback_badge", price = 4 },
-        { type = "upgrade", contentId = "steady_hand", price = 4 },
+        { type = "trick", contentId = "cashback_badge", price = 4 },
+        { type = "trick", contentId = "steady_hand", price = 4 },
       },
       generationTrace = {
         mode = "fixture_injected",
@@ -38,8 +38,8 @@ return {
         offerCount = 2,
       },
     },
-    { op = "purchase", offerType = "upgrade", contentId = "cashback_badge", label = "buy_cashback" },
-    { op = "purchase", offerType = "upgrade", contentId = "steady_hand", label = "buy_steady" },
+    { op = "purchase", offerType = "trick", contentId = "cashback_badge", label = "buy_cashback" },
+    { op = "purchase", offerType = "trick", contentId = "steady_hand", label = "buy_steady" },
   },
 
   assert = function(env, A)
@@ -50,7 +50,7 @@ return {
     A.truthy(secondPurchase.ok, "Steady Finish should purchase successfully")
     A.equal(firstPurchase.result.finalPrice, 4, "Kickback Mark final price")
     A.equal(secondPurchase.result.finalPrice, 4, "Steady Finish final price")
-    A.equal(env.runState.shopPoints, 13, "Influence after cashback sequence")
+    A.equal(env.runState.influence, 13, "Influence after cashback sequence")
     A.notContains(firstPurchase.result.trace.messages or {}, function(message)
       return tostring(message):find("Kickback Mark refunded 1 Influence.", 1, true) ~= nil
     end, "Kickback Mark should not refund its own purchase")

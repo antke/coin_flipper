@@ -66,7 +66,7 @@ function PostStageAnalyticsState:draw(app)
     string.format("Stage: %s", stageRecord.stageLabel or stageRecord.stageId or "n/a"),
     string.format("Opponent: %s", stageRecord.opponentName or "n/a"),
     string.format("Status: %s", tostring(stageRecord.status or "n/a")),
-    string.format("Score Applied to HP: %d / %d", stageRecord.stageScore or 0, stageRecord.targetScore or 0),
+    string.format("Score Applied to HP: %d / %d", stageRecord.scoreAppliedToHp or stageRecord.stageScore or 0, stageRecord.opponentHp or stageRecord.targetScore or 0),
     app:getPostStageReviewFollowupLine(),
   }
 

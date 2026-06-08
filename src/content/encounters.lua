@@ -38,7 +38,7 @@ local EncounterDefinitions = {
       },
       {
         id = "stash_tails_contract",
-        type = "upgrade",
+        type = "trick",
         contentId = "tails_contract",
         label = "Sign Tails Pact",
         description = "Gain the Tails Pact Trick for the run.",
@@ -53,7 +53,7 @@ local EncounterDefinitions = {
     choices = {
       {
         id = "tip_heads_contract",
-        type = "upgrade",
+        type = "trick",
         contentId = "heads_contract",
         label = "Take Heads Pact",
         description = "Gain the Heads Pact Trick for the run.",
@@ -75,7 +75,7 @@ local EncounterDefinitions = {
     choices = {
       {
         id = "credit_insurance_ledger",
-        type = "upgrade",
+        type = "trick",
         contentId = "insurance_ledger",
         label = "Open Insurance Slip",
         description = "Gain the Insurance Slip Trick for the run.",
@@ -97,14 +97,14 @@ local EncounterDefinitions = {
     choices = {
       {
         id = "ledger_merchant_notebook",
-        type = "upgrade",
+        type = "trick",
         contentId = "merchant_notebook",
         label = "Take Street Ledger",
         description = "Gain the Street Ledger Trick for the run.",
       },
       {
         id = "ledger_steady_hand",
-        type = "upgrade",
+        type = "trick",
         contentId = "steady_hand",
         label = "Take Steady Finish",
         description = "Gain the Steady Finish Trick for the run.",
@@ -119,7 +119,7 @@ local EncounterDefinitions = {
     choices = {
       {
         id = "runner_coupon_case",
-        type = "upgrade",
+        type = "trick",
         contentId = "coupon_case",
         label = "Take House Voucher",
         description = "Gain the House Voucher Trick for the run.",
@@ -141,14 +141,14 @@ local EncounterDefinitions = {
     choices = {
       {
         id = "margin_merchant_notebook",
-        type = "upgrade",
+        type = "trick",
         contentId = "merchant_notebook",
         label = "Take Street Ledger",
         description = "Gain the Street Ledger Trick for the run.",
       },
       {
         id = "margin_heads_notebook",
-        type = "upgrade",
+        type = "trick",
         contentId = "heads_notebook",
         label = "Take Heads Ledger",
         description = "Gain the Heads Ledger Trick for the run.",
@@ -170,7 +170,7 @@ local EncounterDefinitions = {
       },
       {
         id = "safety_ledger_choice",
-        type = "upgrade",
+        type = "trick",
         contentId = "insurance_ledger",
         label = "Take Insurance Slip",
         description = "Gain the Insurance Slip Trick for the run.",

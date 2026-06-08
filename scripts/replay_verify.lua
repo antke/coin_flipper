@@ -27,7 +27,7 @@ local function buildTargetedQueueReplayRun(baseSeed)
     local runState, metaProjection = RunInitializer.createNewRun(metaState, {
       seed = seed,
       starterCollection = { "copper_weighted_coin" },
-      ownedUpgradeIds = { "heads_varnish", "echo_cache" },
+      ownedTrickIds = { "heads_varnish", "echo_cache" },
     })
     local stageState = RunInitializer.createStageForCurrentRound(runState)
     local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "copper_weighted_coin" })

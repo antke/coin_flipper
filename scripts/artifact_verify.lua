@@ -38,36 +38,36 @@ local function appendUniqueId(list, seen, id)
 end
 
 local function appendUpgradeChoice(list, seen, choice)
-  if choice and choice.type == "upgrade" then
+  if choice and (choice.type == "trick" or choice.type == "upgrade") then
     appendUniqueId(list, seen, choice.contentId)
   end
 end
 
-local function rebuildOwnedUpgradeIdsForShopSnapshot(sourceRunState, stageHistoryIndex, shopVisit)
-  local ownedUpgradeIds = {}
+local function rebuildOwnedTrickIdsForShopSnapshot(sourceRunState, stageHistoryIndex, shopVisit)
+  local ownedTrickIds = {}
   local seen = {}
 
-  for _, upgradeId in ipairs(sourceRunState.history.bootstrap.ownedUpgradeIds or {}) do
-    appendUniqueId(ownedUpgradeIds, seen, upgradeId)
+  for _, upgradeId in ipairs(sourceRunState.history.bootstrap.ownedTrickIds or sourceRunState.history.bootstrap.ownedUpgradeIds or {}) do
+    appendUniqueId(ownedTrickIds, seen, upgradeId)
   end
 
   for index = 1, stageHistoryIndex do
     local stageRecord = sourceRunState.history.stageResults[index]
-    appendUpgradeChoice(ownedUpgradeIds, seen, stageRecord and stageRecord.rewardChoice)
-    appendUpgradeChoice(ownedUpgradeIds, seen, stageRecord and stageRecord.encounterChoice)
+    appendUpgradeChoice(ownedTrickIds, seen, stageRecord and stageRecord.rewardChoice)
+    appendUpgradeChoice(ownedTrickIds, seen, stageRecord and stageRecord.encounterChoice)
   end
 
   for _, visit in ipairs(sourceRunState.history.shopVisits or {}) do
     if (visit.visitIndex or math.huge) <= (shopVisit.visitIndex or math.huge) then
       for _, purchase in ipairs(visit.purchases or {}) do
-        if purchase.type == "upgrade" then
-          appendUniqueId(ownedUpgradeIds, seen, purchase.contentId)
+        if purchase.type == "trick" or purchase.type == "upgrade" then
+          appendUniqueId(ownedTrickIds, seen, purchase.contentId)
         end
       end
     end
   end
 
-  return ownedUpgradeIds
+  return ownedTrickIds
 end
 
 local function markPurchasedShopOffers(shopOffers, shopVisit)
@@ -89,9 +89,9 @@ end
 runCheck("current_meta_save_roundtrip", function()
   local metaState = MetaState.new({
     metaPoints = 4,
-    purchasedMetaUpgradeIds = { "meta_bonus_slot_1" },
+    purchasedTattooIds = { "meta_bonus_slot_1" },
     effectiveValues = {
-      ["run.maxActiveCoinSlots"] = { mode = "add", value = 1 },
+      ["run.maxFlipSlots"] = { mode = "add", value = 1 },
     },
     stats = {
       runsStarted = 2,
@@ -103,6 +103,8 @@ runCheck("current_meta_save_roundtrip", function()
   assert(artifact, artifactError)
   assert(artifact.artifactType == SaveSystem.SAVE_ARTIFACT_TYPE)
   assert(artifact.version == SaveSystem.SAVE_VERSION)
+  assert(artifact.metaState.purchasedTattooIds[1] == "meta_bonus_slot_1")
+  assert(artifact.metaState.purchasedMetaUpgradeIds == nil)
   assert(artifact.metaState.equippedTattooIds[1] == "meta_bonus_slot_1")
   assert(artifact.metaState.tattooLoadoutLimit == 3)
 
@@ -112,14 +114,14 @@ runCheck("current_meta_save_roundtrip", function()
   assert(decoded.stats.runsStarted == 2)
   assert(decoded.equippedTattooIds[1] == "meta_bonus_slot_1")
   assert(decoded.tattooLoadoutLimit == 3)
-  assert(decoded.effectiveValues["run.maxActiveCoinSlots"].value == 1)
+  assert(decoded.effectiveValues["run.maxFlipSlots"].value == 1)
 end)
 
 runCheck("legacy_raw_meta_save_migrates", function()
   local decoded, decodeError = SaveSystem.decodeMetaStateString(encodeTable({
     metaPoints = 3,
     modifiers = {
-      startingShopPoints = 2,
+      startingInfluence = 2,
     },
     stats = {
       runsStarted = 1,
@@ -127,7 +129,7 @@ runCheck("legacy_raw_meta_save_migrates", function()
   }))
 
   assert(decoded, decodeError)
-  assert(decoded.effectiveValues["run.startingShopPoints"].value == 2)
+  assert(decoded.effectiveValues["run.startingInfluence"].value == 2)
   assert(decoded.stats.runsStarted == 1)
 end)
 
@@ -146,7 +148,7 @@ runCheck("legacy_v1_meta_save_migrates", function()
   }))
 
   assert(decoded, decodeError)
-  assert(decoded.effectiveValues["run.maxActiveCoinSlots"].value == 1)
+  assert(decoded.effectiveValues["run.maxFlipSlots"].value == 1)
   assert(decoded.stats.runsWon == 1)
 end)
 
@@ -161,8 +163,8 @@ runCheck("legacy_purchased_tattoo_auto_equips", function()
   assert(decoded.equippedTattooIds[1] == "meta_bonus_slot_1")
   assert(decoded.equippedTattooIds[2] == "meta_bonus_points_1")
   assert(decoded.equippedTattooIds[3] == "meta_bonus_reroll_1")
-  assert(decoded.effectiveValues["run.maxActiveCoinSlots"].value == 1)
-  assert(decoded.effectiveValues["run.startingShopPoints"].value == 2)
+  assert(decoded.effectiveValues["run.maxFlipSlots"].value == 1)
+  assert(decoded.effectiveValues["run.startingInfluence"].value == 2)
   assert(decoded.effectiveValues["run.startingShopRerolls"].value == 1)
   assert(decoded.effectiveValues["shop.rarityWeight.uncommon"] == nil)
 end)
@@ -209,9 +211,9 @@ runCheck("legacy_v1_transcript_migrates", function()
   legacyTranscript.version = 1
   legacyTranscript.bootstrap.resolvedValues = {
     startingCollectionSize = transcript.bootstrap.resolvedValues["run.startingCollectionSize"],
-    maxActiveCoinSlots = transcript.bootstrap.resolvedValues["run.maxActiveCoinSlots"],
+    maxFlipSlots = transcript.bootstrap.resolvedValues["run.maxFlipSlots"] or transcript.bootstrap.resolvedValues["run.maxActiveCoinSlots"],
     baseFlipsPerStage = transcript.bootstrap.resolvedValues["stage.flipsPerStage"],
-    startingShopPoints = transcript.bootstrap.resolvedValues["run.startingShopPoints"],
+    startingInfluence = transcript.bootstrap.resolvedValues["run.startingInfluence"] or transcript.bootstrap.resolvedValues["run.startingShopPoints"],
     startingShopRerolls = transcript.bootstrap.resolvedValues["run.startingShopRerolls"],
   }
 
@@ -235,7 +237,7 @@ runCheck("conflicting_meta_state_payload_rejected", function()
   local decoded, decodeError = SaveSystem.decodeMetaStateString(encodeTable({
     metaPoints = 1,
     effectiveValues = {
-      ["run.maxActiveCoinSlots"] = { mode = "add", value = 1 },
+      ["run.maxFlipSlots"] = { mode = "add", value = 1 },
     },
     modifiers = {
       bonusCoinSlots = 2,
@@ -249,10 +251,10 @@ end)
 runCheck("purchased_meta_effect_drift_rejected", function()
   local decoded, decodeError = SaveSystem.decodeMetaStateString(encodeTable({
     metaPoints = 1,
-    purchasedMetaUpgradeIds = { "meta_shop_quality_1" },
+    purchasedTattooIds = { "meta_shop_quality_1" },
     effectiveValues = {},
     unlockedCoinIds = {},
-    unlockedUpgradeIds = {},
+    unlockedTrickIds = {},
   }))
 
   assert(decoded == nil)
@@ -262,7 +264,7 @@ end)
 runCheck("unpurchased_equipped_tattoo_rejected", function()
   local decoded, decodeError = SaveSystem.decodeMetaStateString(encodeTable({
     metaPoints = 1,
-    purchasedMetaUpgradeIds = {},
+    purchasedTattooIds = {},
     equippedTattooIds = { "meta_bonus_slot_1" },
     effectiveValues = {},
   }))
@@ -424,8 +426,8 @@ runCheck("active_run_encounter_roundtrip", function()
       stageType = latestStageRecord.stageType,
       variantId = latestStageRecord.variantId,
       variantName = latestStageRecord.variantName,
-      targetScore = latestStageRecord.targetScore,
-      stageScore = latestStageRecord.stageScore,
+      opponentHp = latestStageRecord.opponentHp or latestStageRecord.targetScore,
+      scoreAppliedToHp = latestStageRecord.scoreAppliedToHp or latestStageRecord.stageScore,
       flipsRemaining = 0,
       stageStatus = latestStageRecord.status,
       activeBossModifierIds = Utils.copyArray(latestStageRecord.bossModifierIds or {}),
@@ -501,7 +503,8 @@ runCheck("active_run_shop_snapshot", function()
   runState.roundIndex = stageRecord.roundIndex
   runState.runStatus = "active"
   runState.currentStageId = stageRecord.stageId
-  runState.ownedUpgradeIds = rebuildOwnedUpgradeIdsForShopSnapshot(result.runState, stageHistoryIndex, shopVisit)
+  runState.ownedTrickIds = rebuildOwnedTrickIdsForShopSnapshot(result.runState, stageHistoryIndex, shopVisit)
+  runState.ownedUpgradeIds = runState.ownedTrickIds
   runState.history.stageResults = {}
 
   for index = 1, stageHistoryIndex do
@@ -536,8 +539,8 @@ runCheck("active_run_shop_snapshot", function()
       stageType = stageRecord.stageType,
       variantId = stageRecord.variantId,
       variantName = stageRecord.variantName,
-      targetScore = stageRecord.targetScore,
-      stageScore = stageRecord.stageScore,
+      opponentHp = stageRecord.opponentHp or stageRecord.targetScore,
+      scoreAppliedToHp = stageRecord.scoreAppliedToHp or stageRecord.stageScore,
       flipsRemaining = 0,
       stageStatus = stageRecord.status,
       activeBossModifierIds = Utils.copyArray(stageRecord.bossModifierIds or {}),

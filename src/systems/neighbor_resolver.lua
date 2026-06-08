@@ -43,10 +43,12 @@ local function addRewardActions(actions, reward, label)
     })
   end
 
-  if reward.shopPoints and reward.shopPoints ~= 0 then
+  local influence = reward.influence or reward.shopPoints
+
+  if influence and influence ~= 0 then
     table.insert(actions, {
-      op = "add_shop_points",
-      amount = reward.shopPoints,
+      op = "add_influence",
+      amount = influence,
       category = "neighbor",
       label = label,
     })

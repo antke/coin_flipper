@@ -318,9 +318,12 @@ function StageState:startReveal(app, batchResult)
     batchId = batchResult.batchId,
     call = batchResult.call,
     stageStatus = batchResult.status,
+    scoreAppliedToHp = batchResult.scoreAppliedToHp,
+    opponentHp = batchResult.opponentHp,
     stageScore = batchResult.stageScore,
     targetScore = batchResult.targetScore,
     runTotalScore = batchResult.runTotalScore,
+    influence = batchResult.influence,
     shopPoints = batchResult.shopPoints,
     flipsRemaining = batchResult.flipsRemaining,
     stageDelta = batchResult.scoreBreakdown and batchResult.scoreBreakdown.totalStageScoreDelta or 0,
@@ -516,8 +519,8 @@ function StageState:tryResolveBatch(app)
     "Resolved %s %d. Score applied to HP: %d/%d. Flips remaining: %d.",
     Terminology.getTermLower("flip"),
     batchResult.batchId,
-    app.stageState.stageScore,
-    app.stageState.targetScore,
+    app.stageState.scoreAppliedToHp,
+    app.stageState.opponentHp,
     app.stageState.flipsRemaining
   )
 
@@ -1070,8 +1073,8 @@ end
 function StageState:drawScorePanel(app, area)
   local stage = app.stageState
   local opponentName = stage.opponent and stage.opponent.name or "Opponent"
-  local hpRemaining = math.max(0, (stage.targetScore or 0) - (stage.stageScore or 0))
-  local scoreColor = stage.stageScore >= stage.targetScore and Theme.colors.success or Theme.colors.text
+  local hpRemaining = math.max(0, (stage.opponentHp or 0) - (stage.scoreAppliedToHp or 0))
+  local scoreColor = stage.scoreAppliedToHp >= stage.opponentHp and Theme.colors.success or Theme.colors.text
   local contentArea = Panel.getContentArea(area.x, area.y, area.width, area.height, "Opponent")
   self.opponentDamageFloatyAnchor = {
     x = contentArea.x + math.floor(contentArea.width / 2),
@@ -1087,7 +1090,7 @@ function StageState:drawScorePanel(app, area)
   love.graphics.setFont(app.fonts.small)
   Theme.applyColor(Theme.colors.mutedText)
   love.graphics.printf(opponentName, contentArea.x, contentArea.y + app.fonts.title:getHeight() + 8, math.max(1, contentArea.width), "center")
-  love.graphics.printf(string.format("HP left • score %d/%d", stage.stageScore, stage.targetScore), contentArea.x, contentArea.y + app.fonts.title:getHeight() + 25, math.max(1, contentArea.width), "center")
+  love.graphics.printf(string.format("HP left • score %d/%d", stage.scoreAppliedToHp, stage.opponentHp), contentArea.x, contentArea.y + app.fonts.title:getHeight() + 25, math.max(1, contentArea.width), "center")
 end
 
 function StageState:drawStageSummary(app, area)
@@ -1095,7 +1098,7 @@ function StageState:drawStageSummary(app, area)
   local luckMeter, luckProgress = self:getDisplayedLuckMeter(app)
   local fatedActive = luckMeter and luckMeter.fatedFlipActive == true
   local stats = {
-    { label = "Influence", value = tostring(app.runState and app.runState.shopPoints or 0), color = Theme.colors.text },
+    { label = "Influence", value = tostring(app.runState and app.runState.influence or 0), color = Theme.colors.text },
     { label = "Flips", value = tostring(stage.flipsRemaining), color = Theme.colors.text },
     { label = "Call", value = app.selectedCall and string.upper(app.selectedCall) or "-", color = Theme.colors.text },
     { label = "Luck", kind = "progress", progress = luckProgress, color = fatedActive and Theme.colors.warning or Theme.colors.text },
@@ -2224,11 +2227,11 @@ function StageState:drawRevealOverlay(app)
   love.graphics.printf(string.format("%s %d", Terminology.getTermLabel("flip"), reveal.batchId), contentArea.x + 14, contentArea.y + 10, contentArea.width - 28, "right")
 
   local statsY = contentArea.y + 56
-  local hpRemaining = math.max(0, (reveal.targetScore or 0) - (reveal.stageScore or 0))
+  local hpRemaining = math.max(0, (reveal.opponentHp or reveal.targetScore or 0) - (reveal.scoreAppliedToHp or reveal.stageScore or 0))
   local statsLines = {
     string.format("Score applied this flip: %+d", reveal.stageDelta),
-    string.format("Opponent HP: %d/%d", hpRemaining, reveal.targetScore),
-    string.format("%s: %d", Terminology.getTermPlural("chip"), reveal.shopPoints or 0),
+    string.format("Opponent HP: %d/%d", hpRemaining, reveal.opponentHp or reveal.targetScore),
+    string.format("%s: %d", Terminology.getTermPlural("chip"), reveal.influence or reveal.shopPoints or 0),
     string.format("Flips remaining: %d", reveal.flipsRemaining),
   }
 

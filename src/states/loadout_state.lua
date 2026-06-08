@@ -124,14 +124,14 @@ function LoadoutState:getReconciliationLines(app)
   end
 
   local lines = {
-    string.format("Persisted build: %s", self:formatBuildSummary(details.originalSlots, app.runState.maxActiveCoinSlots)),
+    string.format("Persisted build: %s", self:formatBuildSummary(details.originalSlots, app.runState.maxFlipSlots)),
   }
 
   if details.usedFallback then
-    table.insert(lines, string.format("Reconciled persisted build: %s", self:formatBuildSummary(details.reconciledSlots, app.runState.maxActiveCoinSlots)))
+    table.insert(lines, string.format("Reconciled persisted build: %s", self:formatBuildSummary(details.reconciledSlots, app.runState.maxFlipSlots)))
   end
 
-  table.insert(lines, string.format("Prepared build: %s", self:formatBuildSummary(details.preparedSlots, app.runState.maxActiveCoinSlots)))
+  table.insert(lines, string.format("Prepared build: %s", self:formatBuildSummary(details.preparedSlots, app.runState.maxFlipSlots)))
 
   if details.usedFallback then
     local fallbackMessage = details.fallbackReason == "persisted_invalid"
@@ -200,7 +200,7 @@ function LoadoutState:getSelectionStatusMessage(app, reconciliation)
 end
 
 function LoadoutState:getFirstOpenSlot(app)
-  for slotIndex = 1, app.runState.maxActiveCoinSlots do
+  for slotIndex = 1, app.runState.maxFlipSlots do
     if not self.selectionSlots[slotIndex] then
       return slotIndex
     end
@@ -307,7 +307,7 @@ function LoadoutState:buildCollectionButtons(app, area)
     local equippedMarker = ""
     local equippedSlotIndex = nil
 
-    for slot = 1, app.runState.maxActiveCoinSlots do
+    for slot = 1, app.runState.maxFlipSlots do
       if self.selectionSlots[slot] == coinId then
         equippedMarker = string.format(" [slot %d]", slot)
         equippedSlotIndex = slot
@@ -455,7 +455,7 @@ function LoadoutState:enter(app, payload)
       local ok = Validator.validateLoadoutSelection(app.runState, resumedSelection)
 
       if ok then
-        self.selectionSlots = Loadout.cloneSlots(resumedSelection, app.runState.maxActiveCoinSlots)
+        self.selectionSlots = Loadout.cloneSlots(resumedSelection, app.runState.maxFlipSlots)
       end
     end
 
@@ -502,7 +502,7 @@ function LoadoutState:draw(app)
   love.graphics.printf(
     string.format(
       "Target %d  |  Flips %d",
-      stageDefinition and stageDefinition.targetScore or 0,
+      stageDefinition and (stageDefinition.opponentHp or stageDefinition.targetScore) or 0,
       stagePreview.flipsPerStage or 0
     ),
     layout.padding,

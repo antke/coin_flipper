@@ -21,7 +21,7 @@ return {
       runOptions = {
         seed = 8,
         starterCollection = { "copper_weighted_coin", "copper_marked_coin", "copper_lucky_coin", "copper_hollow_coin" },
-        ownedUpgradeIds = { "sleeve_pocket" },
+        ownedTrickIds = { "sleeve_pocket" },
       },
       initialLoadout = {
         [1] = "copper_weighted_coin",

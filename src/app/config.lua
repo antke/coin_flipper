@@ -35,6 +35,7 @@ local GameConfig = {
   run = {
     normalRoundCount = 3,
     bossRoundCount = 1,
+    startingFlipSlots = 3,
     startingCoinSlots = 3,
     startingFlipsPerStage = 3,
     startingCollectionSize = 5,
@@ -57,8 +58,10 @@ local GameConfig = {
   },
 
   economy = {
+    startingInfluence = 0,
     startingShopPoints = 0,
     startingShopRerolls = 0,
+    influenceMultiplier = 1.0,
     shopPointMultiplier = 1.0,
   },
 

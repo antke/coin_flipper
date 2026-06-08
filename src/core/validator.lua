@@ -34,7 +34,9 @@ local VALID_META_STATE_KEYS = {
   metaPoints = true,
   lifetimeMetaPointsEarned = true,
   unlockedCoinIds = true,
+  unlockedTrickIds = true,
   unlockedUpgradeIds = true,
+  purchasedTattooIds = true,
   purchasedMetaUpgradeIds = true,
   equippedTattooIds = true,
   tattooLoadoutLimit = true,
@@ -177,8 +179,11 @@ local VALID_REPLAY_BOOTSTRAP_KEYS = {
   seed = true,
   starterCollection = true,
   starterPurse = true,
+  flipSlots = true,
   equippedCoinSlots = true,
+  persistedFlipSlots = true,
   persistedLoadoutSlots = true,
+  ownedTrickIds = true,
   ownedUpgradeIds = true,
   metaState = true,
   startingCollectionSize = true,
@@ -320,6 +325,10 @@ local function isNonNegativeNumber(value)
   return type(value) == "number" and value >= 0
 end
 
+local function canonicalContentType(contentType)
+  return contentType == "upgrade" and "trick" or contentType
+end
+
 local function validateIdList(values, label, resolver)
   local seen = {}
 
@@ -454,13 +463,14 @@ local function validateBatchSnapshot(batch)
     return false, string.format("batch snapshot has invalid stageType %s", tostring(batch.stageType))
   end
 
-  local equippedSlotCount = getMaxNumericIndex(batch.equippedCoinSlots)
+  local batchFlipSlots = batch.flipSlots or batch.equippedCoinSlots
+  local equippedSlotCount = getMaxNumericIndex(batchFlipSlots)
   local maxSlots = math.max(
     equippedSlotCount,
     #(batch.resolutionCoinIds or {}),
     #(batch.resolvedCoinResults or {})
   )
-  local ok, normalizedSlots = validateSlotState(batch.equippedCoinSlots or {}, maxSlots, nil, "batch equippedCoinSlots", equippedSlotCount > 0)
+  local ok, normalizedSlots = validateSlotState(batchFlipSlots or {}, maxSlots, nil, "batch flipSlots", equippedSlotCount > 0)
 
   if not ok then
     return false, normalizedSlots
@@ -739,17 +749,19 @@ local function validateRewardOption(option, label)
     return false, string.format("%s must be a table", label)
   end
 
-  if option.type ~= "coin" and option.type ~= "upgrade" then
-    return false, string.format("%s type must be coin|upgrade", label)
+  local optionType = canonicalContentType(option.type)
+
+  if optionType ~= "coin" and optionType ~= "trick" then
+    return false, string.format("%s type must be coin|trick", label)
   end
 
   if type(option.contentId) ~= "string" or option.contentId == "" then
     return false, string.format("%s contentId is required", label)
   end
 
-  local definition = option.type == "coin" and Coins.getById(option.contentId) or Upgrades.getById(option.contentId)
+  local definition = optionType == "coin" and Coins.getById(option.contentId) or Upgrades.getById(option.contentId)
   if not definition then
-    return false, string.format("%s references unknown %s %s", label, option.type, option.contentId)
+    return false, string.format("%s references unknown %s %s", label, optionType, option.contentId)
   end
 
   return true
@@ -773,8 +785,10 @@ local function validateEncounterChoice(choice, label)
     return false, string.format("%s id must be a non-empty string", label)
   end
 
-  if choice.type ~= "shop_points" and choice.type ~= "shop_rerolls" and choice.type ~= "coin" and choice.type ~= "upgrade" then
-    return false, string.format("%s type must be shop_points, shop_rerolls, coin, or upgrade", label)
+  local choiceType = canonicalContentType(choice.type)
+
+  if choice.type ~= "shop_points" and choice.type ~= "shop_rerolls" and choiceType ~= "coin" and choiceType ~= "trick" then
+    return false, string.format("%s type must be shop_points, shop_rerolls, coin, or trick", label)
   end
 
   if choice.type == "shop_points" or choice.type == "shop_rerolls" then
@@ -786,9 +800,9 @@ local function validateEncounterChoice(choice, label)
       return false, string.format("%s contentId must be a non-empty string", label)
     end
 
-    local lookup = choice.type == "coin" and Coins.getById or Upgrades.getById
+    local lookup = choiceType == "coin" and Coins.getById or Upgrades.getById
     if not lookup(choice.contentId) then
-      return false, string.format("%s references unknown %s %s", label, choice.type, tostring(choice.contentId))
+      return false, string.format("%s references unknown %s %s", label, choiceType, tostring(choice.contentId))
     end
   end
 
@@ -1077,8 +1091,9 @@ local function validateRunRecord(record, index)
       return false, string.format("runRecords[%d].stageHistory[%d] stageScore must be a non-negative number", index, stageIndex)
     end
 
-    if type(stageRecord.targetScore) ~= "number" or stageRecord.targetScore <= 0 then
-      return false, string.format("runRecords[%d].stageHistory[%d] targetScore must be a positive number", index, stageIndex)
+      local opponentHp = stageRecord.opponentHp or stageRecord.targetScore
+      if type(opponentHp) ~= "number" or opponentHp <= 0 then
+        return false, string.format("runRecords[%d].stageHistory[%d] opponentHp must be a positive number", index, stageIndex)
     end
 
     if stageRecord.loadoutKey ~= nil and (type(stageRecord.loadoutKey) ~= "string" or stageRecord.loadoutKey == "") then
@@ -1192,7 +1207,9 @@ local function validateRunRecord(record, index)
       end
     end
 
-    if purchase.type ~= "coin" and purchase.type ~= "upgrade" then
+    local purchaseType = canonicalContentType(purchase.type)
+
+    if purchaseType ~= "coin" and purchaseType ~= "trick" then
       return false, string.format("runRecords[%d].purchaseHistory[%d] has invalid type %s", index, purchaseIndex, tostring(purchase.type))
     end
 
@@ -1236,12 +1253,16 @@ function Validator.validateMetaStatePayload(metaStateTable)
     return false, errorMessage
   end
 
-  ok, errorMessage = validateIdList(metaStateTable.unlockedUpgradeIds or {}, "metaState unlockedUpgradeIds", Upgrades.getById)
+  local unlockedTrickIds = metaStateTable.unlockedTrickIds or metaStateTable.unlockedUpgradeIds or {}
+
+  ok, errorMessage = validateIdList(unlockedTrickIds, "metaState unlockedTrickIds", Upgrades.getById)
   if not ok then
     return false, errorMessage
   end
 
-  ok, errorMessage = validateIdList(metaStateTable.purchasedMetaUpgradeIds or {}, "metaState purchasedMetaUpgradeIds", MetaUpgrades.getById)
+  local purchasedTattooIds = metaStateTable.purchasedTattooIds or metaStateTable.purchasedMetaUpgradeIds or {}
+
+  ok, errorMessage = validateIdList(purchasedTattooIds, "metaState purchasedTattooIds", MetaUpgrades.getById)
   if not ok then
     return false, errorMessage
   end
@@ -1252,8 +1273,8 @@ function Validator.validateMetaStatePayload(metaStateTable)
   local expectedUnlockedUpgradeIds = {}
   local purchasedMetaUpgradeIndex = {}
 
-  for _, metaUpgradeId in ipairs(metaStateTable.purchasedMetaUpgradeIds or {}) do
-    purchasedMetaUpgradeIndex[metaUpgradeId] = true
+  for _, tattooId in ipairs(purchasedTattooIds) do
+    purchasedMetaUpgradeIndex[tattooId] = true
   end
 
   if metaStateTable.tattooLoadoutLimit ~= nil and not isNonNegativeInteger(metaStateTable.tattooLoadoutLimit) then
@@ -1292,7 +1313,7 @@ function Validator.validateMetaStatePayload(metaStateTable)
   else
     equippedTattooIds = {}
 
-    for _, metaUpgradeId in ipairs(metaStateTable.purchasedMetaUpgradeIds or {}) do
+    for _, metaUpgradeId in ipairs(purchasedTattooIds) do
       if #equippedTattooIds >= tattooLoadoutLimit then
         break
       end
@@ -1303,7 +1324,7 @@ function Validator.validateMetaStatePayload(metaStateTable)
     end
   end
 
-  for _, metaUpgradeId in ipairs(metaStateTable.purchasedMetaUpgradeIds or {}) do
+  for _, metaUpgradeId in ipairs(purchasedTattooIds) do
     local definition = MetaUpgrades.getById(metaUpgradeId)
 
     if definition then
@@ -1376,10 +1397,10 @@ function Validator.validateMetaStatePayload(metaStateTable)
     end
   end
 
-  if metaStateTable.unlockedUpgradeIds ~= nil then
+  if metaStateTable.unlockedTrickIds ~= nil or metaStateTable.unlockedUpgradeIds ~= nil then
     local unlockedUpgradeIndex = {}
 
-    for _, upgradeId in ipairs(metaStateTable.unlockedUpgradeIds or {}) do
+    for _, upgradeId in ipairs(unlockedTrickIds or {}) do
       unlockedUpgradeIndex[upgradeId] = true
     end
 
@@ -1759,7 +1780,7 @@ function Validator.validateActiveRunArtifactPayload(artifact)
 
       ok, errorMessage = validateSlotState(
         resumeLoadoutState.selectionSlots,
-        artifact.runState.maxActiveCoinSlots,
+        artifact.runState.maxFlipSlots or artifact.runState.maxActiveCoinSlots,
         collectionIndex,
         "active run artifact resumeLoadoutState selectionSlots",
         false
@@ -1893,8 +1914,10 @@ function Validator.validateReplayTranscriptPayload(transcript)
     return false, "replay transcript bootstrap starterCollection must be a table"
   end
 
-  if type(transcript.bootstrap.ownedUpgradeIds) ~= "table" then
-    return false, "replay transcript bootstrap ownedUpgradeIds must be a table"
+  local bootstrapOwnedTrickIds = transcript.bootstrap.ownedTrickIds or transcript.bootstrap.ownedUpgradeIds
+
+  if type(bootstrapOwnedTrickIds) ~= "table" then
+    return false, "replay transcript bootstrap ownedTrickIds must be a table"
   end
 
   local ok, errorMessage = validateIdList(transcript.bootstrap.starterCollection or {}, "replay transcript bootstrap starterCollection", Coins.getById)
@@ -1907,7 +1930,7 @@ function Validator.validateReplayTranscriptPayload(transcript)
     return false, errorMessage
   end
 
-  ok, errorMessage = validateIdList(transcript.bootstrap.ownedUpgradeIds or {}, "replay transcript bootstrap ownedUpgradeIds", Upgrades.getById)
+  ok, errorMessage = validateIdList(bootstrapOwnedTrickIds or {}, "replay transcript bootstrap ownedTrickIds", Upgrades.getById)
   if not ok then
     return false, errorMessage
   end
@@ -2057,7 +2080,7 @@ function Validator.validateReplayTranscriptPayload(transcript)
           return false, optionError
         end
 
-        local optionKey = string.format("%s:%s", tostring(option.type), tostring(option.contentId))
+        local optionKey = string.format("%s:%s", tostring(canonicalContentType(option.type)), tostring(option.contentId))
         if seenRewardOptionKeys[optionKey] then
           return false, string.format("replay transcript stage %d reward option %d duplicates %s", index, optionIndex, optionKey)
         end
@@ -2080,7 +2103,7 @@ function Validator.validateReplayTranscriptPayload(transcript)
           return false, choiceError
         end
 
-        local choiceKey = string.format("%s:%s", tostring(stageEntry.reward.choice.type), tostring(stageEntry.reward.choice.contentId))
+        local choiceKey = string.format("%s:%s", tostring(canonicalContentType(stageEntry.reward.choice.type)), tostring(stageEntry.reward.choice.contentId))
         if not seenRewardOptionKeys[choiceKey] then
           return false, string.format("replay transcript stage %d reward choice %s is not present in options", index, choiceKey)
         end
@@ -2485,7 +2508,7 @@ function Validator.validateReplayTranscriptPayload(transcript)
             return false, string.format("replay transcript stage %d purchase action %d has invalid outcome", index, actionIndex)
           end
 
-          if action.offerType ~= "coin" and action.offerType ~= "upgrade" then
+          if action.offerType ~= "coin" and action.offerType ~= "trick" and action.offerType ~= "upgrade" then
             return false, string.format("replay transcript stage %d purchase action %d has invalid offerType", index, actionIndex)
           end
 
@@ -2527,8 +2550,10 @@ function Validator.validateRunState(runState)
     return false, "runState.currentStageId must be nil or a stage id"
   end
 
-  if not isPositiveInteger(runState.maxActiveCoinSlots) then
-    return false, "runState.maxActiveCoinSlots must be a positive integer"
+  local maxFlipSlots = runState.maxFlipSlots or runState.maxActiveCoinSlots
+
+  if not isPositiveInteger(maxFlipSlots) then
+    return false, "runState.maxFlipSlots must be a positive integer"
   end
 
   if not isPositiveInteger(runState.baseFlipsPerStage) then
@@ -2571,8 +2596,14 @@ function Validator.validateRunState(runState)
     return false, "runState.pendingForcedCoinResults must be a table"
   end
 
-  if type(runState.shopPoints) ~= "number" or runState.shopPoints < 0 then
-    return false, "runState.shopPoints must be a non-negative number"
+  local runInfluence = runState.influence
+
+  if runInfluence == nil then
+    runInfluence = runState.shopPoints
+  end
+
+  if type(runInfluence) ~= "number" or runInfluence < 0 then
+    return false, "runState.influence must be a non-negative number"
   end
 
   if not isNonNegativeInteger(runState.shopRerollsRemaining) then
@@ -2627,7 +2658,9 @@ function Validator.validateRunState(runState)
     return false, purseError
   end
 
-  local upgradeOk, upgradeError = validateIdList(runState.ownedUpgradeIds, "runState.ownedUpgradeIds", Upgrades.getById)
+  local ownedTrickIds = runState.ownedTrickIds or runState.ownedUpgradeIds
+  local unlockedTrickIds = runState.unlockedTrickIds or runState.unlockedUpgradeIds
+  local upgradeOk, upgradeError = validateIdList(ownedTrickIds, "runState.ownedTrickIds", Upgrades.getById)
 
   if not upgradeOk then
     return false, upgradeError
@@ -2639,19 +2672,19 @@ function Validator.validateRunState(runState)
     return false, unlockedCoinsError
   end
 
-  local unlockedUpgradesOk, unlockedUpgradesError = validateIdList(runState.unlockedUpgradeIds or {}, "runState.unlockedUpgradeIds", Upgrades.getById)
+  local unlockedUpgradesOk, unlockedUpgradesError = validateIdList(unlockedTrickIds or {}, "runState.unlockedTrickIds", Upgrades.getById)
 
   if not unlockedUpgradesOk then
     return false, unlockedUpgradesError
   end
 
-  local slotOk, slotError = validateSlotState(runState.equippedCoinSlots or {}, runState.maxActiveCoinSlots, collectionIndex, "runState.equippedCoinSlots", false)
+  local slotOk, slotError = validateSlotState(runState.flipSlots or runState.equippedCoinSlots or {}, maxFlipSlots, collectionIndex, "runState.flipSlots", false)
 
   if not slotOk then
     return false, slotError
   end
 
-  slotOk, slotError = validateSlotState(runState.persistedLoadoutSlots or {}, runState.maxActiveCoinSlots, collectionIndex, "runState.persistedLoadoutSlots", false)
+  slotOk, slotError = validateSlotState(runState.persistedFlipSlots or runState.persistedLoadoutSlots or {}, maxFlipSlots, collectionIndex, "runState.persistedFlipSlots", false)
 
   if not slotOk then
     return false, slotError
@@ -2718,12 +2751,15 @@ function Validator.validateStageState(runState, stageState)
     return false, string.format("stageState has invalid stageStatus %s", tostring(stageState.stageStatus))
   end
 
-  if type(stageState.targetScore) ~= "number" or stageState.targetScore <= 0 then
-    return false, "stageState.targetScore must be a positive number"
+  local opponentHp = stageState.opponentHp or stageState.targetScore
+  local scoreAppliedToHp = stageState.scoreAppliedToHp or stageState.stageScore
+
+  if type(opponentHp) ~= "number" or opponentHp <= 0 then
+    return false, "stageState.opponentHp must be a positive number"
   end
 
-  if type(stageState.stageScore) ~= "number" or stageState.stageScore < 0 then
-    return false, "stageState.stageScore must be a non-negative number"
+  if type(scoreAppliedToHp) ~= "number" or scoreAppliedToHp < 0 then
+    return false, "stageState.scoreAppliedToHp must be a non-negative number"
   end
 
   if not isNonNegativeInteger(stageState.flipsRemaining) then
@@ -2764,12 +2800,12 @@ function Validator.validateStageState(runState, stageState)
       return false, "active stageState must have flips remaining"
     end
 
-    if stageState.stageScore >= stageState.targetScore then
-      return false, "active stageState cannot already meet targetScore"
+    if scoreAppliedToHp >= opponentHp then
+      return false, "active stageState cannot already meet opponentHp"
     end
   elseif stageState.stageStatus == "cleared" then
-    if stageState.stageScore < stageState.targetScore then
-      return false, "cleared stageState must meet targetScore"
+    if scoreAppliedToHp < opponentHp then
+      return false, "cleared stageState must meet opponentHp"
     end
   elseif stageState.stageStatus == "failed" then
     if stageState.flipsRemaining ~= 0 then
@@ -2853,16 +2889,20 @@ function Validator.validateBatchResult(runState, stageState, batchResult)
     return false, "batchResult status does not match trace stageStatusAfter"
   end
 
-  if batchResult.stageScore ~= (batchResult.trace and batchResult.trace.stageScoreAfter) then
-    return false, "batchResult stageScore does not match trace stageScoreAfter"
+  local traceScoreAppliedToHpAfter = batchResult.trace and (batchResult.trace.scoreAppliedToHpAfter or batchResult.trace.stageScoreAfter)
+
+  if batchResult.scoreAppliedToHp ~= traceScoreAppliedToHpAfter then
+    return false, "batchResult scoreAppliedToHp does not match trace scoreAppliedToHpAfter"
   end
 
   if batchResult.runTotalScore ~= (batchResult.trace and batchResult.trace.runScoreAfter) then
     return false, "batchResult runTotalScore does not match trace runScoreAfter"
   end
 
-  if batchResult.shopPoints ~= (batchResult.trace and batchResult.trace.shopPointsAfter) then
-    return false, "batchResult shopPoints does not match trace shopPointsAfter"
+  local traceInfluenceAfter = batchResult.trace and (batchResult.trace.influenceAfter or batchResult.trace.shopPointsAfter)
+
+  if batchResult.influence ~= traceInfluenceAfter then
+    return false, "batchResult influence does not match trace influenceAfter"
   end
 
   if batchResult.flipsRemaining ~= (batchResult.trace and batchResult.trace.flipsRemainingAfter) then
@@ -2887,8 +2927,8 @@ function Validator.validateShopOffers(runState, offers)
     ownedIndex["coin:" .. coinId] = true
   end
 
-  for _, upgradeId in ipairs(runState and runState.ownedUpgradeIds or {}) do
-    ownedIndex["upgrade:" .. upgradeId] = true
+  for _, upgradeId in ipairs(runState and (runState.ownedTrickIds or runState.ownedUpgradeIds) or {}) do
+    ownedIndex["trick:" .. upgradeId] = true
   end
 
   for index, offer in ipairs(offers) do
@@ -2905,7 +2945,7 @@ function Validator.validateShopOffers(runState, offers)
     end
     offerIds[offer.id] = true
 
-    if offer.type ~= "coin" and offer.type ~= "upgrade" then
+    if offer.type ~= "coin" and offer.type ~= "trick" and offer.type ~= "upgrade" then
       return false, string.format("shop offer %s has invalid type %s", offer.id, tostring(offer.type))
     end
 
@@ -2913,7 +2953,8 @@ function Validator.validateShopOffers(runState, offers)
       return false, string.format("shop offer %s missing contentId", offer.id)
     end
 
-    local contentKey = string.format("%s:%s", offer.type, offer.contentId)
+    local offerType = canonicalContentType(offer.type)
+    local contentKey = string.format("%s:%s", offerType, offer.contentId)
     if contentPairs[contentKey] then
       return false, string.format("shop offers contain duplicate content %s", contentKey)
     end
@@ -2927,17 +2968,17 @@ function Validator.validateShopOffers(runState, offers)
       return false, string.format("shop offer %s references unknown coin %s", offer.id, offer.contentId)
     end
 
-    if offer.type == "upgrade" and not Upgrades.getById(offer.contentId) then
-      return false, string.format("shop offer %s references unknown upgrade %s", offer.id, offer.contentId)
+    if offerType == "trick" and not Upgrades.getById(offer.contentId) then
+      return false, string.format("shop offer %s references unknown Trick %s", offer.id, offer.contentId)
     end
 
-    local definition = offer.type == "coin" and Coins.getById(offer.contentId) or Upgrades.getById(offer.contentId)
+    local definition = offerType == "coin" and Coins.getById(offer.contentId) or Upgrades.getById(offer.contentId)
     local isUnlocked
 
-    if offer.type == "coin" then
+    if offerType == "coin" then
       isUnlocked = Coins.isUnlocked(definition, runState and runState.unlockedCoinIds or {})
     else
-      isUnlocked = Upgrades.isUnlocked(definition, runState and runState.unlockedUpgradeIds or {})
+      isUnlocked = Upgrades.isUnlocked(definition, runState and (runState.unlockedTrickIds or runState.unlockedUpgradeIds) or {})
     end
 
     if not isUnlocked then
@@ -2991,9 +3032,11 @@ function Validator.validateRunHistory(runState)
   local bootstrapResolvedValues = history.bootstrap.resolvedValues
   local expectedBootstrapResolvedKeys = {
     "run.startingCollectionSize",
+    "run.maxFlipSlots",
     "run.maxActiveCoinSlots",
     "stage.flipsPerStage",
     "purse.handSize",
+    "run.startingInfluence",
     "run.startingShopPoints",
     "run.startingShopRerolls",
   }
@@ -3004,14 +3047,18 @@ function Validator.validateRunHistory(runState)
     if value == nil then
       if key == "run.startingCollectionSize" and history.bootstrap.startingCollectionSize ~= nil then
         value = history.bootstrap.startingCollectionSize
+      elseif key == "run.maxFlipSlots" then
+        value = bootstrapResolvedValues.maxFlipSlots or bootstrapResolvedValues.maxActiveCoinSlots
       elseif key == "run.maxActiveCoinSlots" then
-        value = bootstrapResolvedValues.maxActiveCoinSlots
+        value = bootstrapResolvedValues.maxActiveCoinSlots or bootstrapResolvedValues.maxFlipSlots
       elseif key == "stage.flipsPerStage" then
         value = bootstrapResolvedValues.baseFlipsPerStage
       elseif key == "purse.handSize" then
         value = bootstrapResolvedValues.handSize
+      elseif key == "run.startingInfluence" then
+        value = bootstrapResolvedValues.startingInfluence or bootstrapResolvedValues.startingShopPoints
       elseif key == "run.startingShopPoints" then
-        value = bootstrapResolvedValues.startingShopPoints
+        value = bootstrapResolvedValues.startingShopPoints or bootstrapResolvedValues.startingInfluence
       elseif key == "run.startingShopRerolls" then
         value = bootstrapResolvedValues.startingShopRerolls
       end
@@ -3019,7 +3066,7 @@ function Validator.validateRunHistory(runState)
 
     local isValid = isNonNegativeInteger(value)
 
-    if key == "run.maxActiveCoinSlots" or key == "stage.flipsPerStage" or key == "purse.handSize" then
+    if key == "run.maxFlipSlots" or key == "run.maxActiveCoinSlots" or key == "stage.flipsPerStage" or key == "purse.handSize" then
       isValid = isPositiveInteger(value)
     end
 
@@ -3195,7 +3242,7 @@ function Validator.validateRunHistory(runState)
       return false, string.format("loadoutCommits[%d] missing canonicalKey", index)
     end
 
-    local slotCount = math.max(getMaxNumericIndex(commit.slots), #(commit.compactCoinIds or {}), runState.maxActiveCoinSlots)
+    local slotCount = math.max(getMaxNumericIndex(commit.slots), #(commit.compactCoinIds or {}), runState.maxFlipSlots or runState.maxActiveCoinSlots)
     local ok, normalizedSlots = validateSlotState(commit.slots or {}, slotCount, nil, string.format("loadoutCommits[%d].slots", index), true)
 
     if not ok then
@@ -3316,7 +3363,7 @@ function Validator.validateRunHistory(runState)
             return false, string.format("shopVisits[%d] missing purchase record for successful action %d", index, actionIndex)
           end
 
-          if purchaseRecord.type ~= action.offerType or purchaseRecord.contentId ~= action.contentId then
+          if canonicalContentType(purchaseRecord.type) ~= canonicalContentType(action.offerType) or purchaseRecord.contentId ~= action.contentId then
             return false, string.format("shopVisits[%d] purchase record mismatch for successful action %d", index, actionIndex)
           end
 
@@ -3328,7 +3375,7 @@ function Validator.validateRunHistory(runState)
             return false, string.format("runState.history.purchases missing entry for successful shop action %d", actionIndex)
           end
 
-          if historyRecord.type ~= purchaseRecord.type or historyRecord.contentId ~= purchaseRecord.contentId or historyRecord.price ~= purchaseRecord.price then
+          if canonicalContentType(historyRecord.type) ~= canonicalContentType(purchaseRecord.type) or historyRecord.contentId ~= purchaseRecord.contentId or historyRecord.price ~= purchaseRecord.price then
             return false, string.format("runState.history.purchases mismatch for shopVisits[%d] action %d", index, actionIndex)
           end
 
@@ -3342,7 +3389,7 @@ function Validator.validateRunHistory(runState)
             return false, string.format("shopVisits[%d] missing failure record for failed action %d", index, actionIndex)
           end
 
-          if failureRecord.type ~= action.offerType or failureRecord.contentId ~= action.contentId then
+          if canonicalContentType(failureRecord.type) ~= canonicalContentType(action.offerType) or failureRecord.contentId ~= action.contentId then
             return false, string.format("shopVisits[%d] failure record mismatch for action %d", index, actionIndex)
           end
 
@@ -3390,8 +3437,11 @@ function Validator.validateRunHistory(runState)
         return false, string.format("final batch status mismatch for stage %s", stageKey)
       end
 
-      if finalBatch.trace.stageScoreAfter ~= stageRecord.stageScore then
-        return false, string.format("final batch stageScore mismatch for stage %s", stageKey)
+      local finalScoreAppliedToHp = finalBatch.trace.scoreAppliedToHpAfter or finalBatch.trace.stageScoreAfter
+      local recordScoreAppliedToHp = stageRecord.scoreAppliedToHp or stageRecord.stageScore
+
+      if finalScoreAppliedToHp ~= recordScoreAppliedToHp then
+        return false, string.format("final batch scoreAppliedToHp mismatch for stage %s", stageKey)
       end
     end
   end
@@ -3442,19 +3492,19 @@ function Validator.assertRuntimeInvariants(label, runState, stageState, options)
 end
 
 function Validator.validateLoadoutSelection(runState, slots)
-  local normalized = Loadout.normalizeSlots(slots, runState.maxActiveCoinSlots)
+  local normalized = Loadout.normalizeSlots(slots, runState.maxFlipSlots or runState.maxActiveCoinSlots)
 
-  if Loadout.countEquipped(normalized, runState.maxActiveCoinSlots) == 0 then
-    return false, "at least one equipped coin is required"
+  if Loadout.countEquipped(normalized, runState.maxFlipSlots or runState.maxActiveCoinSlots) == 0 then
+    return false, "at least one Flip Slot coin is required"
   end
 
-  local hasDuplicate, duplicateId = Loadout.containsDuplicateIds(normalized, runState.maxActiveCoinSlots)
+  local hasDuplicate, duplicateId = Loadout.containsDuplicateIds(normalized, runState.maxFlipSlots or runState.maxActiveCoinSlots)
 
   if hasDuplicate then
     return false, string.format("duplicate equipped coin: %s", duplicateId)
   end
 
-  for slotIndex = 1, runState.maxActiveCoinSlots do
+  for slotIndex = 1, (runState.maxFlipSlots or runState.maxActiveCoinSlots) do
     local coinId = normalized[slotIndex]
 
     if coinId and not Utils.contains(runState.collectionCoinIds, coinId) then
@@ -3467,9 +3517,9 @@ end
 
 function Validator.reconcilePersistedLoadout(runState)
   return Loadout.reconcileSlotsDetailed(
-    runState.persistedLoadoutSlots,
+    runState.persistedFlipSlots or runState.persistedLoadoutSlots,
     runState.collectionCoinIds,
-    runState.maxActiveCoinSlots
+    runState.maxFlipSlots or runState.maxActiveCoinSlots
   )
 end
 
@@ -3609,8 +3659,8 @@ function Validator.validateContentRegistry(registryName, definitions)
         return false, string.format("stages registry error: %s is missing label", definition.id)
       end
 
-      if type(definition.targetScore) ~= "number" then
-        return false, string.format("stages registry error: %s is missing targetScore", definition.id)
+      if type(definition.opponentHp or definition.targetScore) ~= "number" then
+        return false, string.format("stages registry error: %s is missing opponentHp", definition.id)
       end
 
       if definition.activeStageModifierIds ~= nil and type(definition.activeStageModifierIds) ~= "table" then
@@ -3695,8 +3745,8 @@ function Validator.validateContentRegistry(registryName, definitions)
           return false, string.format("stages registry error: %s variants[%d] is missing label", definition.id, variantIndex)
         end
 
-        if variant.targetScore ~= nil and type(variant.targetScore) ~= "number" then
-          return false, string.format("stages registry error: %s variants[%d] has non-numeric targetScore", definition.id, variantIndex)
+        if (variant.opponentHp ~= nil and type(variant.opponentHp) ~= "number") or (variant.targetScore ~= nil and type(variant.targetScore) ~= "number") then
+          return false, string.format("stages registry error: %s variants[%d] has non-numeric opponentHp", definition.id, variantIndex)
         end
 
         if type(variant.activeStageModifierIds) ~= "table" or #variant.activeStageModifierIds == 0 then

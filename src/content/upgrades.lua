@@ -40,7 +40,7 @@ local definitions = {
       {
         hook = "after_scoring",
         effects = {
-          { op = "add_shop_points", amount = 1 },
+          { op = "add_influence", amount = 1 },
         },
       },
     },
@@ -63,7 +63,7 @@ local definitions = {
       {
         hook = "before_scoring",
         effects = {
-          { op = "apply_score_multiplier", value = 1.10 },
+          { op = "apply_score_scaling", value = 1.10 },
         },
       },
     },
@@ -148,7 +148,7 @@ local definitions = {
       scope = { oncePerRun = true },
     },
     onAcquire = {
-      { op = "add_shop_points", amount = 2 },
+      { op = "add_influence", amount = 2 },
     },
   },
   {
@@ -356,7 +356,7 @@ local definitions = {
     triggers = {
       {
         hook = "after_shop_generation",
-        condition = { offer_type = "upgrade" },
+        condition = { offer_type = "trick" },
         effects = {
           { op = "adjust_shop_price", delta = -1 },
         },
@@ -383,9 +383,9 @@ local definitions = {
     triggers = {
       {
         hook = "after_purchase",
-        condition = { purchase_type = "upgrade" },
+        condition = { purchase_type = "trick" },
         effects = {
-          { op = "add_shop_points", amount = 1 },
+          { op = "add_influence", amount = 1 },
           { op = "add_shop_message", message = "Kickback Mark refunded 1 Influence." },
         },
       },
@@ -445,7 +445,7 @@ local definitions = {
                   hook = "after_scoring",
                   condition = { all_matched = true },
                   effects = {
-                    { op = "add_shop_points", amount = 1 },
+                    { op = "add_influence", amount = 1 },
                     { op = "queue_trace_note", note = "Echo Wager paid out." },
                   },
                 },
@@ -481,7 +481,7 @@ local definitions = {
         hook = "before_scoring",
         condition = { call = "tails" },
         effects = {
-          { op = "apply_score_multiplier", value = 1.15 },
+          { op = "apply_score_scaling", value = 1.15 },
         },
       },
     },
@@ -505,7 +505,7 @@ local definitions = {
         hook = "after_scoring",
         condition = { call = "heads" },
         effects = {
-          { op = "add_shop_points", amount = 1 },
+          { op = "add_influence", amount = 1 },
         },
       },
     },
@@ -529,7 +529,7 @@ local definitions = {
         hook = "before_scoring",
         condition = { call = "heads" },
         effects = {
-          { op = "apply_score_multiplier", value = 1.15 },
+          { op = "apply_score_scaling", value = 1.15 },
         },
       },
     },
@@ -553,7 +553,7 @@ local definitions = {
         hook = "before_coin_score",
         condition = { foretold = true, match = true },
         effects = {
-          { op = "apply_score_multiplier", value = 2.0, target = "current_coin_score" },
+          { op = "apply_score_scaling", value = 2.0, target = "current_coin_score" },
         },
       },
     },
@@ -577,7 +577,7 @@ local definitions = {
         hook = "on_batch_end",
         condition = { no_matches = true },
         effects = {
-          { op = "add_shop_points", amount = 2 },
+          { op = "add_influence", amount = 2 },
         },
       },
     },

@@ -5,6 +5,12 @@ local Utils = require("src.core.utils")
 
 local MetaProgressionSystem = {}
 
+local function getPurchasedTattooIds(metaState)
+  metaState.purchasedTattooIds = metaState.purchasedTattooIds or metaState.purchasedMetaUpgradeIds or {}
+  metaState.purchasedMetaUpgradeIds = metaState.purchasedTattooIds
+  return metaState.purchasedTattooIds
+end
+
 local function appendUniqueIds(target, values)
   local index = {}
 
@@ -38,7 +44,7 @@ function MetaProgressionSystem.getUpgradeOptions(metaState)
   local options = {}
 
   for _, definition in ipairs(MetaUpgrades.getAll()) do
-    local purchased = Utils.contains(metaState.purchasedMetaUpgradeIds, definition.id)
+    local purchased = Utils.contains(getPurchasedTattooIds(metaState), definition.id)
     local equipped = Utils.contains(metaState.equippedTattooIds, definition.id)
     local equipEligible = MetaUpgrades.isEquipEligible(definition)
     local effectiveValues = EffectiveValueSystem.getDefinitionEffectiveValues(definition)
@@ -77,7 +83,7 @@ function MetaProgressionSystem.canPurchase(metaState, metaUpgradeId)
     return false, "unknown_meta_upgrade"
   end
 
-  if Utils.contains(metaState.purchasedMetaUpgradeIds, metaUpgradeId) then
+  if Utils.contains(getPurchasedTattooIds(metaState), metaUpgradeId) then
     return false, "already_purchased"
   end
 
@@ -96,7 +102,7 @@ function MetaProgressionSystem.purchase(metaState, metaUpgradeId)
   end
 
   metaState.metaPoints = metaState.metaPoints - (result.cost or 0)
-  table.insert(metaState.purchasedMetaUpgradeIds, metaUpgradeId)
+  table.insert(getPurchasedTattooIds(metaState), metaUpgradeId)
 
   metaState.equippedTattooIds = metaState.equippedTattooIds or {}
 
@@ -106,7 +112,9 @@ function MetaProgressionSystem.purchase(metaState, metaUpgradeId)
 
   rebuildEquippedTattooEffects(metaState)
   appendUniqueIds(metaState.unlockedCoinIds, result.unlockCoinIds)
-  appendUniqueIds(metaState.unlockedUpgradeIds, result.unlockUpgradeIds)
+  metaState.unlockedTrickIds = metaState.unlockedTrickIds or metaState.unlockedUpgradeIds or {}
+  metaState.unlockedUpgradeIds = metaState.unlockedTrickIds
+  appendUniqueIds(metaState.unlockedTrickIds, result.unlockUpgradeIds)
   return true, result
 end
 
@@ -117,7 +125,7 @@ function MetaProgressionSystem.canEquipTattoo(metaState, metaUpgradeId)
     return false, "unknown_meta_upgrade"
   end
 
-  if not Utils.contains(metaState.purchasedMetaUpgradeIds, metaUpgradeId) then
+  if not Utils.contains(getPurchasedTattooIds(metaState), metaUpgradeId) then
     return false, "not_purchased"
   end
 

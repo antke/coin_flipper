@@ -50,7 +50,7 @@ return {
     local refillEvent = A.truthy(batch.refillEvent, "missing refill event")
 
     A.truthy(#dealtHand > #selectedSlots, "dealt hand should be larger than legal Flip Slots")
-    A.equal(#selectedSlots, env.runState.maxActiveCoinSlots, "selected Flip Slot count")
+    A.equal(#selectedSlots, env.runState.maxFlipSlots, "selected Flip Slot count")
     A.equal(#resolutionEntries, #selectedSlots, "resolution entries should match selected slots")
 
     for index, selected in ipairs(selectedSlots) do

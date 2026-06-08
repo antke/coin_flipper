@@ -42,7 +42,7 @@ function FlipResolver.buildResolutionContext(runState, stageState, metaProjectio
     perCoin = {},
     batchFlags = {},
     scoreBreakdown = ScoreBreakdown.new(),
-    pendingScoreMultiplier = 1.0,
+    pendingScoreScaling = 1.0,
     actionMetrics = {
       appliedCount = 0,
       maxAppliedCount = GameConfig.get("engine.maxAppliedActionsPerBatch"),
@@ -204,7 +204,7 @@ function FlipResolver.evaluateStageEnd(stageState, context)
   stageState.batchIndex = context.batchId
   stageState.flipsRemaining = math.max(stageState.flipsRemaining - 1, 0)
 
-  if stageState.stageScore >= stageState.targetScore then
+  if stageState.scoreAppliedToHp >= stageState.opponentHp then
     stageState.stageStatus = "cleared"
   elseif stageState.flipsRemaining == 0 then
     stageState.stageStatus = "failed"
@@ -217,9 +217,11 @@ end
 
 function FlipResolver.updateTraceTerminalState(stageState, context)
   context.trace.stageStatusAfter = stageState.stageStatus
-  context.trace.stageScoreAfter = stageState.stageScore
+  context.trace.scoreAppliedToHpAfter = stageState.scoreAppliedToHp
+  context.trace.stageScoreAfter = stageState.scoreAppliedToHp
   context.trace.runScoreAfter = context.runState.runTotalScore
-  context.trace.shopPointsAfter = context.runState.shopPoints
+  context.trace.influenceAfter = context.runState.influence
+  context.trace.shopPointsAfter = context.runState.influence
   context.trace.flipsRemainingAfter = stageState.flipsRemaining
 end
 
@@ -250,10 +252,13 @@ function FlipResolver.buildBatchResult(runState, stageState, context, resolution
     scoreBreakdown = context.scoreBreakdown,
     trace = context.trace,
     status = stageState.stageStatus,
-    stageScore = stageState.stageScore,
-    targetScore = stageState.targetScore,
+    scoreAppliedToHp = stageState.scoreAppliedToHp,
+    opponentHp = stageState.opponentHp,
+    stageScore = stageState.scoreAppliedToHp,
+    targetScore = stageState.opponentHp,
     runTotalScore = runState.runTotalScore,
-    shopPoints = runState.shopPoints,
+    influence = runState.influence,
+    shopPoints = runState.influence,
     flipsRemaining = stageState.flipsRemaining,
   }
 end
@@ -398,7 +403,7 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
   FlipResolver.runPhase(runState, stageState, context, "on_batch_end")
   LuckSystem.consumeFatedFlip(runState, context)
 
-  if GameConfig.get("scoring.clearOnThresholdAtBatchEnd", true) == true and stageState.stageScore >= stageState.targetScore then
+  if GameConfig.get("scoring.clearOnThresholdAtBatchEnd", true) == true and stageState.scoreAppliedToHp >= stageState.opponentHp then
     stageState.stageStatus = "cleared"
   end
 

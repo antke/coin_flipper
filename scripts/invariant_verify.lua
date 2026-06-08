@@ -31,7 +31,7 @@ local function runTargetedShopScenario(seed)
   local committedSelection, errorMessage = LoadoutSystem.commitLoadout(runState, selection)
   assert(committedSelection, errorMessage)
 
-  stageState.stageScore = stageState.targetScore
+  stageState.scoreAppliedToHp = stageState.opponentHp
   stageState.stageStatus = "cleared"
 
   local stageRecord = RunHistorySystem.finalizeStage(runState, stageState, metaState)
@@ -44,7 +44,7 @@ local function runTargetedShopScenario(seed)
     choice = nil,
     claimed = false,
   })
-  runState.shopPoints = 20
+  runState.influence = 20
   runState.shopRerollsRemaining = 1
 
   local rng = RNG.new(seed)
@@ -57,7 +57,7 @@ local function runTargetedShopScenario(seed)
 
   local purchaseIndex = nil
   for index, offer in ipairs(offers) do
-    if not offer.purchased and (offer.price or 0) <= runState.shopPoints then
+    if not offer.purchased and (offer.price or 0) <= runState.influence then
       purchaseIndex = index
       break
     end
@@ -81,7 +81,7 @@ local function runTargetedQueueScenario(baseSeed)
     local runState, metaProjection = RunInitializer.createNewRun(metaState, {
       seed = seed,
       starterCollection = { "copper_weighted_coin" },
-      ownedUpgradeIds = { "heads_varnish", "echo_cache" },
+      ownedTrickIds = { "heads_varnish", "echo_cache" },
     })
     local stageState = RunInitializer.createStageForCurrentRound(runState)
     local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "copper_weighted_coin" })
@@ -168,7 +168,7 @@ local function runForcedResultLeakScenario(seed)
   assert(selection, errorMessage)
 
   table.insert(runState.pendingForcedCoinResults, "heads")
-  stageState.stageScore = stageState.targetScore
+  stageState.scoreAppliedToHp = stageState.opponentHp
   stageState.stageStatus = "cleared"
 
   RunHistorySystem.finalizeStage(runState, stageState, metaState)

@@ -3,7 +3,7 @@ local Utils = require("src.core.utils")
 
 local FlipBatch = {}
 
-function FlipBatch.new(batchId, call, equippedCoinSlots, resolutionEntries, maxActiveCoinSlots)
+function FlipBatch.new(batchId, call, flipSlots, resolutionEntries, maxFlipSlots)
   local resolutionCoinIds = {}
   local maxSlotIndex = 0
 
@@ -11,18 +11,20 @@ function FlipBatch.new(batchId, call, equippedCoinSlots, resolutionEntries, maxA
     table.insert(resolutionCoinIds, entry.coinId)
   end
 
-  for slotIndex in pairs(equippedCoinSlots or {}) do
+  for slotIndex in pairs(flipSlots or {}) do
     if type(slotIndex) == "number" and slotIndex > maxSlotIndex then
       maxSlotIndex = slotIndex
     end
   end
 
-  local slotCount = math.max(1, maxActiveCoinSlots or 0, maxSlotIndex)
+  local slotCount = math.max(1, maxFlipSlots or 0, maxSlotIndex)
+  local normalizedFlipSlots = Loadout.cloneSlots(flipSlots, slotCount)
 
   return {
     batchId = batchId,
     call = call,
-    equippedCoinSlots = Loadout.cloneSlots(equippedCoinSlots, slotCount),
+    flipSlots = normalizedFlipSlots,
+    equippedCoinSlots = normalizedFlipSlots,
     resolutionCoinIds = resolutionCoinIds,
     resolutionEntries = Utils.clone(resolutionEntries or {}),
     resolvedCoinResults = {},

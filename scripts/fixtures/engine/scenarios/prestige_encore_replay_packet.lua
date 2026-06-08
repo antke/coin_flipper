@@ -21,7 +21,7 @@ return {
       runOptions = {
         seed = 1,
         starterCollection = { "copper_bent_coin", "copper_blank_coin", "copper_hollow_coin" },
-        ownedUpgradeIds = { "encore" },
+        ownedTrickIds = { "encore" },
       },
       initialLoadout = {
         [1] = "copper_bent_coin",

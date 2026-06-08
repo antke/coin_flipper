@@ -7,6 +7,10 @@ local Utils = require("src.core.utils")
 
 local EncounterSystem = {}
 
+local function isTrickType(choiceType)
+  return choiceType == "trick" or choiceType == "upgrade"
+end
+
 local function hashText(text)
   local hash = 2166136261
 
@@ -45,7 +49,7 @@ local function canUseChoice(runState, choice)
     return AcquisitionSystem.canGrantCoin(runState, choice.contentId)
   end
 
-  if choice.type == "upgrade" then
+  if isTrickType(choice.type) then
     return AcquisitionSystem.canGrantUpgrade(runState, choice.contentId)
   end
 
@@ -147,7 +151,7 @@ end
 
 local function applyChoiceToRun(runState, choice)
   if choice.type == "shop_points" then
-    runState.shopPoints = runState.shopPoints + (choice.amount or 0)
+    runState.influence = runState.influence + (choice.amount or 0)
     return true, serializeChoice(choice)
   end
 
@@ -160,8 +164,8 @@ local function applyChoiceToRun(runState, choice)
     return AcquisitionSystem.grantCoin(runState, choice.contentId)
   end
 
-  if choice.type == "upgrade" then
-    return AcquisitionSystem.grantUpgrade(runState, choice.contentId)
+  if isTrickType(choice.type) then
+    return AcquisitionSystem.grantTrick(runState, choice.contentId)
   end
 
   return false, "invalid_encounter_choice_type"
@@ -284,14 +288,16 @@ function EncounterSystem.buildProjectedOutcome(runState, session)
     choice = serializeChoice(choice),
     claimed = session.claimed == true,
     projectedRunState = projectedRunState,
-    shopPointsBefore = runState and runState.shopPoints or 0,
-    shopPointsAfter = projectedRunState and projectedRunState.shopPoints or 0,
+    influenceBefore = runState and runState.influence or 0,
+    influenceAfter = projectedRunState and projectedRunState.influence or 0,
+    shopPointsBefore = runState and runState.influence or 0,
+    shopPointsAfter = projectedRunState and projectedRunState.influence or 0,
     shopRerollsBefore = runState and runState.shopRerollsRemaining or 0,
     shopRerollsAfter = projectedRunState and projectedRunState.shopRerollsRemaining or 0,
     collectionSizeBefore = #(runState and runState.collectionCoinIds or {}),
     collectionSizeAfter = #(projectedRunState and projectedRunState.collectionCoinIds or {}),
-    upgradeCountBefore = #(runState and runState.ownedUpgradeIds or {}),
-    upgradeCountAfter = #(projectedRunState and projectedRunState.ownedUpgradeIds or {}),
+    upgradeCountBefore = #(runState and (runState.ownedTrickIds or runState.ownedUpgradeIds) or {}),
+    upgradeCountAfter = #(projectedRunState and (projectedRunState.ownedTrickIds or projectedRunState.ownedUpgradeIds) or {}),
   }
 end
 

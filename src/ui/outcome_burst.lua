@@ -73,7 +73,7 @@ function OutcomeBurst.getBatchLabel(batchResult, config)
       return labels.clutch or getMatchLabel(matchCount, coinCount, config), "success"
     end
 
-    if (batchResult.stageScore or 0) > (batchResult.targetScore or 0) then
+    if (batchResult.scoreAppliedToHp or batchResult.stageScore or 0) > (batchResult.opponentHp or batchResult.targetScore or 0) then
       return labels.overkill or getMatchLabel(matchCount, coinCount, config), "success"
     end
   end

@@ -233,7 +233,7 @@ function RunHistorySystem.finalizeStage(runState, stageState, metaState)
 
   if stageState.stageStatus == "cleared" and stageState.stageClearShopPointsGranted ~= true then
     victoryShopPointReward = EconomyContent.calculateVictoryShopPointReward(stageState)
-    runState.shopPoints = runState.shopPoints + (victoryShopPointReward.total or 0)
+    runState.influence = runState.influence + (victoryShopPointReward.total or 0)
     stageState.stageClearShopPointsGranted = true
     stageState.victoryShopPointReward = victoryShopPointReward
   end
@@ -250,17 +250,19 @@ function RunHistorySystem.finalizeStage(runState, stageState, metaState)
     opponentId = stageState.opponent and stageState.opponent.id or nil,
     opponentName = stageState.opponent and stageState.opponent.name or nil,
     enemyClass = stageState.opponent and stageState.opponent.enemyClass or nil,
-    opponentHp = stageState.targetScore,
+    opponentHp = stageState.opponentHp,
     status = stageState.stageStatus,
-    stageScore = stageState.stageScore,
-    targetScore = stageState.targetScore,
+    scoreAppliedToHp = stageState.scoreAppliedToHp,
+    stageScore = stageState.scoreAppliedToHp,
+    targetScore = stageState.opponentHp,
     bossModifierIds = Utils.copyArray(stageState.activeBossModifierIds or {}),
     runTotalScore = runState.runTotalScore,
-    shopPoints = runState.shopPoints,
+    influence = runState.influence,
+    shopPoints = runState.influence,
     stageClearShopPoints = stageState.stageClearShopPointsGranted and (victoryShopPointReward.total or 0) or 0,
     victoryShopPointReward = Utils.clone(victoryShopPointReward),
     shopRerollsRemaining = runState.shopRerollsRemaining,
-    loadoutKey = Loadout.toCanonicalKey(runState.equippedCoinSlots, runState.maxActiveCoinSlots),
+    loadoutKey = Loadout.toCanonicalKey(runState.flipSlots, runState.maxFlipSlots),
   }
 
   runState.runStatus = ProgressionSystem.determineRunStatus(runState, stageState)

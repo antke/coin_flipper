@@ -5,6 +5,10 @@ local Utils = require("src.core.utils")
 
 local AcquisitionSystem = {}
 
+local function isTrickType(contentType)
+  return contentType == "trick" or contentType == "upgrade"
+end
+
 function AcquisitionSystem.canGrantCoin(runState, coinId)
   local definition = Coins.getById(coinId)
 
@@ -22,7 +26,10 @@ function AcquisitionSystem.canGrantUpgrade(runState, upgradeId)
     return false, "unknown_upgrade"
   end
 
-  if Utils.contains(runState.ownedUpgradeIds, upgradeId) then
+  runState.ownedTrickIds = runState.ownedTrickIds or runState.ownedUpgradeIds or {}
+  runState.ownedUpgradeIds = runState.ownedTrickIds
+
+  if Utils.contains(runState.ownedTrickIds, upgradeId) then
     return false, "upgrade_already_owned"
   end
 
@@ -34,7 +41,7 @@ function AcquisitionSystem.canGrantByType(runState, contentType, contentId)
     return AcquisitionSystem.canGrantCoin(runState, contentId)
   end
 
-  if contentType == "upgrade" then
+  if isTrickType(contentType) then
     return AcquisitionSystem.canGrantUpgrade(runState, contentId)
   end
 
@@ -65,14 +72,18 @@ function AcquisitionSystem.grantUpgrade(runState, upgradeId, context)
     return false, definition, context
   end
 
-  context = context or ActionQueue.createContext("grant_upgrade", {
+  context = context or ActionQueue.createContext("grant_trick", {
     runState = runState,
   })
   ActionQueue.applyAll(runState, nil, context, {
-    { op = "grant_upgrade", upgradeId = upgradeId },
+    { op = "grant_trick", trickId = upgradeId },
   })
 
   return true, definition, context
+end
+
+function AcquisitionSystem.grantTrick(runState, trickId, context)
+  return AcquisitionSystem.grantUpgrade(runState, trickId, context)
 end
 
 return AcquisitionSystem

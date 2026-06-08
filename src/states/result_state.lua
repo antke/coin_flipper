@@ -144,9 +144,9 @@ function ResultState:draw(app)
   local lines = {
     string.format("Stage: %s", result.stageLabel or "n/a"),
     string.format("Opponent: %s", result.opponentName or "n/a"),
-    string.format("Score Applied to HP: %s / %s", tostring(result.stageScore or 0), tostring(result.targetScore or 0)),
+    string.format("Score Applied to HP: %s / %s", tostring(result.scoreAppliedToHp or result.stageScore or 0), tostring(result.opponentHp or result.targetScore or 0)),
     string.format("Run Status: %s", tostring(result.runStatus or "active")),
-    string.format("Influence: %s", tostring(result.shopPoints or (app.runState and app.runState.shopPoints or 0))),
+    string.format("Influence: %s", tostring(result.influence or result.shopPoints or (app.runState and app.runState.influence or 0))),
     string.format("Next step: %s", destination),
   }
 

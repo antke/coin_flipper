@@ -322,7 +322,6 @@ Terminology.textReplacements = {
   { from = "Heads chance", to = labelTerm("heads_weight") },
   { from = "Tails chance", to = labelTerm("tails_weight") },
   { from = "stage score", to = labelTerm("stage_score") },
-  { from = "score multiplier", to = Terminology.tags.score_scaling },
   { from = "all-match", to = Terminology.outcomes.all_matched },
 }
 

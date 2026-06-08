@@ -25,7 +25,7 @@ return {
       runOptions = {
         seed = 1,
         starterCollection = { "copper_weighted_coin", "copper_marked_coin", "copper_lucky_coin" },
-        ownedUpgradeIds = { "see_behind_the_veil", "fulfilled_fate" },
+        ownedTrickIds = { "see_behind_the_veil", "fulfilled_fate" },
       },
       initialLoadout = {
         [1] = "copper_weighted_coin",
@@ -94,22 +94,23 @@ return {
     A.equal(foretellAction.foretoldResult, foretoldDealt.foretoldResult, "Foretell action result metadata")
     A.equal(foretellAction.dealtIndex, foretoldDealt.dealtIndex, "Foretell action dealt index")
 
-    local scopedMultiplier = nil
-    for _, multiplier in ipairs(firstBatch.scoreBreakdown and firstBatch.scoreBreakdown.multipliers or {}) do
-      if multiplier.scope == "current_coin_score" and multiplier.instanceId == foretoldDealt.instanceId then
-        scopedMultiplier = multiplier
+    local scopedScaling = nil
+    local scoreScalings = firstBatch.scoreBreakdown and firstBatch.scoreBreakdown.scoreScalings or {}
+    for _, scaling in ipairs(scoreScalings) do
+      if scaling.scope == "current_coin_score" and scaling.instanceId == foretoldDealt.instanceId then
+        scopedScaling = scaling
         break
       end
     end
 
-    scopedMultiplier = A.truthy(scopedMultiplier, "Fulfilled Fate should apply scoped score multiplier")
-    A.equal(scopedMultiplier.value, 2.0, "Fulfilled Fate multiplier value")
+    scopedScaling = A.truthy(scopedScaling, "Fulfilled Fate should apply scoped score scaling")
+    A.equal(scopedScaling.value, 2.0, "Fulfilled Fate score scaling value")
     A.traceHasAction(trace, {
-      op = "apply_score_multiplier",
+      op = "apply_score_scaling",
       value = 2.0,
       target = "current_coin_score",
       instanceId = foretoldDealt.instanceId,
-    }, "Fulfilled Fate should trace current-coin score multiplier")
+    }, "Fulfilled Fate should trace current-coin score scaling")
     A.replayOk(env.replay, "Prediction replay should succeed")
 
     local resolutionTamper = Utils.clone(env.transcript)

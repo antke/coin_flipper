@@ -11,7 +11,7 @@ local definitions = {
       tier = 1,
     },
     effectiveValues = {
-      ["economy.shopPointMultiplier"] = 1.10,
+      ["economy.influenceMultiplier"] = 1.10,
     },
   },
   {
@@ -26,7 +26,7 @@ local definitions = {
       tier = 1,
     },
     effectiveValues = {
-      ["run.maxActiveCoinSlots"] = 1,
+      ["run.maxFlipSlots"] = 1,
     },
   },
   {
@@ -41,7 +41,7 @@ local definitions = {
       tier = 1,
     },
     effectiveValues = {
-      ["run.startingShopPoints"] = 2,
+      ["run.startingInfluence"] = 2,
     },
   },
   {

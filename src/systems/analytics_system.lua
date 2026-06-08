@@ -88,8 +88,8 @@ function AnalyticsSystem.buildPostStageReport(runState, stageRecord, lastBatchRe
     string.format("Stage: %s", stageRecord.stageLabel or stageRecord.stageId or "n/a"),
     string.format("Opponent: %s", stageRecord.opponentName or "n/a"),
     string.format("Status: %s", tostring(stageRecord.status or "n/a")),
-    string.format("Score Applied to HP: %d / %d", stageRecord.stageScore or 0, stageRecord.targetScore or 0),
-    string.format("Influence: %d", stageRecord.shopPoints or runState.shopPoints or 0),
+    string.format("Score Applied to HP: %d / %d", stageRecord.scoreAppliedToHp or stageRecord.stageScore or 0, stageRecord.opponentHp or stageRecord.targetScore or 0),
+    string.format("Influence: %d", stageRecord.influence or stageRecord.shopPoints or runState.influence or 0),
     string.format("Black Market Rerolls Ready: %d", stageRecord.shopRerollsRemaining or runState.shopRerollsRemaining or 0),
     string.format("Loadout: %s", loadoutKey),
     string.format("Batches Resolved: %d", #stageBatches),
@@ -231,7 +231,7 @@ function AnalyticsSystem.buildSimulationReport(results)
       end
     end
 
-    for _, upgradeId in ipairs(runState.ownedUpgradeIds or {}) do
+    for _, upgradeId in ipairs(runState.ownedTrickIds or runState.ownedUpgradeIds or {}) do
       local definition = Upgrades.getById(upgradeId)
       local entry = ensureRateEntry(report.trickUsage, upgradeId, definition and definition.name or upgradeId)
       entry.runs = entry.runs + 1
@@ -261,7 +261,7 @@ function AnalyticsSystem.buildSimulationReport(results)
       }
 
       stageEntry.attempts = stageEntry.attempts + 1
-      stageEntry.totalStageScore = stageEntry.totalStageScore + (stageRecord.stageScore or 0)
+      stageEntry.totalStageScore = stageEntry.totalStageScore + (stageRecord.scoreAppliedToHp or stageRecord.stageScore or 0)
 
       if stageRecord.status == "cleared" then
         stageEntry.clears = stageEntry.clears + 1

@@ -30,7 +30,7 @@ return {
       runOptions = {
         seed = 1,
         starterCollection = { "copper_weighted_coin", "copper_marked_coin", "copper_lucky_coin" },
-        ownedUpgradeIds = { "omen_engine" },
+        ownedTrickIds = { "omen_engine" },
       },
       initialLoadout = {
         [1] = "copper_weighted_coin",
@@ -78,7 +78,7 @@ return {
     A.traceHasTriggeredSource(trace, {
       phase = "luck_gain",
       sourceId = "omen_engine",
-      sourceType = "run upgrade",
+      sourceType = "trick",
     }, "Omen Engine should trigger from luck_gain")
     A.traceHasAction(trace, {
       op = "add_luck",

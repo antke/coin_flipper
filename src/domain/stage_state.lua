@@ -3,6 +3,33 @@ local PurseSystem = require("src.systems.purse_system")
 
 local StageState = {}
 
+local STAGE_STATE_ALIASES = {
+  stageScore = "scoreAppliedToHp",
+  targetScore = "opponentHp",
+}
+
+local STAGE_STATE_METATABLE = {
+  __index = function(stageState, key)
+    local canonicalKey = STAGE_STATE_ALIASES[key]
+
+    if canonicalKey then
+      return rawget(stageState, canonicalKey)
+    end
+
+    return nil
+  end,
+  __newindex = function(stageState, key, value)
+    local canonicalKey = STAGE_STATE_ALIASES[key]
+
+    if canonicalKey then
+      rawset(stageState, canonicalKey, value)
+      return
+    end
+
+    rawset(stageState, key, value)
+  end,
+}
+
 function StageState.new(stageDefinition, runState, options)
   options = options or {}
   local activeBossModifierIds = {}
@@ -10,7 +37,7 @@ function StageState.new(stageDefinition, runState, options)
   opponent.id = opponent.id or (stageDefinition.id .. "_opponent")
   opponent.name = opponent.name or stageDefinition.name or stageDefinition.label or "Opponent"
   opponent.description = opponent.description or "Defeat this opponent with your coin flips."
-  opponent.hp = opponent.hp or stageDefinition.targetScore or 0
+  opponent.hp = opponent.hp or stageDefinition.opponentHp or stageDefinition.targetScore or 0
 
   if stageDefinition.bossModifierIds then
     for _, modifierId in ipairs(stageDefinition.bossModifierIds) do
@@ -27,8 +54,8 @@ function StageState.new(stageDefinition, runState, options)
     variantId = stageDefinition.variantId,
     variantName = stageDefinition.variantName,
     opponent = opponent,
-    targetScore = opponent.hp,
-    stageScore = 0,
+    opponentHp = opponent.hp,
+    scoreAppliedToHp = 0,
     flipsRemaining = math.max(1, tonumber(options.flipsPerStage) or runState.baseFlipsPerStage),
     stageStatus = "active",
 
@@ -46,7 +73,7 @@ function StageState.new(stageDefinition, runState, options)
 
   PurseSystem.initializeStagePurse(runState, stageState)
 
-  return stageState
+  return setmetatable(stageState, STAGE_STATE_METATABLE)
 end
 
 return StageState

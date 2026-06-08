@@ -102,9 +102,9 @@ local function ensureShopOffers(env)
 end
 
 local function setShopPoints(env, step)
-  env.runState.shopPoints = step.value
+  env.runState.influence = step.value
   Common.assertRuntime(env, "fixtures.set_shop_points", { history = true })
-  return env.runState.shopPoints
+  return env.runState.influence
 end
 
 local function setShopRerolls(env, step)

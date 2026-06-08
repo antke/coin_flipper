@@ -1558,7 +1558,7 @@ function Game:getRunRecordDetailLines(record)
   end
 
   for _, stageRecord in ipairs(record.stageHistory or {}) do
-    local line = string.format("- R%s %s => %s score to HP %s/%s", tostring(stageRecord.roundIndex or "?"), tostring(stageRecord.opponentName or stageRecord.stageLabel or "n/a"), tostring(stageRecord.status or "n/a"), tostring(stageRecord.stageScore or 0), tostring(stageRecord.targetScore or 0))
+    local line = string.format("- R%s %s => %s score to HP %s/%s", tostring(stageRecord.roundIndex or "?"), tostring(stageRecord.opponentName or stageRecord.stageLabel or "n/a"), tostring(stageRecord.status or "n/a"), tostring(stageRecord.scoreAppliedToHp or stageRecord.stageScore or 0), tostring(stageRecord.opponentHp or stageRecord.targetScore or 0))
 
     if stageRecord.rewardChoice then
       line = string.format("%s | Reward: %s", line, tostring(stageRecord.rewardChoice.name or stageRecord.rewardChoice.contentId or "n/a"))
@@ -1577,7 +1577,7 @@ function Game:getRunRecordDetailLines(record)
   table.insert(lines, "Purchase History:")
 
   for _, purchase in ipairs(record.purchaseHistory or {}) do
-    local purchaseType = purchase.type == "upgrade" and "Trick" or tostring(purchase.type or "?")
+    local purchaseType = (purchase.type == "trick" or purchase.type == "upgrade") and "Trick" or tostring(purchase.type or "?")
     table.insert(lines, string.format("- %s %s (%d)", purchaseType, tostring(purchase.contentId or "n/a"), tonumber(purchase.price or 0) or 0))
   end
 
@@ -1708,7 +1708,7 @@ function Game:buildStagePreviewData(stageDefinition, options)
     table.insert(lines, string.format("Type: %s", isBoss and "Boss" or "Standard"))
   end
 
-  table.insert(lines, string.format("Opponent HP: %d", opponent.hp or stageDefinition.targetScore or 0))
+  table.insert(lines, string.format("Opponent HP: %d", opponent.hp or stageDefinition.opponentHp or stageDefinition.targetScore or 0))
   table.insert(lines, string.format("Flips Available: %d", flipsPerStage or 0))
 
   if #cards > 0 then
@@ -1770,7 +1770,7 @@ function Game:commitLoadout(selectionSlots)
     self.logger:info("Recorded run start", { seed = self.runState.seed, round = self.runState.roundIndex })
   end
 
-  self.logger:info("Committed loadout", { key = Loadout.toCanonicalKey(committedSlots, self.runState.maxActiveCoinSlots) })
+  self.logger:info("Committed loadout", { key = Loadout.toCanonicalKey(committedSlots, self.runState.maxFlipSlots) })
   self:assertRuntimeInvariants("game.commitLoadout", { history = true })
   self:saveActiveRun("commit_loadout", "loadout")
   return committedSlots
@@ -1803,19 +1803,24 @@ function Game:syncLatestBatchTerminalState()
     end
 
     trace.stageStatusAfter = stageState.stageStatus
-    trace.stageScoreAfter = stageState.stageScore
+    trace.scoreAppliedToHpAfter = stageState.scoreAppliedToHp
+    trace.stageScoreAfter = stageState.scoreAppliedToHp
     trace.runScoreAfter = self.runState and self.runState.runTotalScore or trace.runScoreAfter
-    trace.shopPointsAfter = self.runState and self.runState.shopPoints or trace.shopPointsAfter
+    trace.influenceAfter = self.runState and self.runState.influence or trace.influenceAfter
+    trace.shopPointsAfter = self.runState and self.runState.influence or trace.shopPointsAfter
     trace.flipsRemainingAfter = stageState.flipsRemaining
     changed = true
   end
 
   if batchResult then
     batchResult.status = stageState.stageStatus
-    batchResult.stageScore = stageState.stageScore
-    batchResult.targetScore = stageState.targetScore
+    batchResult.scoreAppliedToHp = stageState.scoreAppliedToHp
+    batchResult.opponentHp = stageState.opponentHp
+    batchResult.stageScore = stageState.scoreAppliedToHp
+    batchResult.targetScore = stageState.opponentHp
     batchResult.runTotalScore = self.runState and self.runState.runTotalScore or batchResult.runTotalScore
-    batchResult.shopPoints = self.runState and self.runState.shopPoints or batchResult.shopPoints
+    batchResult.influence = self.runState and self.runState.influence or batchResult.influence
+    batchResult.shopPoints = self.runState and self.runState.influence or batchResult.shopPoints
     batchResult.flipsRemaining = stageState.flipsRemaining
     syncTrace(batchResult.trace)
 
@@ -1854,13 +1859,13 @@ function Game:normalizeStageCompletion()
     and #(purse.availableInstanceIds or {}) == 0
 
   if stageState.stageStatus == "active" then
-    if stageState.targetScore ~= nil and (stageState.stageScore or 0) >= stageState.targetScore then
+    if stageState.opponentHp ~= nil and (stageState.scoreAppliedToHp or 0) >= stageState.opponentHp then
       stageState.stageStatus = "cleared"
     elseif stageState.flipsRemaining ~= nil and stageState.flipsRemaining <= 0 then
       stageState.flipsRemaining = 0
       stageState.stageStatus = "failed"
     elseif purseExhausted then
-      if stageState.targetScore ~= nil and (stageState.stageScore or 0) >= stageState.targetScore then
+      if stageState.opponentHp ~= nil and (stageState.scoreAppliedToHp or 0) >= stageState.opponentHp then
         stageState.stageStatus = "cleared"
       else
         stageState.flipsRemaining = 0
@@ -2172,9 +2177,9 @@ function Game:debugGrantShopPoints(amount)
   end
 
   amount = amount or self.config.get("debug.grantShopPointsAmount", 5)
-  self.runState.shopPoints = self.runState.shopPoints + amount
+  self.runState.influence = self.runState.influence + amount
   self:assertRuntimeInvariants("game.debugGrantShopPoints", { history = true })
-    self.logger:info("Dev control granted Influence", { amount = amount, total = self.runState.shopPoints })
+    self.logger:info("Dev control granted Influence", { amount = amount, total = self.runState.influence })
   return true, amount
 end
 
@@ -2186,7 +2191,7 @@ function Game:debugGrantNextUpgrade()
   local nextUpgradeId = nil
 
   for _, definition in ipairs(Upgrades.getAll()) do
-    if not Utils.contains(self.runState.ownedUpgradeIds, definition.id) then
+    if not Utils.contains(self.runState.ownedTrickIds or self.runState.ownedUpgradeIds, definition.id) then
       nextUpgradeId = definition.id
       break
     end
@@ -2273,9 +2278,9 @@ function Game:debugPrintFullBatchTrace()
   if self.lastBatchResult.trace then
     self.logger:debug("Trace terminal state", {
       stageStatus = self.lastBatchResult.trace.stageStatusAfter or "n/a",
-      stageScore = self.lastBatchResult.trace.stageScoreAfter or "n/a",
+      scoreAppliedToHp = self.lastBatchResult.trace.scoreAppliedToHpAfter or self.lastBatchResult.trace.stageScoreAfter or "n/a",
       runScore = self.lastBatchResult.trace.runScoreAfter or "n/a",
-      shopPoints = self.lastBatchResult.trace.shopPointsAfter or "n/a",
+      influence = self.lastBatchResult.trace.influenceAfter or self.lastBatchResult.trace.shopPointsAfter or "n/a",
       flipsRemaining = self.lastBatchResult.trace.flipsRemainingAfter or "n/a",
     })
   end
@@ -2289,7 +2294,7 @@ function Game:debugForceStageOutcome(outcome)
   end
 
   if outcome == "clear" then
-    self.stageState.stageScore = math.max(self.stageState.stageScore, self.stageState.targetScore)
+    self.stageState.scoreAppliedToHp = math.max(self.stageState.scoreAppliedToHp, self.stageState.opponentHp)
     self.stageState.stageStatus = "cleared"
   elseif outcome == "fail" then
     self.stageState.flipsRemaining = 0
@@ -2324,13 +2329,13 @@ function Game:getStageEndEvaluationLines()
   local batchResult = self.lastBatchResult
 
   if batchResult and batchResult.trace then
-    local stageScoreAfter = batchResult.trace.stageScoreAfter
-    local targetScore = batchResult.targetScore or batchResult.stageScore or 0
+    local scoreAppliedToHpAfter = batchResult.trace.scoreAppliedToHpAfter or batchResult.trace.stageScoreAfter
+    local opponentHp = batchResult.opponentHp or batchResult.targetScore or batchResult.scoreAppliedToHp or batchResult.stageScore or 0
     local flipsRemainingAfter = batchResult.trace.flipsRemainingAfter
     local statusAfter = batchResult.trace.stageStatusAfter or batchResult.status or "n/a"
     local lines = {
       string.format("Opponent evaluation: %s", tostring(statusAfter == "cleared" and "defeated" or statusAfter)),
-      string.format("Score applied to HP: %s/%s", tostring(stageScoreAfter or "n/a"), tostring(targetScore or "n/a")),
+      string.format("Score applied to HP: %s/%s", tostring(scoreAppliedToHpAfter or "n/a"), tostring(opponentHp or "n/a")),
       string.format("Flips after %s: %s", Terminology.getTermLower("flip"), tostring(flipsRemainingAfter or "n/a")),
     }
 
@@ -2350,7 +2355,7 @@ function Game:getStageEndEvaluationLines()
   if self.stageState and self.stageState.stageStatus ~= "active" then
     return {
       string.format("Opponent evaluation: %s", tostring(self.stageState.stageStatus == "cleared" and "defeated" or self.stageState.stageStatus)),
-      string.format("Score applied to HP: %s/%s", tostring(self.stageState.stageScore or "n/a"), tostring(self.stageState.targetScore or "n/a")),
+      string.format("Score applied to HP: %s/%s", tostring(self.stageState.scoreAppliedToHp or "n/a"), tostring(self.stageState.opponentHp or "n/a")),
       string.format("Flips after %s: %s", Terminology.getTermLower("flip"), tostring(self.stageState.flipsRemaining or "n/a")),
       "Source: dev-forced or no flip trace",
     }
@@ -2662,7 +2667,7 @@ function Game:getCurrentMetaProjection()
 end
 
 function Game:formatRunModifier(key, value)
-  if key == "shopPointMultiplier" then
+  if key == "influenceMultiplier" or key == "shopPointMultiplier" then
     return string.format("%s gain x%.2f", Terminology.getTermLabel("chip"), value)
   end
 
@@ -2674,7 +2679,7 @@ function Game:formatRunModifier(key, value)
     return string.format("+%d %s(s)", value, Terminology.getTermLabel("free_reroll"))
   end
 
-  if key == "startingShopPoints" then
+  if key == "startingInfluence" or key == "startingShopPoints" then
     return string.format("+%d starting %s", value, Terminology.getTermLabel("chip"))
   end
 
@@ -2731,7 +2736,7 @@ function Game:getEffectiveValueLines(effectiveValues)
       return string.format("%s = %s", tostring(path), tostring(value))
     end
 
-    if path == "economy.shopPointMultiplier" then
+    if path == "economy.influenceMultiplier" or path == "economy.shopPointMultiplier" then
       if mode == "add" then
         return string.format("%s gain %s", Terminology.getTermLabel("chip"), formatSignedNumber(value))
       end
@@ -2739,7 +2744,7 @@ function Game:getEffectiveValueLines(effectiveValues)
       return string.format("%s gain x%.2f", Terminology.getTermLabel("chip"), value)
     end
 
-    if path == "run.maxActiveCoinSlots" then
+    if path == "run.maxFlipSlots" or path == "run.maxActiveCoinSlots" then
       if mode == "override" then
         return string.format("%s = %d", Terminology.getTermLabel("active_coin_slot"), value)
       end
@@ -2755,7 +2760,7 @@ function Game:getEffectiveValueLines(effectiveValues)
       return string.format("%s %s(s)", formatSignedNumber(value), Terminology.getTermLabel("free_reroll"))
     end
 
-    if path == "run.startingShopPoints" then
+    if path == "run.startingInfluence" or path == "run.startingShopPoints" then
       if mode == "override" then
         return string.format("Starting %s = %d", Terminology.getTermLabel("chip"), value)
       end
@@ -2851,14 +2856,14 @@ end
 
 function Game:getMetaStatusLines()
   local unlockedCoinCount = #(Coins.getUnlockedIds(self.metaState.unlockedCoinIds or {}) or {})
-  local unlockedUpgradeCount = #(Upgrades.getUnlockedIds(self.metaState.unlockedUpgradeIds or {}) or {})
+  local unlockedUpgradeCount = #(Upgrades.getUnlockedIds(self.metaState.unlockedTrickIds or self.metaState.unlockedUpgradeIds or {}) or {})
   local equippedTattooCount = #(self.metaState.equippedTattooIds or {})
   local tattooLoadoutLimit = self.metaState.tattooLoadoutLimit or MetaUpgrades.getEquipLimit()
 
   return {
     string.format("Reputation: %d", self.metaState.metaPoints or 0),
     string.format("Lifetime Reputation: %d", self.metaState.lifetimeMetaPointsEarned or 0),
-    string.format("Purchased Tattoos: %d", #(self.metaState.purchasedMetaUpgradeIds or {})),
+    string.format("Purchased Tattoos: %d", #(self.metaState.purchasedTattooIds or self.metaState.purchasedMetaUpgradeIds or {})),
     string.format("Equipped Tattoos: %d/%d", equippedTattooCount, tattooLoadoutLimit),
     string.format("Unlocked Coins: %d/%d", unlockedCoinCount, #(Coins.getAll() or {})),
     string.format("Unlocked Tricks: %d/%d", unlockedUpgradeCount, #(Upgrades.getAll() or {})),
@@ -2907,7 +2912,7 @@ function Game:getMetaUpgradeDetailLines(metaUpgradeId)
     Terminology.getMechanicRichText(definition.description),
     "",
     string.format("Cost: %d Reputation", definition.cost or 0),
-    Utils.contains(self.metaState.purchasedMetaUpgradeIds, metaUpgradeId) and "Status: purchased" or "Status: available",
+    Utils.contains(self.metaState.purchasedTattooIds or self.metaState.purchasedMetaUpgradeIds, metaUpgradeId) and "Status: purchased" or "Status: available",
   }
 
   if MetaUpgrades.isEquipEligible(definition) then
@@ -3015,7 +3020,7 @@ function Game:getPersistedLoadoutKey()
     return "n/a"
   end
 
-  return Loadout.toCanonicalKey(self.runState.persistedLoadoutSlots, self.runState.maxActiveCoinSlots)
+  return Loadout.toCanonicalKey(self.runState.persistedFlipSlots, self.runState.maxFlipSlots)
 end
 
 function Game:getCurrentLoadoutKey()
@@ -3023,18 +3028,18 @@ function Game:getCurrentLoadoutKey()
     return "n/a"
   end
 
-  return Loadout.toCanonicalKey(self.runState.equippedCoinSlots, self.runState.maxActiveCoinSlots)
+  return Loadout.toCanonicalKey(self.runState.flipSlots, self.runState.maxFlipSlots)
 end
 
 function Game:getEquippedCoinNames()
   local names = {}
 
-  if not self.runState or not self.runState.maxActiveCoinSlots then
+  if not self.runState or not self.runState.maxFlipSlots then
     return names
   end
 
-  for slotIndex = 1, self.runState.maxActiveCoinSlots do
-    local coinId = self.runState.equippedCoinSlots[slotIndex]
+  for slotIndex = 1, self.runState.maxFlipSlots do
+    local coinId = self.runState.flipSlots[slotIndex]
 
     if coinId then
       table.insert(names, self:getCoinName(coinId))
@@ -3077,7 +3082,7 @@ end
 function Game:getActiveUpgradeNames()
   local names = {}
 
-  for _, upgradeId in ipairs(self.runState and self.runState.ownedUpgradeIds or {}) do
+  for _, upgradeId in ipairs(self.runState and (self.runState.ownedTrickIds or self.runState.ownedUpgradeIds) or {}) do
     table.insert(names, self:getUpgradeName(upgradeId))
   end
 
@@ -3173,7 +3178,7 @@ function Game:getShopStatusLines()
     string.format("Free rerolls remaining: %d", self.runState and self.runState.shopRerollsRemaining or 0),
     string.format("Paid reroll cost: %d Influence", shopRules.rerollCost),
     string.format("Unlocked coin pool: %d/%d", #(Coins.getUnlockedIds(self.runState and self.runState.unlockedCoinIds or {}) or {}), #(Coins.getAll() or {})),
-    string.format("Unlocked Trick pool: %d/%d", #(Upgrades.getUnlockedIds(self.runState and self.runState.unlockedUpgradeIds or {}) or {}), #(Upgrades.getAll() or {})),
+    string.format("Unlocked Trick pool: %d/%d", #(Upgrades.getUnlockedIds(self.runState and (self.runState.unlockedTrickIds or self.runState.unlockedUpgradeIds) or {}) or {}), #(Upgrades.getAll() or {})),
   }
 
   if shopRules.rarityWeights then
@@ -3260,7 +3265,7 @@ function Game:getPurchaseHistoryLines(limit)
   local lines = {}
 
   for _, record in ipairs(self.runState and self.runState.history.purchases or {}) do
-    local purchaseType = record.type == "upgrade" and "Trick" or tostring(record.type or "?")
+    local purchaseType = (record.type == "trick" or record.type == "upgrade") and "Trick" or tostring(record.type or "?")
     table.insert(lines, string.format("- %s (%s) for %d", self:getPurchaseName(record), purchaseType, record.price or 0))
   end
 
@@ -3371,7 +3376,7 @@ function Game:getBossWarningLines()
     "You are about to enter a boss encounter.",
     "",
     string.format("Opponent: %s", opponent.name or "Boss"),
-    string.format("Opponent HP: %d", self.stageState and self.stageState.targetScore or 0),
+    string.format("Opponent HP: %d", self.stageState and self.stageState.opponentHp or 0),
     string.format("Flips Available: %d", self.stageState and self.stageState.flipsRemaining or 0),
     string.format("Current Build: %s", self:getCurrentLoadoutKey()),
   }
@@ -3404,10 +3409,10 @@ function Game:getRewardPreviewLines()
   local rewardGeneration = rewardSession and rewardSession.generation or result.rewardGeneration or {}
   local lines = {
     string.format("Opponent Defeated: %s", result.opponentName or result.stageLabel or "n/a"),
-    string.format("Influence Ready: %d", result.shopPoints or (self.runState and self.runState.shopPoints or 0)),
+    string.format("Influence Ready: %d", result.influence or result.shopPoints or (self.runState and self.runState.influence or 0)),
     string.format("Free Black Market Rerolls: %d", result.shopRerollsRemaining or (self.runState and self.runState.shopRerollsRemaining or 0)),
     string.format("Loadout Key: %s", result.loadoutKey or self:getCurrentLoadoutKey()),
-    string.format("Owned Tricks: %d", #(self.runState and self.runState.ownedUpgradeIds or {})),
+    string.format("Owned Tricks: %d", #(self.runState and (self.runState.ownedTrickIds or self.runState.ownedUpgradeIds) or {})),
   }
 
   local victoryChipLine = self:formatVictoryChipRewardLine(result)
@@ -3637,12 +3642,12 @@ function Game:getProjectedEncounterImpactLines(projected)
     table.insert(lines, "Selected Option: none")
   end
 
-  if projectedOutcome.shopPointsAfter ~= projectedOutcome.shopPointsBefore then
+  if projectedOutcome.influenceAfter ~= projectedOutcome.influenceBefore then
     table.insert(lines, string.format(
       "Influence: %d → %d (%+d)",
-      projectedOutcome.shopPointsBefore,
-      projectedOutcome.shopPointsAfter,
-      projectedOutcome.shopPointsAfter - projectedOutcome.shopPointsBefore
+      projectedOutcome.influenceBefore,
+      projectedOutcome.influenceAfter,
+      projectedOutcome.influenceAfter - projectedOutcome.influenceBefore
     ))
   end
 
@@ -3675,7 +3680,7 @@ function Game:getProjectedEncounterImpactLines(projected)
 
   if choice and choice.type == "coin" then
     table.insert(lines, "On continue, the coin is added to your collection before the Black Market opens.")
-  elseif choice and choice.type == "upgrade" then
+  elseif choice and (choice.type == "trick" or choice.type == "upgrade") then
     table.insert(lines, "On continue, the Trick becomes active immediately before the Black Market opens.")
   elseif #(session and session.choices or {}) == 0 then
     table.insert(lines, "No encounter reward will be added; the Black Market continues unchanged.")
@@ -3790,7 +3795,7 @@ function Game:buildStagePreviewDataForRun(runState, stageDefinition, options)
     string.format("Stage: %s", stageDefinition.label or stageDefinition.name or stageDefinition.id),
     string.format("Opponent: %s", opponent.name or stageDefinition.name or stageDefinition.id),
     string.format("Type: %s", isBoss and "Boss" or "Standard"),
-    string.format("Opponent HP: %d", opponent.hp or stageDefinition.targetScore or 0),
+    string.format("Opponent HP: %d", opponent.hp or stageDefinition.opponentHp or stageDefinition.targetScore or 0),
     string.format("Flips Available: %d", flipsPerStage or 0),
   }
 
@@ -3833,7 +3838,7 @@ function Game:getProjectedRewardImpactLines(options, projected)
   local option = projectedOutcome.option
 
   if option then
-    local optionType = option.type == "upgrade" and "TRICK" or string.upper(option.type or "?")
+    local optionType = (option.type == "trick" or option.type == "upgrade") and "TRICK" or string.upper(option.type or "?")
     table.insert(lines, string.format("Selected Reward: %s — %s", optionType, option.name or option.contentId or "Unknown"))
   elseif session and #(session.options or {}) > 0 and session.claimed ~= true then
     table.insert(lines, "Selected Reward: pending choice")
@@ -3854,12 +3859,12 @@ function Game:getProjectedRewardImpactLines(options, projected)
     projectedOutcome.upgradeCountAfter - projectedOutcome.upgradeCountBefore
   ))
 
-  if projectedOutcome.shopPointsAfter ~= projectedOutcome.shopPointsBefore then
+  if projectedOutcome.influenceAfter ~= projectedOutcome.influenceBefore then
     table.insert(lines, string.format(
       "Influence: %d → %d (%+d)",
-      projectedOutcome.shopPointsBefore,
-      projectedOutcome.shopPointsAfter,
-      projectedOutcome.shopPointsAfter - projectedOutcome.shopPointsBefore
+      projectedOutcome.influenceBefore,
+      projectedOutcome.influenceAfter,
+      projectedOutcome.influenceAfter - projectedOutcome.influenceBefore
     ))
   end
 
@@ -3910,7 +3915,7 @@ function Game:getProjectedRewardImpactLines(options, projected)
   end
 
   if previewOptions.finalReward == true and (
-    projectedOutcome.shopPointsAfter ~= projectedOutcome.shopPointsBefore
+    projectedOutcome.influenceAfter ~= projectedOutcome.influenceBefore
     or projectedOutcome.shopRerollsAfter ~= projectedOutcome.shopRerollsBefore
     or projectedOutcome.maxSlotsAfter ~= projectedOutcome.maxSlotsBefore
   ) then
@@ -3929,7 +3934,7 @@ function Game:getShopPreviewLinesForRun(runState)
     metaProjection = runState.metaProjection,
   })
   local unlockedCoinCount = #(Coins.getUnlockedIds(runState.unlockedCoinIds or {}) or {})
-  local unlockedUpgradeCount = #(Upgrades.getUnlockedIds(runState.unlockedUpgradeIds or {}) or {})
+  local unlockedUpgradeCount = #(Upgrades.getUnlockedIds(runState.unlockedTrickIds or runState.unlockedUpgradeIds or {}) or {})
   local lines = {
     "Next stop: Black Market",
     string.format("Offer Count: %d", shopRules.offerCount),
@@ -4100,7 +4105,7 @@ function Game:getRewardPreviewOptionCards()
   for index, option in ipairs(session and session.options or {}) do
     local displayType = tostring(option.type or "Reward")
 
-    if option.type == "upgrade" then
+    if option.type == "trick" or option.type == "upgrade" then
       displayType = "Trick"
     elseif option.type == "coin" then
       displayType = "Coin"
@@ -4280,7 +4285,7 @@ function Game:getSummaryMetaHandoffLines()
   local summary = self:buildSummary()
   local lines = {
     string.format("Reputation Available: %d", self.metaState and self.metaState.metaPoints or 0),
-    string.format("Purchased Tattoos: %d", #(self.metaState and self.metaState.purchasedMetaUpgradeIds or {})),
+    string.format("Purchased Tattoos: %d", #(self.metaState and (self.metaState.purchasedTattooIds or self.metaState.purchasedMetaUpgradeIds) or {})),
   }
 
   if (summary.metaRewardEarned or 0) > 0 then
@@ -4304,7 +4309,7 @@ function Game:describeTriggeredSource(source)
 
   if source.sourceType == "equipped coin" then
     label = self:getCoinName(source.sourceId)
-  elseif source.sourceType == "run upgrade" then
+  elseif source.sourceType == "trick" or source.sourceType == "run upgrade" then
     label = self:getUpgradeName(source.sourceId)
   elseif source.sourceType == "stage modifier" then
     label = self:getStageModifierName(source.sourceId)
@@ -4324,7 +4329,7 @@ function Game:describeAction(action)
     return "n/a"
   end
 
-  if action.op == "add_stage_score" or action.op == "add_run_score" or action.op == "add_shop_points" or action.op == "add_luck" then
+  if action.op == "add_stage_score" or action.op == "add_run_score" or action.op == "add_influence" or action.op == "add_shop_points" or action.op == "add_luck" then
     local amount = action.appliedAmount or action.amount
     return string.format("%s %+d", action.op, amount)
   end
@@ -4369,16 +4374,16 @@ function Game:describeAction(action)
     return string.format("%s S%d->S%d", action.op, action.sourceSlotIndex or action.slotIndex or 0, action.chainedSlotIndex or action.targetSlotIndex or 0)
   end
 
-  if action.op == "apply_score_multiplier" then
-    return string.format("%s x%.2f", action.op, action.value)
+  if action.op == "apply_score_scaling" or action.op == "apply_score_multiplier" then
+    return string.format("apply_score_scaling x%.2f", action.value)
   end
 
   if action.op == "grant_coin" then
     return string.format("%s %s", action.op, self:getCoinName(action.coinId))
   end
 
-  if action.op == "grant_upgrade" then
-    return string.format("%s %s", action.op, self:getUpgradeName(action.upgradeId))
+  if action.op == "grant_trick" or action.op == "grant_upgrade" then
+    return string.format("grant_trick %s", self:getUpgradeName(action.trickId or action.upgradeId))
   end
 
   if action.op == "grant_temporary_effect" then
@@ -4422,10 +4427,10 @@ function Game:formatBatchLogLine(batchResult)
     batchResult.batchId,
     string.upper(batchResult.call or "?"),
     table.concat(coinSummaries, " ; "),
-    batchResult.stageScore or 0,
-    batchResult.targetScore or 0,
+    batchResult.scoreAppliedToHp or batchResult.stageScore or 0,
+    batchResult.opponentHp or batchResult.targetScore or 0,
     batchResult.runTotalScore or 0,
-    batchResult.shopPoints or 0,
+    batchResult.influence or batchResult.shopPoints or 0,
     batchResult.status or "active"
   )
 end
@@ -4591,7 +4596,7 @@ function Game:getScoreBreakdownLines(limit)
   end
 
   table.insert(lines, string.format("Base score: %d", breakdown.baseScore or 0))
-  table.insert(lines, string.format("After multipliers: %d", breakdown.finalBaseScore or breakdown.baseScore or 0))
+  table.insert(lines, string.format("After score scaling: %d", breakdown.finalBaseScore or breakdown.baseScore or 0))
   table.insert(lines, string.format("Score bonus delta: %+d", stageBonusDelta))
   table.insert(lines, string.format("Score applied to HP gained: %+d", breakdown.totalStageScoreDelta or 0))
   table.insert(lines, string.format("Triggered sources: %d", #(self.lastBatchResult.trace and self.lastBatchResult.trace.triggeredSources or {})))
@@ -4606,8 +4611,8 @@ function Game:getScoreBreakdownLines(limit)
     table.insert(lines, string.format("%s delta: %+d", Terminology.getTermLabel("chip"), breakdown.totalShopPointDelta or 0))
   end
 
-  for _, multiplier in ipairs(breakdown.multipliers or {}) do
-    table.insert(lines, string.format("Score Scaling: x%.2f", multiplier.value or 1.0))
+  for _, scoreScaling in ipairs(breakdown.scoreScalings or breakdown.multipliers or {}) do
+    table.insert(lines, string.format("Score Scaling: x%.2f", scoreScaling.value or 1.0))
   end
 
   for _, bonus in ipairs(breakdown.additiveBonuses or {}) do

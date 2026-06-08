@@ -39,7 +39,7 @@ local definitions = {
       {
         hook = "after_scoring",
         effects = {
-          { op = "add_shop_points", amount = 1 },
+          { op = "add_influence", amount = 1 },
         },
       },
     },
@@ -55,7 +55,7 @@ local definitions = {
         hook = "before_scoring",
         condition = { call = "heads" },
         effects = {
-          { op = "apply_score_multiplier", value = 1.10 },
+          { op = "apply_score_scaling", value = 1.10 },
         },
       },
     },

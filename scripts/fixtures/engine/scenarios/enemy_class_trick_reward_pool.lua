@@ -45,7 +45,7 @@ return {
     local classOfferCount = 0
 
     for _, option in ipairs(preview.options or {}) do
-      A.equal(option.type, "upgrade", "enemy reward options should be Tricks")
+      A.equal(option.type, "trick", "enemy reward options should be Tricks")
       A.equal(option.enemyClass, "card_shark", "reward option should carry enemy class")
       A.equal(option.enemyClassLabel, "Card Shark", "reward option should carry enemy class label")
       A.equal(option.wildcardChance, generation.wildcardChance, "reward option should carry wildcard chance")

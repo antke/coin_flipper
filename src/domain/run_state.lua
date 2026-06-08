@@ -5,9 +5,47 @@ local Utils = require("src.core.utils")
 
 local RunState = {}
 
+local RUN_STATE_ALIASES = {
+  equippedCoinSlots = "flipSlots",
+  maxActiveCoinSlots = "maxFlipSlots",
+  persistedLoadoutSlots = "persistedFlipSlots",
+  shopPoints = "influence",
+}
+
+local RUN_STATE_METATABLE = {
+  __index = function(runState, key)
+    local canonicalKey = RUN_STATE_ALIASES[key]
+
+    if canonicalKey then
+      return rawget(runState, canonicalKey)
+    end
+
+    return nil
+  end,
+  __newindex = function(runState, key, value)
+    local canonicalKey = RUN_STATE_ALIASES[key]
+
+    if canonicalKey then
+      rawset(runState, canonicalKey, value)
+      return
+    end
+
+    rawset(runState, key, value)
+  end,
+}
+
 function RunState.new(options)
   options = options or {}
-  local maxActiveCoinSlots = math.max(1, tonumber(options.maxActiveCoinSlots) or 1)
+  local maxFlipSlots = math.max(1, tonumber(options.maxFlipSlots or options.maxActiveCoinSlots) or 1)
+  local ownedTrickIds = Utils.copyArray(options.ownedTrickIds or options.ownedUpgradeIds or {})
+  local unlockedTrickIds = Utils.copyArray(options.unlockedTrickIds or options.unlockedUpgradeIds or {})
+  local flipSlots = options.flipSlots or options.equippedCoinSlots
+  local persistedFlipSlots = options.persistedFlipSlots or options.persistedLoadoutSlots
+  local startingInfluence = options.startingInfluence
+
+  if startingInfluence == nil then
+    startingInfluence = options.startingShopPoints
+  end
 
   local runState = {
     seed = options.seed or 1,
@@ -17,18 +55,20 @@ function RunState.new(options)
 
     collectionCoinIds = Utils.copyArray(options.starterCollection or {}),
     coinInstances = {},
-    equippedCoinSlots = Loadout.normalizeSlots(options.equippedCoinSlots, maxActiveCoinSlots),
-    persistedLoadoutSlots = Loadout.normalizeSlots(options.persistedLoadoutSlots, maxActiveCoinSlots),
-    ownedUpgradeIds = Utils.copyArray(options.ownedUpgradeIds or {}),
+    flipSlots = Loadout.normalizeSlots(flipSlots, maxFlipSlots),
+    persistedFlipSlots = Loadout.normalizeSlots(persistedFlipSlots, maxFlipSlots),
+    ownedTrickIds = ownedTrickIds,
+    ownedUpgradeIds = ownedTrickIds,
     unlockedCoinIds = Utils.copyArray(options.unlockedCoinIds or {}),
-    unlockedUpgradeIds = Utils.copyArray(options.unlockedUpgradeIds or {}),
+    unlockedTrickIds = unlockedTrickIds,
+    unlockedUpgradeIds = unlockedTrickIds,
 
     metaProjection = Utils.clone(options.metaProjection),
-    maxActiveCoinSlots = maxActiveCoinSlots,
+    maxFlipSlots = maxFlipSlots,
     baseFlipsPerStage = math.max(1, tonumber(options.baseFlipsPerStage) or 1),
     resolvedValues = Utils.clone(options.resolvedValues or {}),
 
-    shopPoints = math.max(0, tonumber(options.startingShopPoints) or 0),
+    influence = math.max(0, tonumber(startingInfluence) or 0),
     shopRerollsRemaining = math.max(0, tonumber(options.startingShopRerolls) or 0),
     runTotalScore = 0,
     luck = {
@@ -69,7 +109,7 @@ function RunState.new(options)
 
   PurseSystem.createInstancesFromDefinitionIds(runState, options.starterPurse or options.starterCollection or {})
 
-  return runState
+  return setmetatable(runState, RUN_STATE_METATABLE)
 end
 
 return RunState

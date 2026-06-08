@@ -124,7 +124,7 @@ function CollectionState:getEntries(app)
     local entries = {}
 
     for _, definition in ipairs(Upgrades.getAll()) do
-      local unlocked = Upgrades.isUnlocked(definition, app.metaState.unlockedUpgradeIds)
+      local unlocked = Upgrades.isUnlocked(definition, app.metaState.unlockedTrickIds or app.metaState.unlockedUpgradeIds)
       local unlockSource = definition.unlockedByDefault ~= false
         and "Available by default"
         or (#(UPGRADE_UNLOCK_SOURCES[definition.id] or {}) > 0 and ("Unlock via: " .. table.concat(UPGRADE_UNLOCK_SOURCES[definition.id], ", ")) or "Unlock through progression")
@@ -154,7 +154,7 @@ function CollectionState:getEntries(app)
 
   local entries = {}
   for _, definition in ipairs(MetaUpgrades.getAll()) do
-    local purchased = Utils.contains(app.metaState.purchasedMetaUpgradeIds, definition.id)
+    local purchased = Utils.contains(app.metaState.purchasedTattooIds or app.metaState.purchasedMetaUpgradeIds, definition.id)
     local equipped = Utils.contains(app.metaState.equippedTattooIds, definition.id)
     local detailLines = {
       Terminology.getMechanicRichText(definition.description),
@@ -191,11 +191,11 @@ end
 
 function CollectionState:getSummaryLines(app)
   local unlockedCoinCount = #(Coins.getUnlockedIds(app.metaState.unlockedCoinIds or {}) or {})
-  local unlockedUpgradeCount = #(Upgrades.getUnlockedIds(app.metaState.unlockedUpgradeIds or {}) or {})
+  local unlockedUpgradeCount = #(Upgrades.getUnlockedIds(app.metaState.unlockedTrickIds or app.metaState.unlockedUpgradeIds or {}) or {})
   return {
     string.format("Unlocked Coins: %d/%d", unlockedCoinCount, #(Coins.getAll() or {})),
     string.format("Unlocked Tricks: %d/%d", unlockedUpgradeCount, #(Upgrades.getAll() or {})),
-    string.format("Purchased Tattoos: %d/%d", #(app.metaState.purchasedMetaUpgradeIds or {}), #(MetaUpgrades.getAll() or {})),
+    string.format("Purchased Tattoos: %d/%d", #(app.metaState.purchasedTattooIds or app.metaState.purchasedMetaUpgradeIds or {}), #(MetaUpgrades.getAll() or {})),
     string.format("Equipped Tattoos: %d/%d", #(app.metaState.equippedTattooIds or {}), app.metaState.tattooLoadoutLimit or MetaUpgrades.getEquipLimit()),
   }
 end

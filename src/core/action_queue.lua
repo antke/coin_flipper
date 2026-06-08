@@ -13,10 +13,12 @@ local ActionQueue = {}
 local PurseSystem = require("src.systems.purse_system")
 
 ActionQueue.ACQUISITION_SAFE_OPS = {
+  add_influence = true,
   add_shop_points = true,
   add_shop_rerolls = true,
   increase_coin_slots = true,
   grant_coin = true,
+  grant_trick = true,
   grant_upgrade = true,
   queue_trace_note = true,
   set_run_flag = true,
@@ -25,6 +27,7 @@ ActionQueue.ACQUISITION_SAFE_OPS = {
 ActionQueue.KNOWN_OPS = {
   add_stage_score = true,
   add_run_score = true,
+  add_influence = true,
   add_shop_points = true,
   add_luck = true,
   add_weight = true,
@@ -37,12 +40,14 @@ ActionQueue.KNOWN_OPS = {
   replay_resolution_packet = true,
   trigger_random_neighbor = true,
   modify_coin_weight = true,
+  apply_score_scaling = true,
   apply_score_multiplier = true,
   set_batch_flag = true,
   set_shop_flag = true,
   set_stage_flag = true,
   set_run_flag = true,
   queue_trace_note = true,
+  grant_trick = true,
   grant_upgrade = true,
   grant_coin = true,
   increase_coin_slots = true,
@@ -77,6 +82,10 @@ end
 
 local function ensureScoreBreakdown(context)
   context.scoreBreakdown = context.scoreBreakdown or ScoreBreakdown.new()
+
+  local scoreScalings = context.scoreBreakdown.scoreScalings or context.scoreBreakdown.multipliers or {}
+  context.scoreBreakdown.scoreScalings = scoreScalings
+  context.scoreBreakdown.multipliers = scoreScalings
 end
 
 local function ensureShopContext(context)
@@ -175,7 +184,7 @@ local function cloneOnAcquireActions(actionList)
   for _, action in ipairs(actionList or {}) do
     local nextAction = Utils.clone(action)
 
-    if nextAction.op == "add_shop_points" and nextAction.applyMultiplier == nil then
+    if (nextAction.op == "add_influence" or nextAction.op == "add_shop_points") and nextAction.applyMultiplier == nil then
       nextAction.applyMultiplier = false
     end
 
@@ -461,7 +470,7 @@ end
 
 local function chooseBorrowedNameTarget(context, source)
   local target = nil
-  local targetScore = nil
+  local targetBaseScore = nil
 
   for _, coinState in ipairs(context.perCoin or {}) do
     local isSource = source and coinState.instanceId == source.instanceId
@@ -471,9 +480,9 @@ local function chooseBorrowedNameTarget(context, source)
     if isSelected and isFailure and not isSource then
       local baseScore = getCoinBaseScore(coinState.coinId)
 
-      if target == nil or baseScore < targetScore then
+      if target == nil or baseScore < targetBaseScore then
         target = coinState
-        targetScore = baseScore
+        targetBaseScore = baseScore
       end
     end
   end
@@ -978,7 +987,7 @@ local function applyReplayResolutionPacket(runState, stageState, context, action
   table.insert(context.scoreBreakdown.prestigeReplays, Utils.clone(replay))
 
   if replayedScore > 0 then
-    stageState.stageScore = stageState.stageScore + replayedScore
+    stageState.scoreAppliedToHp = stageState.scoreAppliedToHp + replayedScore
     runState.runTotalScore = runState.runTotalScore + replayedScore
     context.scoreBreakdown.totalStageScoreDelta = context.scoreBreakdown.totalStageScoreDelta + replayedScore
     context.scoreBreakdown.totalRunScoreDelta = context.scoreBreakdown.totalRunScoreDelta + replayedScore
@@ -1361,14 +1370,18 @@ local function grantCoinFromAction(runState, action)
 end
 
 local function grantUpgradeFromAction(runState, stageState, context, action)
-  local definition = Upgrades.getById(action.upgradeId)
+  local trickId = action.trickId or action.upgradeId
+  local definition = Upgrades.getById(trickId)
 
   if not definition then
     error("unknown_upgrade")
   end
 
-  if not Utils.contains(runState.ownedUpgradeIds, action.upgradeId) then
-    table.insert(runState.ownedUpgradeIds, action.upgradeId)
+  runState.ownedTrickIds = runState.ownedTrickIds or runState.ownedUpgradeIds or {}
+  runState.ownedUpgradeIds = runState.ownedTrickIds
+
+  if not Utils.contains(runState.ownedTrickIds, trickId) then
+    table.insert(runState.ownedTrickIds, trickId)
     ActionQueue.applyAll(runState, stageState, context, cloneOnAcquireActions(definition.onAcquire))
   end
 
@@ -1384,13 +1397,13 @@ function ActionQueue.validateAction(action)
     return false, string.format("unknown op: %s", tostring(action.op))
   end
 
-  if action.op == "add_stage_score" or action.op == "add_run_score" or action.op == "add_shop_points" or action.op == "add_luck" then
+  if action.op == "add_stage_score" or action.op == "add_run_score" or action.op == "add_influence" or action.op == "add_shop_points" or action.op == "add_luck" then
     if type(action.amount) ~= "number" then
       return false, string.format("%s requires numeric amount", action.op)
     end
   end
 
-  if action.op == "add_stage_score" or action.op == "add_run_score" or action.op == "add_shop_points" then
+  if action.op == "add_stage_score" or action.op == "add_run_score" or action.op == "add_influence" or action.op == "add_shop_points" then
     if action.applyMultiplier ~= nil and type(action.applyMultiplier) ~= "boolean" then
       return false, string.format("%s applyMultiplier must be boolean", action.op)
     end
@@ -1518,13 +1531,13 @@ function ActionQueue.validateAction(action)
     end
   end
 
-  if action.op == "apply_score_multiplier" then
+  if action.op == "apply_score_scaling" or action.op == "apply_score_multiplier" then
     if type(action.value) ~= "number" then
-      return false, "apply_score_multiplier requires numeric value"
+      return false, string.format("%s requires numeric value", action.op)
     end
 
     if action.target ~= nil and action.target ~= "current_coin_score" then
-      return false, "apply_score_multiplier target must be current_coin_score when present"
+      return false, string.format("%s target must be current_coin_score when present", action.op)
     end
   end
 
@@ -1542,12 +1555,16 @@ function ActionQueue.validateAction(action)
     return false, "queue_trace_note note must be a string"
   end
 
-  if action.op == "grant_upgrade" and (type(action.upgradeId) ~= "string" or action.upgradeId == "") then
-    return false, "grant_upgrade requires upgradeId"
-  end
+  if action.op == "grant_trick" or action.op == "grant_upgrade" then
+    local trickId = action.trickId or action.upgradeId
 
-  if action.op == "grant_upgrade" and not Upgrades.getById(action.upgradeId) then
-    return false, string.format("grant_upgrade references unknown upgrade %s", tostring(action.upgradeId))
+    if type(trickId) ~= "string" or trickId == "" then
+      return false, string.format("%s requires trickId", action.op)
+    end
+
+    if not Upgrades.getById(trickId) then
+      return false, string.format("%s references unknown Trick %s", action.op, tostring(trickId))
+    end
   end
 
   if action.op == "grant_coin" and (type(action.coinId) ~= "string" or action.coinId == "") then
@@ -1583,8 +1600,8 @@ function ActionQueue.validateAction(action)
   end
 
   if action.op == "add_shop_offer" then
-    if action.offerType ~= "coin" and action.offerType ~= "upgrade" then
-      return false, "add_shop_offer requires offerType=coin|upgrade"
+    if action.offerType ~= "coin" and action.offerType ~= "trick" and action.offerType ~= "upgrade" then
+      return false, "add_shop_offer requires offerType=coin|trick"
     end
 
     if type(action.contentId) ~= "string" or action.contentId == "" then
@@ -1611,8 +1628,8 @@ function ActionQueue.validateAction(action)
       return false, "adjust_shop_price requires numeric delta"
     end
 
-    if action.offerType ~= nil and action.offerType ~= "coin" and action.offerType ~= "upgrade" then
-      return false, "adjust_shop_price offerType must be coin|upgrade"
+    if action.offerType ~= nil and action.offerType ~= "coin" and action.offerType ~= "trick" and action.offerType ~= "upgrade" then
+      return false, "adjust_shop_price offerType must be coin|trick"
     end
 
     if action.contentId ~= nil and (type(action.contentId) ~= "string" or action.contentId == "") then
@@ -1633,8 +1650,8 @@ function ActionQueue.validateAction(action)
   end
 
    if action.op == "record_purchase" then
-    if action.purchaseType ~= "coin" and action.purchaseType ~= "upgrade" then
-      return false, "record_purchase requires purchaseType=coin|upgrade"
+    if action.purchaseType ~= "coin" and action.purchaseType ~= "trick" and action.purchaseType ~= "upgrade" then
+      return false, "record_purchase requires purchaseType=coin|trick"
     end
 
     if type(action.contentId) ~= "string" or action.contentId == "" then
@@ -1653,8 +1670,8 @@ function ActionQueue.validateAction(action)
       return false, string.format("record_purchase references unknown coin %s", tostring(action.contentId))
     end
 
-    if action.purchaseType == "upgrade" and not Upgrades.getById(action.contentId) then
-      return false, string.format("record_purchase references unknown upgrade %s", tostring(action.contentId))
+    if (action.purchaseType == "trick" or action.purchaseType == "upgrade") and not Upgrades.getById(action.contentId) then
+      return false, string.format("record_purchase references unknown Trick %s", tostring(action.contentId))
     end
   end
 
@@ -1687,7 +1704,7 @@ function ActionQueue.apply(runState, stageState, context, action)
   if action.op == "add_stage_score" then
     ensureScoreBreakdown(context)
     requireStageState(stageState, action.op)
-    stageState.stageScore = stageState.stageScore + action.amount
+    stageState.scoreAppliedToHp = stageState.scoreAppliedToHp + action.amount
     runState.runTotalScore = runState.runTotalScore + action.amount
     context.scoreBreakdown.totalStageScoreDelta = context.scoreBreakdown.totalStageScoreDelta + action.amount
     context.scoreBreakdown.totalRunScoreDelta = context.scoreBreakdown.totalRunScoreDelta + action.amount
@@ -1707,12 +1724,12 @@ function ActionQueue.apply(runState, stageState, context, action)
         scoreTarget = "run",
       })
     end
-  elseif action.op == "add_shop_points" then
+  elseif action.op == "add_influence" or action.op == "add_shop_points" then
     ensureScoreBreakdown(context)
     local multiplier = 1.0
 
     if action.applyMultiplier ~= false then
-      multiplier = EffectiveValueSystem.getEffectiveValue("economy.shopPointMultiplier", runState, stageState, {
+      multiplier = EffectiveValueSystem.getEffectiveValue("economy.influenceMultiplier", runState, stageState, {
         metaProjection = context.metaProjection,
         activeSources = context.activeSources,
       })
@@ -1730,7 +1747,7 @@ function ActionQueue.apply(runState, stageState, context, action)
       end
     end
 
-    runState.shopPoints = runState.shopPoints + scaledAmount
+    runState.influence = runState.influence + scaledAmount
     context.scoreBreakdown.totalShopPointDelta = context.scoreBreakdown.totalShopPointDelta + scaledAmount
 
     local appliedAction = Utils.clone(action)
@@ -1797,12 +1814,13 @@ function ActionQueue.apply(runState, stageState, context, action)
       coinState.weightChanges = coinState.weightChanges or {}
       table.insert(coinState.weightChanges, cloneActionForTrace(action))
     end
-  elseif action.op == "apply_score_multiplier" then
+  elseif action.op == "apply_score_scaling" or action.op == "apply_score_multiplier" then
     ensureScoreBreakdown(context)
     if action.target == "current_coin_score" then
       if context.currentScoreEvent then
-        context.currentScoreEvent.multiplier = (context.currentScoreEvent.multiplier or 1.0) * action.value
-        addScoreBreakdownEntry(context.scoreBreakdown.multipliers, action, {
+        context.currentScoreEvent.scoreScaling = (context.currentScoreEvent.scoreScaling or context.currentScoreEvent.multiplier or 1.0) * action.value
+        context.currentScoreEvent.multiplier = context.currentScoreEvent.scoreScaling
+        addScoreBreakdownEntry(context.scoreBreakdown.scoreScalings, action, {
           scope = "current_coin_score",
           scoreEventId = context.currentScoreEvent.eventId,
           coinId = context.currentScoreEvent.coinId,
@@ -1814,8 +1832,9 @@ function ActionQueue.apply(runState, stageState, context, action)
         recordWarning(context, "current_coin_score score scaling ignored outside coin scoring.")
       end
     else
-      context.pendingScoreMultiplier = (context.pendingScoreMultiplier or 1.0) * action.value
-      table.insert(context.scoreBreakdown.multipliers, cloneActionForTrace(action))
+      context.pendingScoreScaling = (context.pendingScoreScaling or context.pendingScoreMultiplier or 1.0) * action.value
+      context.pendingScoreMultiplier = context.pendingScoreScaling
+      table.insert(context.scoreBreakdown.scoreScalings, cloneActionForTrace(action))
     end
   elseif action.op == "set_batch_flag" then
     context.batchFlags[action.flag] = action.value ~= false
@@ -1831,14 +1850,14 @@ function ActionQueue.apply(runState, stageState, context, action)
     ensureScoreBreakdown(context)
     table.insert(context.trace.notes, action.note or "(empty note)")
     table.insert(context.scoreBreakdown.notes, action.note or "(empty note)")
-  elseif action.op == "grant_upgrade" then
+  elseif action.op == "grant_trick" or action.op == "grant_upgrade" then
     grantUpgradeFromAction(runState, stageState, context, action)
   elseif action.op == "grant_coin" then
     grantCoinFromAction(runState, action)
   elseif action.op == "increase_coin_slots" then
-    runState.maxActiveCoinSlots = math.max(1, runState.maxActiveCoinSlots + action.amount)
-    runState.equippedCoinSlots = Loadout.normalizeSlots(runState.equippedCoinSlots, runState.maxActiveCoinSlots)
-    runState.persistedLoadoutSlots = Loadout.normalizeSlots(runState.persistedLoadoutSlots, runState.maxActiveCoinSlots)
+    runState.maxFlipSlots = math.max(1, runState.maxFlipSlots + action.amount)
+    runState.flipSlots = Loadout.normalizeSlots(runState.flipSlots, runState.maxFlipSlots)
+    runState.persistedFlipSlots = Loadout.normalizeSlots(runState.persistedFlipSlots, runState.maxFlipSlots)
   elseif action.op == "add_shop_rerolls" then
     runState.shopRerollsRemaining = math.max(0, (runState.shopRerollsRemaining or 0) + action.amount)
   elseif action.op == "set_flips_remaining" then
@@ -1918,10 +1937,11 @@ function ActionQueue.apply(runState, stageState, context, action)
   elseif action.op == "add_shop_offer" then
     ensureShopContext(context)
 
-    local definition = action.offerType == "coin" and Coins.getById(action.contentId) or Upgrades.getById(action.contentId)
+    local canonicalOfferType = action.offerType == "upgrade" and "trick" or action.offerType
+    local definition = canonicalOfferType == "coin" and Coins.getById(action.contentId) or Upgrades.getById(action.contentId)
 
     if definition then
-      local ownedList = action.offerType == "coin" and runState.collectionCoinIds or runState.ownedUpgradeIds
+      local ownedList = canonicalOfferType == "coin" and runState.collectionCoinIds or (runState.ownedTrickIds or runState.ownedUpgradeIds)
       local alreadyOffered = false
 
       for _, offer in ipairs(context.shopOffers) do
@@ -1933,11 +1953,11 @@ function ActionQueue.apply(runState, stageState, context, action)
 
       if not Utils.contains(ownedList, action.contentId) and not alreadyOffered then
         table.insert(context.shopOffers, {
-          type = action.offerType,
+          type = canonicalOfferType,
           contentId = action.contentId,
           name = definition.name,
           rarity = definition.rarity,
-          price = action.price or ShopContent.resolvePrice(action.offerType, definition),
+          price = action.price or ShopContent.resolvePrice(canonicalOfferType, definition),
           purchased = false,
           injectedBy = Utils.clone(action._trace),
           tags = Utils.copyArray(definition.tags or {}),
@@ -1956,7 +1976,9 @@ function ActionQueue.apply(runState, stageState, context, action)
     end
 
     for _, offer in ipairs(targets) do
-      local matchesType = action.offerType == nil or offer.type == action.offerType
+      local canonicalOfferType = action.offerType == "upgrade" and "trick" or action.offerType
+      local canonicalCurrentType = offer.type == "upgrade" and "trick" or offer.type
+      local matchesType = action.offerType == nil or canonicalCurrentType == canonicalOfferType
       local matchesContent = action.contentId == nil or offer.contentId == action.contentId
       local matchesRarity = action.rarity == nil or offer.rarity == action.rarity
 
@@ -1978,7 +2000,7 @@ function ActionQueue.apply(runState, stageState, context, action)
     end
   elseif action.op == "record_purchase" then
     table.insert(runState.history.purchases, {
-      type = action.purchaseType,
+      type = action.purchaseType == "upgrade" and "trick" or action.purchaseType,
       contentId = action.contentId,
       price = action.price,
     })

@@ -85,7 +85,9 @@ local function buildScoreEvent(context, coinState, index, didMatch)
     call = context.call,
     matched = didMatch,
     baseScoreContribution = baseScoreContribution,
+    scoreScaling = 1.0,
     multiplier = 1.0,
+    scoreBeforeAggregateScaling = didMatch and 1 or 0,
     scoreBeforeAggregateMultiplier = didMatch and 1 or 0,
     finalScoreContribution = 0,
     baseHeadsWeight = coinState.baseHeadsWeight,
@@ -190,8 +192,10 @@ function ScoringSystem.buildScoreActions(context, options)
 
     syncScoreCreditFields(scoreEvent, coinState)
 
-    scoreEvent.multiplier = tonumber(scoreEvent.multiplier) or 1.0
-    scoreEvent.scoreBeforeAggregateMultiplier = scoreEvent.baseScoreContribution * scoreEvent.multiplier
+    scoreEvent.scoreScaling = tonumber(scoreEvent.scoreScaling or scoreEvent.multiplier) or 1.0
+    scoreEvent.multiplier = scoreEvent.scoreScaling
+    scoreEvent.scoreBeforeAggregateScaling = scoreEvent.baseScoreContribution * scoreEvent.scoreScaling
+    scoreEvent.scoreBeforeAggregateMultiplier = scoreEvent.scoreBeforeAggregateScaling
 
     if runCoinScorePhase then
       runCoinScorePhase("after_coin_score", scoreEvent, coinState)
@@ -204,15 +208,15 @@ function ScoringSystem.buildScoreActions(context, options)
     end
   end
 
-  local multiplier = context.pendingScoreMultiplier or 1.0
+  local scoreScaling = context.pendingScoreScaling or context.pendingScoreMultiplier or 1.0
   local baseScore = matchCount
-  local preMultiplierScore = 0
+  local preScoreScalingScore = 0
 
   for _, scoreEvent in ipairs(scoreEvents) do
-    preMultiplierScore = preMultiplierScore + (scoreEvent.scoreBeforeAggregateMultiplier or 0)
+    preScoreScalingScore = preScoreScalingScore + (scoreEvent.scoreBeforeAggregateScaling or scoreEvent.scoreBeforeAggregateMultiplier or 0)
   end
 
-  local finalScore = math.floor(preMultiplierScore * multiplier + 0.00001)
+  local finalScore = math.floor(preScoreScalingScore * scoreScaling + 0.00001)
   local coinCount = #(context.perCoin or {})
 
   context.batchFlags.all_matched = coinCount > 0 and matchCount == coinCount
@@ -220,13 +224,15 @@ function ScoringSystem.buildScoreActions(context, options)
   context.batchFlags.no_matches = coinCount > 0 and matchCount == 0
 
   context.scoreBreakdown.baseScore = baseScore
-  context.scoreBreakdown.preMultiplierScore = preMultiplierScore
+  context.scoreBreakdown.preScoreScalingScore = preScoreScalingScore
+  context.scoreBreakdown.preMultiplierScore = preScoreScalingScore
   context.scoreBreakdown.finalBaseScore = finalScore
 
   for _, scoreEvent in ipairs(scoreEvents) do
-    local eventPreMultiplierScore = scoreEvent.scoreBeforeAggregateMultiplier or 0
-    scoreEvent.finalScoreContribution = preMultiplierScore > 0 and (finalScore * eventPreMultiplierScore / preMultiplierScore) or 0
-    scoreEvent.packetSeed.scoreBeforeAggregateMultiplier = eventPreMultiplierScore
+    local eventPreScoreScalingScore = scoreEvent.scoreBeforeAggregateScaling or scoreEvent.scoreBeforeAggregateMultiplier or 0
+    scoreEvent.finalScoreContribution = preScoreScalingScore > 0 and (finalScore * eventPreScoreScalingScore / preScoreScalingScore) or 0
+    scoreEvent.packetSeed.scoreBeforeAggregateScaling = eventPreScoreScalingScore
+    scoreEvent.packetSeed.scoreBeforeAggregateMultiplier = eventPreScoreScalingScore
     scoreEvent.packetSeed.finalScoreContribution = scoreEvent.finalScoreContribution
 
     table.insert(context.scoreBreakdown.scoreEvents, scoreEvent)
@@ -245,7 +251,8 @@ function ScoringSystem.buildScoreActions(context, options)
       call = scoreEvent.call,
       matched = scoreEvent.matched,
       baseScoreContribution = scoreEvent.baseScoreContribution,
-      scoreBeforeAggregateMultiplier = eventPreMultiplierScore,
+      scoreBeforeAggregateScaling = eventPreScoreScalingScore,
+      scoreBeforeAggregateMultiplier = eventPreScoreScalingScore,
       finalScoreContribution = scoreEvent.finalScoreContribution,
       prestigeReplay = false,
       chained = scoreEvent.chained == true,

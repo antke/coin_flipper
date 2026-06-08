@@ -35,7 +35,7 @@ return {
       if offer.type == "coin" then
         coinCount = coinCount + 1
         A.truthy(Coins.getById(offer.contentId), string.format("active coin offer %s", tostring(offer.contentId)))
-      elseif offer.type == "upgrade" then
+      elseif offer.type == "trick" then
         trickCount = trickCount + 1
         local definition = A.truthy(Upgrades.getById(offer.contentId), string.format("known Trick offer %s", tostring(offer.contentId)))
         A.equal(definition.shopEligible, true, string.format("Black Market Trick offer %s must be explicitly shop eligible", tostring(offer.contentId)))

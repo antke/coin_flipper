@@ -265,9 +265,9 @@ function PurseSystem.removeInstance(runState, stageState, instanceId)
   removeInstanceFromStagePurse(stageState, instanceId)
   rebuildCollectionCoinIds(runState)
 
-  local maxSlots = runState.maxActiveCoinSlots or 0
-  runState.equippedCoinSlots = Loadout.reconcileSlotsDetailed(runState.equippedCoinSlots, runState.collectionCoinIds, maxSlots).slots
-  runState.persistedLoadoutSlots = Loadout.reconcileSlotsDetailed(runState.persistedLoadoutSlots, runState.collectionCoinIds, maxSlots).slots
+  local maxSlots = runState.maxFlipSlots or runState.maxActiveCoinSlots or 0
+  runState.flipSlots = Loadout.reconcileSlotsDetailed(runState.flipSlots, runState.collectionCoinIds, maxSlots).slots
+  runState.persistedFlipSlots = Loadout.reconcileSlotsDetailed(runState.persistedFlipSlots, runState.collectionCoinIds, maxSlots).slots
 
   return true, {
     instanceId = removed.instanceId,
@@ -330,7 +330,7 @@ function PurseSystem.dealHand(runState, stageState, rng)
   local handSize = PurseSystem.getHandSize(runState)
 
   if #(purse.availableInstanceIds or {}) == 0 then
-    local status = stageState.stageScore >= stageState.targetScore and "cleared" or "failed"
+    local status = stageState.scoreAppliedToHp >= stageState.opponentHp and "cleared" or "failed"
     stageState.stageStatus = status
     table.insert(purse.exhaustionEvents, {
       batchIndex = stageState.batchIndex,
@@ -381,7 +381,7 @@ function PurseSystem.selectDefaultFlipSlots(runState, stageState)
     return purse.selectedSlots, nil
   end
 
-  local maxSlots = math.max(1, tonumber(runState and runState.maxActiveCoinSlots) or PurseSystem.getHandSize(runState))
+  local maxSlots = math.max(1, tonumber(runState and (runState.maxFlipSlots or runState.maxActiveCoinSlots)) or PurseSystem.getHandSize(runState))
   local selected = {}
 
   for _, slot in ipairs(purse.dealtHandSlots or {}) do

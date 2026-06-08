@@ -5,10 +5,12 @@ local Utils = require("src.core.utils")
 local MetaState = {}
 
 local DEFAULT_MODIFIERS = {
+  influenceMultiplier = 1.0,
   shopPointMultiplier = 1.0,
   bonusStartingCoins = 0,
   bonusCoinSlots = 0,
   bonusRerolls = 0,
+  startingInfluence = 0,
   startingShopPoints = 0,
 }
 
@@ -46,36 +48,36 @@ local function getTattooLoadoutLimit(options)
   return math.max(0, math.floor(limit))
 end
 
-local function appendEquippedTattooId(target, equippedIndex, purchasedIndex, metaUpgradeId, limit)
-  if #target >= limit or equippedIndex[metaUpgradeId] or not purchasedIndex[metaUpgradeId] then
+local function appendEquippedTattooId(target, equippedIndex, purchasedIndex, tattooId, limit)
+  if #target >= limit or equippedIndex[tattooId] or not purchasedIndex[tattooId] then
     return
   end
 
-  local definition = MetaUpgrades.getById(metaUpgradeId)
+  local definition = MetaUpgrades.getById(tattooId)
   if not MetaUpgrades.isEquipEligible(definition) then
     return
   end
 
-  equippedIndex[metaUpgradeId] = true
-  table.insert(target, metaUpgradeId)
+  equippedIndex[tattooId] = true
+  table.insert(target, tattooId)
 end
 
-local function normalizeEquippedTattooIds(sourceEquippedTattooIds, purchasedMetaUpgradeIds, tattooLoadoutLimit)
+local function normalizeEquippedTattooIds(sourceEquippedTattooIds, purchasedTattooIds, tattooLoadoutLimit)
   local purchasedIndex = {}
   local equippedIndex = {}
   local equippedTattooIds = {}
 
-  for _, metaUpgradeId in ipairs(purchasedMetaUpgradeIds or {}) do
-    purchasedIndex[metaUpgradeId] = true
+  for _, tattooId in ipairs(purchasedTattooIds or {}) do
+    purchasedIndex[tattooId] = true
   end
 
   if type(sourceEquippedTattooIds) == "table" then
-    for _, metaUpgradeId in ipairs(sourceEquippedTattooIds) do
-      appendEquippedTattooId(equippedTattooIds, equippedIndex, purchasedIndex, metaUpgradeId, tattooLoadoutLimit)
+    for _, tattooId in ipairs(sourceEquippedTattooIds) do
+      appendEquippedTattooId(equippedTattooIds, equippedIndex, purchasedIndex, tattooId, tattooLoadoutLimit)
     end
   else
-    for _, metaUpgradeId in ipairs(purchasedMetaUpgradeIds or {}) do
-      appendEquippedTattooId(equippedTattooIds, equippedIndex, purchasedIndex, metaUpgradeId, tattooLoadoutLimit)
+    for _, tattooId in ipairs(purchasedTattooIds or {}) do
+      appendEquippedTattooId(equippedTattooIds, equippedIndex, purchasedIndex, tattooId, tattooLoadoutLimit)
     end
   end
 
@@ -85,8 +87,8 @@ end
 local function buildEquippedTattooEffectiveValues(equippedTattooIds)
   local effectiveValues = {}
 
-  for _, metaUpgradeId in ipairs(equippedTattooIds or {}) do
-    local definition = MetaUpgrades.getById(metaUpgradeId)
+  for _, tattooId in ipairs(equippedTattooIds or {}) do
+    local definition = MetaUpgrades.getById(tattooId)
 
     if definition then
       EffectiveValueSystem.mergeEffectiveValueTables(
@@ -108,11 +110,11 @@ function MetaState.new(options)
   local sourceEffectiveValues = type(options.effectiveValues) == "table" and options.effectiveValues or nil
   local sourceStats = type(options.stats) == "table" and options.stats or {}
   local unlockedCoinIds = type(options.unlockedCoinIds) == "table" and options.unlockedCoinIds or {}
-  local unlockedUpgradeIds = type(options.unlockedUpgradeIds) == "table" and options.unlockedUpgradeIds or {}
-  local purchasedMetaUpgradeIds = type(options.purchasedMetaUpgradeIds) == "table" and options.purchasedMetaUpgradeIds or {}
+  local unlockedTrickIds = type(options.unlockedTrickIds) == "table" and options.unlockedTrickIds or (type(options.unlockedUpgradeIds) == "table" and options.unlockedUpgradeIds or {})
+  local purchasedTattooIds = type(options.purchasedTattooIds) == "table" and options.purchasedTattooIds or (type(options.purchasedMetaUpgradeIds) == "table" and options.purchasedMetaUpgradeIds or {})
   local sourceEquippedTattooIds = type(options.equippedTattooIds) == "table" and options.equippedTattooIds or nil
   local tattooLoadoutLimit = getTattooLoadoutLimit(options)
-  local equippedTattooIds = normalizeEquippedTattooIds(sourceEquippedTattooIds, purchasedMetaUpgradeIds, tattooLoadoutLimit)
+  local equippedTattooIds = normalizeEquippedTattooIds(sourceEquippedTattooIds, purchasedTattooIds, tattooLoadoutLimit)
 
   local effectiveValues = buildEquippedTattooEffectiveValues(equippedTattooIds)
   local modifiers = {}
@@ -122,7 +124,7 @@ function MetaState.new(options)
   local unlockedCoinIndex = {}
   local unlockedUpgradeIndex = {}
 
-  if sourceEffectiveValues and #purchasedMetaUpgradeIds == 0 then
+  if sourceEffectiveValues and #purchasedTattooIds == 0 then
     EffectiveValueSystem.mergeEffectiveValueTables(effectiveValues, sourceEffectiveValues)
   elseif not sourceEffectiveValues then
     EffectiveValueSystem.mergeEffectiveValueTables(
@@ -134,10 +136,10 @@ function MetaState.new(options)
   modifiers = EffectiveValueSystem.buildLegacyModifierTableFromCanonicalEffectiveValues(effectiveValues, DEFAULT_MODIFIERS)
 
   appendUniqueIds(normalizedUnlockedCoinIds, unlockedCoinIndex, unlockedCoinIds)
-  appendUniqueIds(normalizedUnlockedUpgradeIds, unlockedUpgradeIndex, unlockedUpgradeIds)
+  appendUniqueIds(normalizedUnlockedUpgradeIds, unlockedUpgradeIndex, unlockedTrickIds)
 
-  for _, metaUpgradeId in ipairs(purchasedMetaUpgradeIds) do
-    local definition = MetaUpgrades.getById(metaUpgradeId)
+  for _, tattooId in ipairs(purchasedTattooIds) do
+    local definition = MetaUpgrades.getById(tattooId)
 
     if definition then
       appendUniqueIds(normalizedUnlockedCoinIds, unlockedCoinIndex, definition.unlockCoinIds)
@@ -157,8 +159,10 @@ function MetaState.new(options)
     metaPoints = tonumber(options.metaPoints) or 0,
     lifetimeMetaPointsEarned = tonumber(options.lifetimeMetaPointsEarned) or 0,
     unlockedCoinIds = normalizedUnlockedCoinIds,
+    unlockedTrickIds = normalizedUnlockedUpgradeIds,
     unlockedUpgradeIds = normalizedUnlockedUpgradeIds,
-    purchasedMetaUpgradeIds = Utils.copyArray(purchasedMetaUpgradeIds),
+    purchasedTattooIds = Utils.copyArray(purchasedTattooIds),
+    purchasedMetaUpgradeIds = Utils.copyArray(purchasedTattooIds),
     equippedTattooIds = Utils.copyArray(equippedTattooIds),
     tattooLoadoutLimit = tattooLoadoutLimit,
     runRecords = Utils.clone(type(options.runRecords) == "table" and options.runRecords or {}),

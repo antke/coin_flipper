@@ -10,14 +10,14 @@ return {
     return {
       metaStateOptions = {
         effectiveValues = {
-          ["run.maxActiveCoinSlots"] = { mode = "add", value = 1 },
-          ["run.startingShopPoints"] = { mode = "add", value = 2 },
+          ["run.maxFlipSlots"] = { mode = "add", value = 1 },
+          ["run.startingInfluence"] = { mode = "add", value = 2 },
           ["run.startingShopRerolls"] = { mode = "add", value = 1 },
         },
       },
       runOptions = {
         seed = 10,
-        ownedUpgradeIds = { "cashback_badge", "showcase_rack" },
+        ownedTrickIds = { "cashback_badge", "showcase_rack" },
       },
     }
   end,
@@ -34,15 +34,15 @@ return {
 
   assert = function(env, A)
     local offers = A.truthy(env.shopFlow and env.shopFlow.offers, "shop offers missing")
-    A.equal(env.runState.maxActiveCoinSlots, 4, "max Flip Slots")
-    A.equal(env.runState.shopPoints, 2 + (env.stageRecord.stageClearShopPoints or 0), "starting Influence plus clear reward")
+    A.equal(env.runState.maxFlipSlots, 4, "max Flip Slots")
+    A.equal(env.runState.influence, 2 + (env.stageRecord.stageClearShopPoints or 0), "starting Influence plus clear reward")
     A.equal(env.runState.shopRerollsRemaining, 1, "starting Black Market rerolls")
     A.equal(#offers, 3, "shop offer count")
 
     for _, offer in ipairs(offers) do
-      if offer.type == "upgrade" then
+      if offer.type == "trick" then
         local definition = Upgrades.getById(offer.contentId)
-        local expectedPrice = ShopContent.resolvePrice("upgrade", definition) - 1
+        local expectedPrice = ShopContent.resolvePrice("trick", definition) - 1
         A.equal(offer.price, expectedPrice, string.format("discounted price for %s", tostring(offer.contentId)))
       end
     end

@@ -338,8 +338,8 @@ function SaveSystem.normalizeMetaStateForSave(metaState)
     metaPoints = metaState.metaPoints,
     lifetimeMetaPointsEarned = metaState.lifetimeMetaPointsEarned,
     unlockedCoinIds = Utils.copyArray(metaState.unlockedCoinIds or {}),
-    unlockedUpgradeIds = Utils.copyArray(metaState.unlockedUpgradeIds or {}),
-    purchasedMetaUpgradeIds = Utils.copyArray(metaState.purchasedMetaUpgradeIds or {}),
+    unlockedTrickIds = Utils.copyArray(metaState.unlockedTrickIds or metaState.unlockedUpgradeIds or {}),
+    purchasedTattooIds = Utils.copyArray(metaState.purchasedTattooIds or metaState.purchasedMetaUpgradeIds or {}),
     equippedTattooIds = Utils.copyArray(metaState.equippedTattooIds or {}),
     tattooLoadoutLimit = metaState.tattooLoadoutLimit,
     runRecords = Utils.clone(metaState.runRecords or {}),
@@ -592,6 +592,21 @@ function SaveSystem.decodeActiveRunArtifactString(contents)
 
   for key, value in pairs(payload.activeRun) do
     artifact[key] = value
+  end
+
+  if type(artifact.runState) == "table" then
+    artifact.runState.influence = artifact.runState.influence or artifact.runState.shopPoints
+    artifact.runState.maxFlipSlots = artifact.runState.maxFlipSlots or artifact.runState.maxActiveCoinSlots
+    artifact.runState.maxActiveCoinSlots = artifact.runState.maxActiveCoinSlots or artifact.runState.maxFlipSlots
+    artifact.runState.flipSlots = artifact.runState.flipSlots or artifact.runState.equippedCoinSlots
+    artifact.runState.persistedFlipSlots = artifact.runState.persistedFlipSlots or artifact.runState.persistedLoadoutSlots
+    artifact.runState.ownedTrickIds = artifact.runState.ownedTrickIds or artifact.runState.ownedUpgradeIds
+    artifact.runState.unlockedTrickIds = artifact.runState.unlockedTrickIds or artifact.runState.unlockedUpgradeIds
+  end
+
+  if type(artifact.stageState) == "table" then
+    artifact.stageState.scoreAppliedToHp = artifact.stageState.scoreAppliedToHp or artifact.stageState.stageScore
+    artifact.stageState.opponentHp = artifact.stageState.opponentHp or artifact.stageState.targetScore
   end
 
   local ok, errorMessage = Validator.validateActiveRunArtifactPayload(artifact)

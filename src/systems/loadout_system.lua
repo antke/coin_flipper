@@ -7,14 +7,14 @@ local LoadoutSystem = {}
 
 function LoadoutSystem.createSelection(runState)
   local reconciliation = Validator.reconcilePersistedLoadout(runState)
-  local selection = Loadout.cloneSlots(reconciliation.slots, runState.maxActiveCoinSlots)
-  local originalCount = Loadout.countEquipped(reconciliation.originalSlots, runState.maxActiveCoinSlots)
+  local selection = Loadout.cloneSlots(reconciliation.slots, runState.maxFlipSlots)
+  local originalCount = Loadout.countEquipped(reconciliation.originalSlots, runState.maxFlipSlots)
 
-  reconciliation.reconciledSlots = Loadout.cloneSlots(selection, runState.maxActiveCoinSlots)
-  reconciliation.reconciledCanonicalKey = Loadout.toCanonicalKey(reconciliation.reconciledSlots, runState.maxActiveCoinSlots)
+  reconciliation.reconciledSlots = Loadout.cloneSlots(selection, runState.maxFlipSlots)
+  reconciliation.reconciledCanonicalKey = Loadout.toCanonicalKey(reconciliation.reconciledSlots, runState.maxFlipSlots)
 
-  if Loadout.countEquipped(selection, runState.maxActiveCoinSlots) == 0 then
-    for slotIndex = 1, runState.maxActiveCoinSlots do
+  if Loadout.countEquipped(selection, runState.maxFlipSlots) == 0 then
+    for slotIndex = 1, runState.maxFlipSlots do
       local coinId = runState.collectionCoinIds[slotIndex]
       selection[slotIndex] = coinId
 
@@ -34,25 +34,25 @@ function LoadoutSystem.createSelection(runState)
     reconciliation.fallbackReason = nil
   end
 
-  reconciliation.originalCanonicalKey = Loadout.toCanonicalKey(reconciliation.originalSlots, runState.maxActiveCoinSlots)
-  reconciliation.reconciledCanonicalKey = Loadout.toCanonicalKey(reconciliation.slots, runState.maxActiveCoinSlots)
-  reconciliation.preparedSlots = Loadout.cloneSlots(selection, runState.maxActiveCoinSlots)
-  reconciliation.preparedCanonicalKey = Loadout.toCanonicalKey(selection, runState.maxActiveCoinSlots)
-  reconciliation.selectionCanonicalKey = Loadout.toCanonicalKey(selection, runState.maxActiveCoinSlots)
-  reconciliation.selectionSlots = Loadout.cloneSlots(selection, runState.maxActiveCoinSlots)
+  reconciliation.originalCanonicalKey = Loadout.toCanonicalKey(reconciliation.originalSlots, runState.maxFlipSlots)
+  reconciliation.reconciledCanonicalKey = Loadout.toCanonicalKey(reconciliation.slots, runState.maxFlipSlots)
+  reconciliation.preparedSlots = Loadout.cloneSlots(selection, runState.maxFlipSlots)
+  reconciliation.preparedCanonicalKey = Loadout.toCanonicalKey(selection, runState.maxFlipSlots)
+  reconciliation.selectionCanonicalKey = Loadout.toCanonicalKey(selection, runState.maxFlipSlots)
+  reconciliation.selectionSlots = Loadout.cloneSlots(selection, runState.maxFlipSlots)
   reconciliation.changed = reconciliation.originalCanonicalKey ~= reconciliation.selectionCanonicalKey or #(reconciliation.changes or {}) > 0
 
-  return Loadout.normalizeSlots(selection, runState.maxActiveCoinSlots), reconciliation
+  return Loadout.normalizeSlots(selection, runState.maxFlipSlots), reconciliation
 end
 
 function LoadoutSystem.assignCoinToSlot(runState, selection, coinId, slotIndex)
   if not Utils.contains(runState.collectionCoinIds, coinId) then
-    return Loadout.normalizeSlots(selection, runState.maxActiveCoinSlots), "coin_not_owned"
+    return Loadout.normalizeSlots(selection, runState.maxFlipSlots), "coin_not_owned"
   end
 
-  local nextSelection = Loadout.normalizeSlots(selection, runState.maxActiveCoinSlots)
+  local nextSelection = Loadout.normalizeSlots(selection, runState.maxFlipSlots)
 
-  for existingSlot = 1, runState.maxActiveCoinSlots do
+  for existingSlot = 1, runState.maxFlipSlots do
     if nextSelection[existingSlot] == coinId then
       nextSelection[existingSlot] = nil
     end
@@ -63,7 +63,7 @@ function LoadoutSystem.assignCoinToSlot(runState, selection, coinId, slotIndex)
 end
 
 function LoadoutSystem.clearSlot(runState, selection, slotIndex)
-  local nextSelection = Loadout.normalizeSlots(selection, runState.maxActiveCoinSlots)
+  local nextSelection = Loadout.normalizeSlots(selection, runState.maxFlipSlots)
   nextSelection[slotIndex] = nil
   return nextSelection
 end
@@ -75,18 +75,18 @@ function LoadoutSystem.commitLoadout(runState, selection)
     return nil, result
   end
 
-  local normalizedSelection = Loadout.normalizeSlots(result, runState.maxActiveCoinSlots)
+  local normalizedSelection = Loadout.normalizeSlots(result, runState.maxFlipSlots)
 
-  runState.equippedCoinSlots = normalizedSelection
-  runState.persistedLoadoutSlots = Loadout.cloneSlots(normalizedSelection, runState.maxActiveCoinSlots)
+  runState.flipSlots = normalizedSelection
+  runState.persistedFlipSlots = Loadout.cloneSlots(normalizedSelection, runState.maxFlipSlots)
 
   if runState.history and runState.history.loadoutCommits then
     local entry = {
       roundIndex = runState.roundIndex,
       stageId = runState.currentStageId,
-      slots = Loadout.cloneSlots(runState.equippedCoinSlots, runState.maxActiveCoinSlots),
-      compactCoinIds = Loadout.compactSlots(runState.equippedCoinSlots, runState.maxActiveCoinSlots),
-      canonicalKey = Loadout.toCanonicalKey(runState.equippedCoinSlots, runState.maxActiveCoinSlots),
+      slots = Loadout.cloneSlots(runState.flipSlots, runState.maxFlipSlots),
+      compactCoinIds = Loadout.compactSlots(runState.flipSlots, runState.maxFlipSlots),
+      canonicalKey = Loadout.toCanonicalKey(runState.flipSlots, runState.maxFlipSlots),
     }
     local replaced = false
 
@@ -103,14 +103,14 @@ function LoadoutSystem.commitLoadout(runState, selection)
     end
   end
 
-  return runState.equippedCoinSlots
+  return runState.flipSlots
 end
 
 function LoadoutSystem.getResolutionOrder(runState)
   local compact = {}
 
-  for slotIndex = 1, runState.maxActiveCoinSlots do
-    local coinId = runState.equippedCoinSlots[slotIndex]
+  for slotIndex = 1, runState.maxFlipSlots do
+    local coinId = runState.flipSlots[slotIndex]
 
     if coinId then
       table.insert(compact, {
