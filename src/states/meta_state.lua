@@ -33,7 +33,7 @@ local function formatEquipError(errorCode)
   end
 
   if errorCode == "tattoo_not_equip_eligible" then
-    return "That Tattoo unlocks content passively and does not use a loadout slot."
+    return "That Tattoo unlocks content passively and does not use a Tattoo Slot."
   end
 
   if errorCode == "already_equipped" then
@@ -41,7 +41,7 @@ local function formatEquipError(errorCode)
   end
 
   if errorCode == "tattoo_loadout_full" then
-    return "Tattoo loadout is full. Unequip another Tattoo first."
+    return "Tattoo Slots are full. Unequip another Tattoo first."
   end
 
   if errorCode == "not_equipped" then

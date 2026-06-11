@@ -594,6 +594,13 @@ function SaveSystem.decodeActiveRunArtifactString(contents)
     artifact[key] = value
   end
 
+  artifact.draftSession = nil
+
+  if artifact.currentState == "coin_draft" then
+    artifact.currentState = "loadout"
+    artifact.screenState = nil
+  end
+
   if type(artifact.runState) == "table" then
     artifact.runState.influence = artifact.runState.influence or artifact.runState.shopPoints
     artifact.runState.maxFlipSlots = artifact.runState.maxFlipSlots or artifact.runState.maxActiveCoinSlots

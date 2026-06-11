@@ -33,7 +33,7 @@ end
 
 function BossWarningState.new()
   return setmetatable({
-    statusMessage = "Face the boss or adjust your loadout.",
+    statusMessage = "Face the boss or adjust your pouch.",
     buttons = {},
   }, BossWarningState)
 end
@@ -54,7 +54,7 @@ function BossWarningState:buildButtons(app)
       y = y,
       width = buttonWidth,
       height = buttonHeight,
-      label = "Back to Loadout",
+      label = "Back to Pouch",
       variant = "warning",
       onClick = function()
         return app.stateGraph:request("back")
@@ -78,7 +78,7 @@ end
 
 function BossWarningState:enter(app)
   app:ensureCurrentStage()
-  self.statusMessage = "Face the boss or adjust your loadout."
+  self.statusMessage = "Face the boss or adjust your pouch."
   app:showFeedback("boss", "Boss Incoming", app.currentStageDefinition and app.currentStageDefinition.label or "A dangerous table waits ahead.", {
     duration = 1.8,
     flashAlpha = 0.06,

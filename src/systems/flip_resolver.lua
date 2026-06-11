@@ -324,20 +324,19 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
   local context
 
   local _, drawWarning = PurseSystem.dealHand(runState, stageState, rng)
+  local purse = PurseSystem.getStagePurse(runState, stageState)
 
   PurseHookSystem.runAfterDealBeforeSelection(runState, stageState, metaProjection, { call = call, rng = rng })
-  local handSlots, selectionWarning = PurseSystem.selectDefaultFlipSlots(runState, stageState)
-  PurseHookSystem.runAfterHandDraw(runState, stageState, metaProjection, { call = call, rng = rng })
-
-  drawWarning = drawWarning == "purse_empty" and drawWarning or (selectionWarning or drawWarning)
 
   if stageState.stageStatus ~= "active" then
     return nil, drawWarning or "stage_not_active"
   end
 
-  if not handSlots or #handSlots == 0 then
-    return nil, drawWarning or "hand_empty"
+  if not purse or not purse.handSlots or #purse.handSlots == 0 then
+    return nil, drawWarning or "select at least one coin before flipping"
   end
+
+  PurseHookSystem.runAfterHandDraw(runState, stageState, metaProjection, { call = call, rng = rng })
 
   local preValidationRunState = Utils.clone(runState)
   local preValidationStageState = Utils.clone(stageState)

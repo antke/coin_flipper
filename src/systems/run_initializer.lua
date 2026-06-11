@@ -2,6 +2,7 @@ local Coins = require("src.content.coins")
 local EffectiveValueSystem = require("src.systems.effective_value_system")
 local Loadout = require("src.domain.loadout")
 local MetaUpgrades = require("src.content.meta_upgrades")
+local RNG = require("src.core.rng")
 local RunState = require("src.domain.run_state")
 local StageState = require("src.domain.stage_state")
 local Stages = require("src.content.stages")
@@ -9,6 +10,7 @@ local Utils = require("src.core.utils")
 local Validator = require("src.core.validator")
 
 local RunInitializer = {}
+local STARTER_PURSE_SIZE = 12
 local DEFAULT_STARTER_COLLECTION = {
   "copper_bent_coin",
   "copper_blank_coin",
@@ -18,11 +20,12 @@ local DEFAULT_STARTER_COLLECTION = {
   "copper_weighted_coin",
 }
 
-local function buildStarterPurse()
+local function buildStarterPurse(seed)
   local starterPurse = {}
+  local rng = RNG.new(seed or 1)
 
-  for index = 1, 10 do
-    table.insert(starterPurse, DEFAULT_STARTER_COLLECTION[((index - 1) % #DEFAULT_STARTER_COLLECTION) + 1])
+  for _ = 1, STARTER_PURSE_SIZE do
+    table.insert(starterPurse, DEFAULT_STARTER_COLLECTION[rng:nextInt(1, #DEFAULT_STARTER_COLLECTION)])
   end
 
   return starterPurse
@@ -71,7 +74,7 @@ function RunInitializer.createNewRun(metaState, options)
   elseif options.starterCollection then
     starterPurse = buildStarterPurseFromCollection(starterCollection, resolvedValues)
   else
-    starterPurse = buildStarterPurse()
+    starterPurse = buildStarterPurse(options.seed)
   end
 
   local runState = RunState.new({

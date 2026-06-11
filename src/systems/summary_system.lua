@@ -46,7 +46,7 @@ function SummarySystem.buildRunRecord(runState, resultType, stageState)
       finalStageLabel = stageState.stageLabel or finalStageLabel
     elseif runState and runState.runStatus == "active" then
       finalStageStatus = "active"
-      finalStageLabel = runState.currentStageId or "Loadout"
+      finalStageLabel = runState.currentStageId or "Pouch Review"
     end
   end
 

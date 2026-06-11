@@ -8,6 +8,7 @@ local forgeryBorrowedNameIdentity = require("scripts.fixtures.engine.scenarios.f
 local loadedTrickWeightActions = require("scripts.fixtures.engine.scenarios.loaded_trick_weight_actions")
 local misdirectionCrookedSpotlightCredit = require("scripts.fixtures.engine.scenarios.misdirection_crooked_spotlight_credit")
 local perCoinScoreEvents = require("scripts.fixtures.engine.scenarios.per_coin_score_events")
+local preparedBuildBootstrap = require("scripts.fixtures.engine.scenarios.prepared_build_bootstrap")
 local prestigeEncoreReplayPacket = require("scripts.fixtures.engine.scenarios.prestige_encore_replay_packet")
 local predictionForetoldScore = require("scripts.fixtures.engine.scenarios.prediction_foretold_score")
 local shopPurchaseBoundary = require("scripts.fixtures.engine.scenarios.shop_purchase_boundary")
@@ -27,6 +28,7 @@ return {
   loadedTrickWeightActions,
   misdirectionCrookedSpotlightCredit,
   perCoinScoreEvents,
+  preparedBuildBootstrap,
   prestigeEncoreReplayPacket,
   predictionForetoldScore,
   shopPurchaseBoundary,

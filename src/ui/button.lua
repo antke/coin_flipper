@@ -1,4 +1,6 @@
 local Theme = require("src.ui.theme")
+local Box = require("src.ui.box")
+local TextBox = require("src.ui.text_box")
 
 local Button = {}
 
@@ -7,45 +9,18 @@ local defaultFont = nil
 local pressEffects = {}
 local PRESS_EFFECT_DURATION = 0.18
 
-local VARIANT_COLORS = {
-  default = {
-    fill = Theme.colors.panel,
-    border = Theme.colors.panelBorder,
-  },
-  primary = {
-    fill = Theme.colors.accent,
-    border = Theme.colors.highlight,
-  },
-  success = {
-    fill = Theme.colors.success,
-    border = Theme.colors.accent,
-  },
-  danger = {
-    fill = Theme.colors.danger,
-    border = Theme.colors.warning,
-  },
-  warning = {
-    fill = Theme.colors.warning,
-    border = Theme.colors.highlight,
-  },
-  accent = {
-    fill = Theme.colors.accent,
-    border = Theme.colors.highlight,
-  },
-}
+local BUTTON_HOVER_OVERLAY_ALPHA = 0.08
 
 local function resolveButtonColors(options)
-  local variant = VARIANT_COLORS[options.variant or "default"] or VARIANT_COLORS.default
-
   if options.disabled then
     return Theme.colors.panel, Theme.colors.panelBorder, Theme.colors.mutedText
   end
 
-  if options.focused or options.hovered then
-    return variant.fill, variant.border, Theme.colors.text
+  if options.active then
+    return { 0.22, 0.31, 0.40, 0.96 }, { 0.48, 0.62, 0.70, 1.0 }, Theme.colors.text
   end
 
-  return Theme.colors.panel, variant.border, Theme.colors.text
+  return Theme.colors.panel, Theme.colors.panelBorder, Theme.colors.text
 end
 
 local function getTime()
@@ -76,6 +51,29 @@ local function buttonIsPressed(button, now)
   return false
 end
 
+local function drawPixelButtonFrame(x, y, width, height, fill, border, options)
+  local _, inner, edge, radius = Box.drawFrame(x, y, width, height, {
+    fill = fill,
+    border = border,
+  })
+
+  if options.disabled then
+    Theme.applyColor({ Theme.colors.shadow[1], Theme.colors.shadow[2], Theme.colors.shadow[3], 0.20 })
+    love.graphics.rectangle("fill", inner.x, inner.y, inner.width, inner.height, radius, radius)
+    return
+  end
+
+  if options.pressed then
+    Theme.applyColor(Theme.colors.shadow)
+    love.graphics.rectangle("fill", inner.x, inner.y, inner.width, edge)
+  end
+
+  if options.hovered then
+    love.graphics.setColor(1, 1, 1, BUTTON_HOVER_OVERLAY_ALPHA)
+    love.graphics.rectangle("fill", x + (edge * 2), y + (edge * 2), width - (edge * 4), height - (edge * 4), radius, radius)
+  end
+end
+
 function Button.containsPoint(button, x, y)
   return x >= button.x and x <= (button.x + button.width) and y >= button.y and y <= (button.y + button.height)
 end
@@ -103,17 +101,25 @@ function Button.drawTextButton(x, y, width, height, label, options)
 
   local fill, border, textColor = resolveButtonColors(options)
   local font = love.graphics.getFont()
-  local textY = y + math.floor((height - font:getHeight()) / 2)
+  local edge = math.max(1, Theme.scale(2))
+  local contentArea = Box.contentRect(x, y, width, height, {
+    border = edge * 2,
+    padding = math.max(1, Theme.scale(2)),
+  })
+  local textOffset = options.pressed and math.max(1, Theme.scale(1)) or 0
 
-  Theme.applyColor(fill)
-  love.graphics.rectangle("fill", x + 3, y + 3, width, height)
-  Theme.applyColor(fill)
-  love.graphics.rectangle("fill", x, y, width, height)
-  Theme.applyColor(border)
-  love.graphics.rectangle("line", x, y, width, height)
+  drawPixelButtonFrame(x, y, width, height, fill, border, options)
 
-  Theme.applyColor(textColor)
-  love.graphics.printf(label, x + 6, textY, width - 12, options.align or "center")
+  TextBox.draw(label, contentArea, {
+    font = font,
+    color = textColor,
+    align = options.align or "center",
+    valign = "center",
+    fit = "shrink",
+    minScale = 0.5,
+    maxScale = 1,
+    offsetY = textOffset,
+  })
 
   if buttonFont and buttonFont ~= previousFont then
     love.graphics.setFont(previousFont)
@@ -124,13 +130,14 @@ function Button.drawButtons(buttons, mouseX, mouseY)
   local now = getTime()
 
   for _, button in ipairs(buttons or {}) do
-    local pressOffset = buttonIsPressed(button, now) and 2 or 0
+    local pressed = buttonIsPressed(button, now)
 
-    Button.drawTextButton(button.x, button.y + pressOffset, button.width, button.height, button.label, {
+    Button.drawTextButton(button.x, button.y, button.width, button.height, button.label, {
       focused = button.focused,
+      active = button.active,
       hovered = mouseX and mouseY and not button.disabled and Button.containsPoint(button, mouseX, mouseY),
+      pressed = pressed,
       disabled = button.disabled,
-      variant = button.variant,
       align = button.align,
       font = button.font,
     })

@@ -91,9 +91,9 @@ function LoadoutState:getLayout(app)
   })
   local availableHeight = math.max(Theme.scale(220), footerMetrics.contentBottomY - panelY)
   local contentWidth = width - (padding * 2)
-  local topHeight = math.min(Theme.scale(160), math.floor(availableHeight * 0.30))
-  local slotY = panelY + topHeight + gap
-  local slotHeight = availableHeight - topHeight - gap
+  local topHeight = 0
+  local slotY = panelY
+  local slotHeight = availableHeight
 
   return {
     padding = padding,
@@ -501,7 +501,7 @@ function LoadoutState:draw(app)
   Theme.applyColor(Theme.colors.mutedText)
   love.graphics.printf(
     string.format(
-      "Target %d  |  Flips %d",
+      "Opponent HP %d  |  Flips %d",
       stageDefinition and (stageDefinition.opponentHp or stageDefinition.targetScore) or 0,
       stagePreview.flipsPerStage or 0
     ),
@@ -511,21 +511,16 @@ function LoadoutState:draw(app)
     "right"
   )
 
-  Panel.draw(layout.padding, layout.panelY, layout.contentWidth, layout.topHeight, "Stage Briefing")
   Panel.draw(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Pouch")
 
-  local briefingArea = Panel.getContentArea(layout.padding, layout.panelY, layout.contentWidth, layout.topHeight, "Stage Briefing")
   local purseArea = Panel.getContentArea(layout.padding, layout.slotY, layout.contentWidth, layout.slotHeight, "Pouch")
 
   local mouseX, mouseY = love.mouse.getPosition()
-  love.graphics.setFont(app.fonts.body)
-  Layout.drawWrappedLines(stagePreview.lines or {}, briefingArea.x, briefingArea.y, briefingArea.width, Theme.colors.text, Theme.spacing.lineHeight, briefingArea.height)
 
   local maxPurseScrollOffset = PurseView.getMaxScrollOffset(app, purseArea, nil)
   self.purseScrollOffset = math.max(0, math.min(self.purseScrollOffset or 0, maxPurseScrollOffset))
 
   PurseView.draw(app, purseArea, nil, {
-    note = "Each flip draws a 5-coin hand. Flipped coins exhaust until the next stage.",
     scrollOffset = self.purseScrollOffset,
   })
   self.purseScrollButtons = PurseView.getScrollButtons(
@@ -541,8 +536,10 @@ function LoadoutState:draw(app)
   )
   Button.drawButtons(self.purseScrollButtons, mouseX, mouseY)
 
-  Theme.applyColor(Theme.colors.warning)
-  love.graphics.printf(self.statusMessage, layout.padding, layout.height - layout.footerMetrics.statusHeight + Theme.spacing.statusPadding, layout.width - (layout.padding * 2), "left")
+  if self.statusMessage ~= "" then
+    Theme.applyColor(Theme.colors.warning)
+    love.graphics.printf(self.statusMessage, layout.padding, layout.height - layout.footerMetrics.statusHeight + Theme.spacing.statusPadding, layout.width - (layout.padding * 2), "left")
+  end
 
   Button.drawButtons(self:buildActionButtons(app, layout), mouseX, mouseY)
 

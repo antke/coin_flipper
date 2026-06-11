@@ -1,6 +1,7 @@
 local Button = require("src.ui.button")
 local Layout = require("src.ui.layout")
 local Panel = require("src.ui.panel")
+local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
 
 local RewardPreviewState = {}
@@ -26,16 +27,6 @@ local function formatRewardError(errorCode)
   return tostring(errorCode)
 end
 
-local function getWrappedLineCount(text, width)
-  local font = love.graphics.getFont()
-  local _, wrapped = font:getWrap(tostring(text or ""), math.max(1, width))
-  return math.max(1, #wrapped)
-end
-
-local function getPreviewCardHeight(card, width)
-  return 32
-end
-
 function RewardPreviewState.new()
   return setmetatable({
     statusMessage = "Choose a reward, then continue to the Black Market.",
@@ -46,34 +37,19 @@ end
 
 function RewardPreviewState:getLayout(app)
   local padding = Theme.spacing.screenPadding
-  local gap = Theme.spacing.blockGap
   local width = love.graphics.getWidth()
   local height = love.graphics.getHeight()
   local footerMetrics = Layout.getFooterMetrics(height)
   local topY = 128
   local availableHeight = math.max(260, footerMetrics.contentBottomY - topY)
-  local topHeight = math.max(180, math.floor((availableHeight - gap) * 0.38))
-  local bottomY = topY + topHeight + gap
-  local bottomHeight = math.max(160, footerMetrics.contentBottomY - bottomY)
-  local columnWidth = math.floor((width - (padding * 2) - gap) / 2)
-  local middleX = padding + columnWidth + gap
-  local rightX = middleX
-  local rightWidth = width - rightX - padding
 
   return {
     padding = padding,
-    gap = gap,
     width = width,
     height = height,
     footerMetrics = footerMetrics,
     topY = topY,
-    topHeight = topHeight,
-    bottomY = bottomY,
-    bottomHeight = bottomHeight,
-    columnWidth = columnWidth,
-    middleX = middleX,
-    rightX = rightX,
-    rightWidth = rightWidth,
+    topHeight = availableHeight,
   }
 end
 
@@ -98,31 +74,104 @@ function RewardPreviewState:tryContinue(app)
   return app.stateGraph:request("continue")
 end
 
-function RewardPreviewState:buildRewardButtons(app, area)
+function RewardPreviewState:tryReroll(app)
+  local ok, result = app:rerollRewardOptions()
+
+  if ok then
+    self.statusMessage = "Rerolled reward choices."
+  else
+    self.statusMessage = formatRewardError(result)
+  end
+
+  return ok, result
+end
+
+function RewardPreviewState:trySkip(app)
+  local ok, result = app:skipRewardForCurrency()
+
+  if ok then
+    self.statusMessage = string.format("Skipped reward for +%d Influence. Continue to the Black Market.", result.amount or 0)
+  else
+    self.statusMessage = formatRewardError(result)
+  end
+
+  return ok, result
+end
+
+function RewardPreviewState:getRewardContentAreas(rewardArea, hasOptions)
+  if not hasOptions then
+    return rewardArea, nil
+  end
+
+  local gap = Theme.spacing.blockGap
+  local summaryHeight = math.max(Theme.scale(86), math.min(Theme.scale(124), math.floor(rewardArea.height * 0.28)))
+
+  return {
+    x = rewardArea.x,
+    y = rewardArea.y,
+    width = rewardArea.width,
+    height = summaryHeight,
+  }, {
+    x = rewardArea.x,
+    y = rewardArea.y + summaryHeight + gap,
+    width = rewardArea.width,
+    height = math.max(0, rewardArea.height - summaryHeight - gap),
+  }
+end
+
+function RewardPreviewState:getRewardCardLayout(app, area)
+  local cards = app:getRewardPreviewOptionCards()
+  local count = #cards
+
+  if count == 0 or not area then
+    return {}
+  end
+
+  local gap = Theme.spacing.blockGap
+  local columns = math.min(3, count)
+  local rows = math.max(1, math.ceil(count / columns))
+  local panelWidth = math.floor((area.width - (gap * (columns - 1))) / columns)
+  local panelHeight = math.max(Theme.scale(150), math.floor((area.height - (gap * (rows - 1))) / rows))
+  local layout = {}
+
+  for index, card in ipairs(cards) do
+    local row = math.floor((index - 1) / columns)
+    local column = (index - 1) % columns
+
+    table.insert(layout, {
+      index = card.index or index,
+      option = card,
+      x = area.x + (column * (panelWidth + gap)),
+      y = area.y + (row * (panelHeight + gap)),
+      width = panelWidth,
+      height = panelHeight,
+    })
+  end
+
+  return layout
+end
+
+function RewardPreviewState:buildRewardButtons(app, cardLayout)
   local session = app:ensureRewardPreview()
-  local buttonHeight = 44
-  local gap = Theme.spacing.itemGap
+  local buttonHeight = 38
 
   self.rewardButtons = {}
 
-  for index, option in ipairs(app:getRewardPreviewOptionCards()) do
-    local optionName = option.name or option.contentId or "Unknown"
-    local optionLabel = option.displayType and string.format("%s — %s", option.displayType, optionName) or optionName
-    if option.wildcard then
-      optionLabel = optionLabel .. " (Wildcard)"
-    end
+  for _, entry in ipairs(cardLayout or {}) do
+    local option = entry.option
+    local contentArea = Panel.getContentArea(entry.x, entry.y, entry.width, entry.height, string.format("Choice %d", entry.index))
 
     table.insert(self.rewardButtons, {
-      x = area.x,
-      y = area.y + ((index - 1) * (buttonHeight + gap)),
-      width = area.width,
+      x = contentArea.x,
+      y = contentArea.y + contentArea.height - buttonHeight,
+      width = contentArea.width,
       height = buttonHeight,
-      label = string.format("%d. %s", index, optionLabel),
-      variant = option.selected and "primary" or "default",
+      label = option.selected and "Selected" or "Choose",
+      variant = option.selected and "success" or "primary",
       focused = option.selected == true,
       disabled = session and session.claimed == true,
       onClick = function()
-        return self:selectRewardOption(app, index)
+        return self:selectRewardOption(app, entry.index)
       end,
     })
   end
@@ -132,12 +181,40 @@ end
 
 function RewardPreviewState:buildButtons(app)
   local metrics = Layout.getFooterMetrics(love.graphics.getHeight())
-  local buttonWidth = 300
+  local padding = Theme.spacing.screenPadding
+  local gap = Theme.spacing.itemGap
+  local buttonWidth = math.floor((love.graphics.getWidth() - (padding * 2) - (gap * 2)) / 3)
   local buttonHeight = metrics.buttonHeight
+  local session = app:getRewardSession()
+  local rewardActionDisabled = session == nil or session.claimed == true
 
   self.buttons = {
     {
-      x = math.floor((love.graphics.getWidth() - buttonWidth) / 2),
+      x = padding,
+      y = metrics.buttonY,
+      width = buttonWidth,
+      height = buttonHeight,
+      label = "Reroll Rewards",
+      variant = "warning",
+      disabled = rewardActionDisabled,
+      onClick = function()
+        return self:tryReroll(app)
+      end,
+    },
+    {
+      x = padding + buttonWidth + gap,
+      y = metrics.buttonY,
+      width = buttonWidth,
+      height = buttonHeight,
+      label = string.format("Skip (+%d Influence)", app:getRewardSkipInfluenceAmount()),
+      variant = "default",
+      disabled = rewardActionDisabled,
+      onClick = function()
+        return self:trySkip(app)
+      end,
+    },
+    {
+      x = padding + ((buttonWidth + gap) * 2),
       y = metrics.buttonY,
       width = buttonWidth,
       height = buttonHeight,
@@ -153,11 +230,56 @@ function RewardPreviewState:buildButtons(app)
   return self.buttons
 end
 
+function RewardPreviewState:drawRewardCard(app, entry)
+  local option = entry.option or {}
+  local title = string.format("Choice %d", entry.index)
+  local contentArea
+
+  Panel.draw(entry.x, entry.y, entry.width, entry.height, title)
+  contentArea = Panel.getContentArea(entry.x, entry.y, entry.width, entry.height, title)
+
+  if option.selected then
+    Theme.applyColor(Theme.colors.success)
+    love.graphics.setLineWidth(3)
+    love.graphics.rectangle("line", entry.x, entry.y, entry.width, entry.height, 8, 8)
+    love.graphics.setLineWidth(1)
+  end
+
+  local buttonHeight = 38
+  local artSize = math.min(Theme.scale(76), math.max(Theme.scale(48), math.floor(contentArea.width * 0.30)))
+  local textX = contentArea.x + artSize + Theme.spacing.itemGap
+  local textY = contentArea.y
+  local textWidth = contentArea.width - artSize - Theme.spacing.itemGap
+  local badge = option.type == "coin" and "C" or "T"
+
+  love.graphics.setColor(Theme.colors.highlight[1], Theme.colors.highlight[2], Theme.colors.highlight[3], option.selected and 0.28 or 0.18)
+  love.graphics.rectangle("fill", contentArea.x, contentArea.y, artSize, artSize, 10, 10)
+  Theme.applyColor(option.selected and Theme.colors.success or Theme.colors.highlight)
+  love.graphics.rectangle("line", contentArea.x, contentArea.y, artSize, artSize, 10, 10)
+  love.graphics.setFont(app.fonts.heading)
+  love.graphics.printf(badge, contentArea.x, contentArea.y + math.floor((artSize - Theme.spacing.lineHeight) / 2), artSize, "center")
+  love.graphics.setFont(app.fonts.body)
+
+  local typeLine = option.displayType or option.type or "Reward"
+  if option.wildcard then
+    typeLine = typeLine .. " (Wildcard)"
+  end
+
+  local lines = {
+    option.name or option.contentId or "Unknown Reward",
+    typeLine,
+    "",
+    Terminology.getMechanicRichText(option.description or ""),
+  }
+
+  Layout.drawWrappedLines(lines, textX, textY, textWidth, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height - buttonHeight - Theme.spacing.itemGap)
+end
+
 function RewardPreviewState:enter(app)
   local session = app:ensureRewardPreview()
 
   if session and #(session.options or {}) > 0 then
-    self.statusMessage = "Choose one reward, then continue to the Black Market."
+    self.statusMessage = "Choose one reward, reroll, or skip for Influence."
   else
     self.statusMessage = "No reward options remain. Continue to the Black Market."
   end
@@ -194,6 +316,16 @@ function RewardPreviewState:keypressed(app, key)
     return
   end
 
+  if key == "r" then
+    self:tryReroll(app)
+    return
+  end
+
+  if key == "s" then
+    self:trySkip(app)
+    return
+  end
+
   if key == "return" or key == "space" or key == "kpenter" then
     self:tryContinue(app)
   end
@@ -202,75 +334,37 @@ end
 function RewardPreviewState:draw(app)
   local layout = self:getLayout(app)
   local rewardSession = app:ensureRewardPreview()
-  local projectedOutcome = app:getProjectedRewardOutcome()
-  local projectedImpactLines = app:getProjectedRewardImpactLines({}, projectedOutcome)
-  local stagePreview = app:getProjectedUpcomingStagePreviewData(projectedOutcome)
+  local hasOptions = #(rewardSession and rewardSession.options or {}) > 0
 
   love.graphics.setFont(app.fonts.title)
   Layout.centeredText("Reward Preview", 64, app.fonts.title, Theme.colors.accent)
 
   Panel.draw(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Choose Reward")
-  Panel.draw(layout.padding, layout.bottomY, layout.columnWidth, layout.bottomHeight, "Projected Impact")
-  Panel.draw(layout.rightX, layout.bottomY, layout.rightWidth, layout.bottomHeight, stagePreview.title or "After the Black Market")
 
   local rewardArea = Panel.getContentArea(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Choose Reward")
-  local impactArea = Panel.getContentArea(layout.padding, layout.bottomY, layout.columnWidth, layout.bottomHeight, "Projected Impact")
-  local stageArea = Panel.getContentArea(layout.rightX, layout.bottomY, layout.rightWidth, layout.bottomHeight, stagePreview.title or "After the Black Market")
 
   local rewardLines = app:getRewardPreviewLines()
   table.insert(rewardLines, "")
   table.insert(rewardLines, self.statusMessage)
-  local rewardButtonsHeight = 0
-  if #(rewardSession and rewardSession.options or {}) > 0 then
-    rewardButtonsHeight = (#rewardSession.options * 44) + math.max(0, (#rewardSession.options - 1) * Theme.spacing.itemGap) + Theme.spacing.itemGap
-  else
+  if not hasOptions then
     table.insert(rewardLines, "")
     table.insert(rewardLines, "No valid reward options remain for this stage.")
   end
 
+  local summaryArea, cardArea = self:getRewardContentAreas(rewardArea, hasOptions)
+
   love.graphics.setFont(app.fonts.body)
-  Layout.drawWrappedLines(rewardLines, rewardArea.x, rewardArea.y, rewardArea.width, Theme.colors.text, Theme.spacing.lineHeight, math.max(0, rewardArea.height - rewardButtonsHeight))
-  Layout.drawWrappedLines(projectedImpactLines, impactArea.x, impactArea.y, impactArea.width, Theme.colors.text, Theme.spacing.lineHeight, impactArea.height)
+  Layout.drawWrappedLines(rewardLines, summaryArea.x, summaryArea.y, summaryArea.width, Theme.colors.text, Theme.spacing.lineHeight, summaryArea.height)
 
-  if rewardButtonsHeight > 0 then
+  if hasOptions then
     local mouseX, mouseY = love.mouse.getPosition()
-    local rewardButtonsY = rewardArea.y + rewardArea.height - rewardButtonsHeight + Theme.spacing.itemGap
-    local rewardButtonArea = { x = rewardArea.x, y = rewardButtonsY, width = rewardArea.width }
-    Button.drawButtons(self:buildRewardButtons(app, rewardButtonArea), mouseX, mouseY)
-  end
+    local cardLayout = self:getRewardCardLayout(app, cardArea)
 
-  local previewLinesHeight = 0
-  for _, line in ipairs(stagePreview.lines or {}) do
-    previewLinesHeight = previewLinesHeight + (getWrappedLineCount(line, stageArea.width) * Theme.spacing.lineHeight)
-  end
-
-  local stageLineHeight = math.min(stageArea.height, previewLinesHeight)
-  Layout.drawWrappedLines(stagePreview.lines or {}, stageArea.x, stageArea.y, stageArea.width, Theme.colors.text, Theme.spacing.lineHeight, stageLineHeight)
-
-  local cardY = stageArea.y + stageLineHeight + Theme.spacing.itemGap
-  local remainingHeight = stageArea.height - stageLineHeight - Theme.spacing.itemGap
-
-  for _, card in ipairs(stagePreview.cards or {}) do
-    local cardHeight = getPreviewCardHeight(card, stageArea.width)
-    if cardY + cardHeight > (stageArea.y + stageArea.height) then
-      break
+    for _, entry in ipairs(cardLayout) do
+      self:drawRewardCard(app, entry)
     end
 
-    love.graphics.setColor(stagePreview.isBoss and Theme.colors.danger or Theme.colors.accent)
-    love.graphics.rectangle("fill", stageArea.x, cardY, 6, cardHeight, 4, 4)
-    love.graphics.setColor(Theme.colors.panel)
-    love.graphics.rectangle("fill", stageArea.x + 8, cardY, stageArea.width - 8, cardHeight, 8, 8)
-    love.graphics.setColor(Theme.colors.panelBorder)
-    love.graphics.rectangle("line", stageArea.x + 8, cardY, stageArea.width - 8, cardHeight, 8, 8)
-
-    love.graphics.setColor(Theme.colors.text)
-    love.graphics.print(card.name, stageArea.x + 18, cardY + 8)
-    cardY = cardY + cardHeight + Theme.spacing.itemGap
-    remainingHeight = remainingHeight - cardHeight - Theme.spacing.itemGap
-
-    if remainingHeight <= 0 then
-      break
-    end
+    Button.drawButtons(self:buildRewardButtons(app, cardLayout), mouseX, mouseY)
   end
 
   local mouseX, mouseY = love.mouse.getPosition()
@@ -287,10 +381,8 @@ function RewardPreviewState:mousepressed(app, x, y, button)
   local rewardSession = app:ensureRewardPreview()
 
   if #(rewardSession and rewardSession.options or {}) > 0 then
-    local rewardButtonsHeight = (#rewardSession.options * 44) + math.max(0, (#rewardSession.options - 1) * Theme.spacing.itemGap) + Theme.spacing.itemGap
-    local rewardButtonsY = rewardArea.y + rewardArea.height - rewardButtonsHeight + Theme.spacing.itemGap
-    local rewardButtonArea = { x = rewardArea.x, y = rewardButtonsY, width = rewardArea.width }
-    local handled = select(1, Button.handleMousePressed(self:buildRewardButtons(app, rewardButtonArea), x, y))
+    local _, cardArea = self:getRewardContentAreas(rewardArea, true)
+    local handled = select(1, Button.handleMousePressed(self:buildRewardButtons(app, self:getRewardCardLayout(app, cardArea)), x, y))
 
     if handled then
       return

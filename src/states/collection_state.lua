@@ -164,7 +164,7 @@ function CollectionState:getEntries(app)
     }
 
     if MetaUpgrades.isEquipEligible(definition) then
-      table.insert(detailLines, string.format("Tattoo Loadout: %d/%d", #(app.metaState.equippedTattooIds or {}), app.metaState.tattooLoadoutLimit or MetaUpgrades.getEquipLimit()))
+      table.insert(detailLines, string.format("Tattoo Slots: %d/%d", #(app.metaState.equippedTattooIds or {}), app.metaState.tattooLoadoutLimit or MetaUpgrades.getEquipLimit()))
     end
 
     if #(definition.unlockCoinIds or {}) > 0 or #(definition.unlockUpgradeIds or {}) > 0 then

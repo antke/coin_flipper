@@ -91,7 +91,7 @@ function AnalyticsSystem.buildPostStageReport(runState, stageRecord, lastBatchRe
     string.format("Score Applied to HP: %d / %d", stageRecord.scoreAppliedToHp or stageRecord.stageScore or 0, stageRecord.opponentHp or stageRecord.targetScore or 0),
     string.format("Influence: %d", stageRecord.influence or stageRecord.shopPoints or runState.influence or 0),
     string.format("Black Market Rerolls Ready: %d", stageRecord.shopRerollsRemaining or runState.shopRerollsRemaining or 0),
-    string.format("Loadout: %s", loadoutKey),
+    string.format("Pouch: %s", loadoutKey),
     string.format("Batches Resolved: %d", #stageBatches),
   }
 
@@ -107,7 +107,7 @@ function AnalyticsSystem.buildPostStageReport(runState, stageRecord, lastBatchRe
   end
 
   if stageRecord.metaRewardEarned and stageRecord.metaRewardEarned > 0 then
-    table.insert(report.stageLines, string.format("Meta Reward: %d", stageRecord.metaRewardEarned))
+    table.insert(report.stageLines, string.format("Reputation Reward: %d", stageRecord.metaRewardEarned))
   end
 
   report.distributionLines = {
@@ -305,7 +305,7 @@ function AnalyticsSystem.formatSimulationReport(report)
 
   table.insert(lines, "Simulation Report")
   table.insert(lines, string.format("Runs: %d | Wins: %d | Losses: %d | Win rate: %.1f%%", report.runCount or 0, report.winCount or 0, report.lossCount or 0, (report.winRate or 0) * 100))
-  table.insert(lines, string.format("Avg total score: %.2f | Avg meta reward: %.2f | Avg damage per batch: %.2f", report.averageRunScore or 0, report.averageMetaReward or 0, report.averageStageScorePerBatch or 0))
+  table.insert(lines, string.format("Avg total score: %.2f | Avg Reputation reward: %.2f | Avg score applied per batch: %.2f", report.averageRunScore or 0, report.averageMetaReward or 0, report.averageStageScorePerBatch or 0))
   table.insert(lines, string.format("Calls: H=%d T=%d | Outcomes: H=%d T=%d", (report.callDistribution or {}).heads or 0, (report.callDistribution or {}).tails or 0, (report.outcomeDistribution or {}).heads or 0, (report.outcomeDistribution or {}).tails or 0))
 
   table.insert(lines, "")
@@ -334,7 +334,7 @@ function AnalyticsSystem.formatSimulationReport(report)
     return string.format("- %s x%d", item.key, item.value)
   end)
 
-  appendTopSection("Top Loadouts:", report.sortedLoadouts or {}, function(item)
+  appendTopSection("Top Pouches:", report.sortedLoadouts or {}, function(item)
     return string.format("- %s x%d", item.key == "" and "(empty)" or item.key, item.value)
   end)
 

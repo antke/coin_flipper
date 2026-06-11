@@ -34,14 +34,16 @@ return {
   assert = function(env, A)
     local firstBatch = A.truthy(A.getResult("first_batch"), "missing first batch")
     local resolutionEntries = firstBatch.batch.resolutionEntries or {}
+    local selectedSlots = firstBatch.batch.selectedSlots or {}
 
-    A.equal(resolutionEntries[1].coinId, "copper_weighted_coin", "first resolution entry coin")
-    A.equal(resolutionEntries[1].slotIndex, 1, "first resolution entry slot")
-    A.equal(resolutionEntries[1].resolutionIndex, 1, "first resolution entry index")
-    A.equal(resolutionEntries[2].coinId, "copper_weighted_coin", "second resolution entry coin")
-    A.equal(resolutionEntries[2].slotIndex, 2, "second resolution entry slot")
-    A.equal(resolutionEntries[3].coinId, "copper_marked_coin", "third resolution entry coin")
-    A.equal(resolutionEntries[3].slotIndex, 3, "third resolution entry slot")
+    for index, selected in ipairs(selectedSlots) do
+      local resolution = A.truthy(resolutionEntries[index], string.format("missing resolution entry %d", index))
+      A.equal(resolution.coinId, selected.coinId, string.format("resolution entry %d coin", index))
+      A.equal(resolution.instanceId, selected.instanceId, string.format("resolution entry %d instance", index))
+      A.equal(resolution.slotIndex, index, string.format("resolution entry %d slot", index))
+      A.equal(resolution.resolutionIndex, index, string.format("resolution entry %d index", index))
+    end
+
     A.equal(#resolutionEntries, 3, "only selected Flip Slots should resolve")
     A.equal(env.runState.history.loadoutCommits[1].canonicalKey, "copper_lucky_coin|copper_marked_coin|copper_weighted_coin", "canonical key remains sorted")
     A.truthy(#(env.transcript.expected.batchSignatures or {}) > 0, "batch signatures should exist")

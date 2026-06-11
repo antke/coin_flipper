@@ -19,7 +19,7 @@ return {
   setup = function()
     return {
       runOptions = {
-        seed = 8,
+        seed = 2,
         starterCollection = { "copper_weighted_coin", "copper_marked_coin", "copper_lucky_coin", "copper_hollow_coin" },
         ownedTrickIds = { "sleeve_pocket" },
       },

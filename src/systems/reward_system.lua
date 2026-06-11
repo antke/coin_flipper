@@ -1,4 +1,5 @@
 local AcquisitionSystem = require("src.systems.acquisition_system")
+local ActionQueue = require("src.core.action_queue")
 local Coins = require("src.content.coins")
 local RNG = require("src.core.rng")
 local Upgrades = require("src.content.upgrades")
@@ -10,7 +11,8 @@ local function isTrickType(contentType)
   return contentType == "trick" or contentType == "upgrade"
 end
 
-local REWARD_OPTION_COUNT = 4
+local REWARD_OPTION_COUNT = 3
+local SKIP_INFLUENCE_REWARD = 1
 local WILDCARD_CHANCE = 0.25
 local WILDCARD_CAP = 1
 
@@ -342,7 +344,7 @@ function RewardSystem.serializeOption(option)
   return Utils.clone(option)
 end
 
-function RewardSystem.createPreviewRng(runState, stageRecord)
+function RewardSystem.createPreviewRng(runState, stageRecord, rerollCount)
   if type(runState) ~= "table" then
     return nil
   end
@@ -350,13 +352,23 @@ function RewardSystem.createPreviewRng(runState, stageRecord)
   local seed = tostring(runState.seed or 1)
   local roundIndex = tostring(stageRecord and stageRecord.roundIndex or runState.roundIndex or 1)
   local stageId = tostring(stageRecord and stageRecord.stageId or runState.currentStageId or "unknown_stage")
-  local derivedSeed = ((hashText(seed .. ":reward:" .. roundIndex .. ":" .. stageId) - 1) % 2147483646) + 1
+  local rerollKey = tostring(math.max(0, math.floor(tonumber(rerollCount) or 0)))
+  local seedKey = seed .. ":reward:" .. roundIndex .. ":" .. stageId
+
+  if rerollKey ~= "0" then
+    seedKey = seedKey .. ":reroll:" .. rerollKey
+  end
+
+  local derivedSeed = ((hashText(seedKey) - 1) % 2147483646) + 1
 
   return RNG.new(derivedSeed)
 end
 
-function RewardSystem.buildPreviewForStage(runState, stageRecord)
-  return RewardSystem.buildPreview(runState, RewardSystem.createPreviewRng(runState, stageRecord), stageRecord)
+function RewardSystem.buildPreviewForStage(runState, stageRecord, rerollCount)
+  local normalizedRerollCount = math.max(0, math.floor(tonumber(rerollCount) or 0))
+  local preview = RewardSystem.buildPreview(runState, RewardSystem.createPreviewRng(runState, stageRecord, normalizedRerollCount), stageRecord)
+  preview.rerollCount = normalizedRerollCount
+  return preview
 end
 
 function RewardSystem.buildPreview(runState, rng, stageRecord)
@@ -391,7 +403,7 @@ function RewardSystem.buildPreview(runState, rng, stageRecord)
 
   local extraCandidates = buildExtraCandidates(coinCandidates, upgradeCandidates)
 
-  while #options < 4 do
+  while #options < REWARD_OPTION_COUNT do
     local extraOption = chooseSerializedOption(extraCandidates, rng)
 
     if not extraOption then
@@ -415,6 +427,33 @@ function RewardSystem.buildPreview(runState, rng, stageRecord)
     claimed = false,
     generation = generation,
   }
+end
+
+function RewardSystem.rerollPreview(runState, session, stageRecord)
+  if type(session) ~= "table" then
+    return false, "reward_preview_not_initialized"
+  end
+
+  if session.claimed == true then
+    return false, "reward_already_claimed"
+  end
+
+  local rerollCount = math.max(0, math.floor(tonumber(session.rerollCount) or 0)) + 1
+  local preview = RewardSystem.buildPreviewForStage(runState, stageRecord, rerollCount)
+
+  session.options = preview.options
+  session.selectedIndex = nil
+  session.choice = nil
+  session.claimed = false
+  session.generation = preview.generation
+  session.rerollCount = rerollCount
+  session.skipped = false
+
+  return true, session
+end
+
+function RewardSystem.getSkipInfluenceReward()
+  return SKIP_INFLUENCE_REWARD
 end
 
 function RewardSystem.selectOption(session, index)
@@ -443,6 +482,49 @@ end
 function RewardSystem.canContinue(session)
   return type(session) == "table"
     and (#(session.options or {}) == 0 or session.claimed == true or session.selectedIndex ~= nil)
+end
+
+function RewardSystem.claimSkip(runState, session)
+  if type(session) ~= "table" then
+    return false, "reward_preview_not_initialized"
+  end
+
+  if session.claimed == true then
+    return false, "reward_already_claimed"
+  end
+
+  local amount = RewardSystem.getSkipInfluenceReward()
+  local influenceBefore = runState.influence or 0
+  local context = ActionQueue.createContext("reward_skip", {
+    runState = runState,
+  })
+
+  ActionQueue.applyAll(runState, nil, context, {
+    {
+      op = "add_influence",
+      amount = amount,
+      applyMultiplier = false,
+      category = "reward_skip",
+      label = "reward_skip",
+    },
+  })
+
+  local appliedAmount = (runState.influence or 0) - influenceBefore
+  local choice = {
+    type = "currency",
+    contentId = "skip_influence",
+    name = string.format("+%d Influence", appliedAmount),
+    description = string.format("Skipped the reward choice for +%d Influence.", appliedAmount),
+    amount = appliedAmount,
+    currency = "influence",
+  }
+
+  session.selectedIndex = nil
+  session.choice = RewardSystem.serializeOption(choice)
+  session.claimed = true
+  session.skipped = true
+
+  return true, session.choice
 end
 
 function RewardSystem.claimSelection(runState, session)

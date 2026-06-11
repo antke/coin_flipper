@@ -3,6 +3,8 @@ package.path = "./?.lua;./?/init.lua;" .. package.path
 local FlipResolver = require("src.systems.flip_resolver")
 local LoadoutSystem = require("src.systems.loadout_system")
 local MetaState = require("src.domain.meta_state")
+local PurseHookSystem = require("src.systems.purse_hook_system")
+local PurseSystem = require("src.systems.purse_system")
 local ReplaySystem = require("src.systems.replay_system")
 local RNG = require("src.core.rng")
 local RunHistorySystem = require("src.systems.run_history_system")
@@ -19,6 +21,16 @@ local baseSeed = parseArg(2, 1001)
 local seedStep = parseArg(3, 1)
 local passCount = 0
 local failures = {}
+
+local function selectDefaultFlipSlots(runState, stageState, metaProjection, call, rng)
+  local _, dealWarning = PurseSystem.dealHand(runState, stageState, rng)
+  PurseHookSystem.runAfterDealBeforeSelection(runState, stageState, metaProjection, { call = call, rng = rng })
+
+  if dealWarning ~= "purse_empty" then
+    local selectedSlots, selectionWarning = PurseSystem.selectDefaultFlipSlots(runState, stageState)
+    assert(selectedSlots and #selectedSlots > 0, selectionWarning)
+  end
+end
 
 local function buildTargetedQueueReplayRun(baseSeed)
   for offset = 0, 31 do
@@ -38,6 +50,7 @@ local function buildTargetedQueueReplayRun(baseSeed)
     local sawConsume = false
 
     while stageState.stageStatus == "active" do
+      selectDefaultFlipSlots(runState, stageState, metaProjection, "heads", rng)
       local batchResult, batchError = FlipResolver.resolveBatch(runState, stageState, metaProjection, "heads", rng)
       assert(batchResult, batchError)
       table.insert(runState.history.flipBatches, Utils.clone(batchResult.batch))
@@ -72,6 +85,7 @@ local function buildTargetedForcedReplayRun(seed)
   local sawForced = false
 
   while stageState.stageStatus == "active" do
+    selectDefaultFlipSlots(runState, stageState, metaProjection, "heads", rng)
     local batchResult, batchError = FlipResolver.resolveBatch(runState, stageState, metaProjection, "heads", rng)
     assert(batchResult, batchError)
     table.insert(runState.history.flipBatches, Utils.clone(batchResult.batch))

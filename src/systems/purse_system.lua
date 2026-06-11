@@ -4,7 +4,7 @@ local Loadout = require("src.domain.loadout")
 
 local PurseSystem = {}
 
-local DEFAULT_HAND_SIZE = 5
+local DEFAULT_HAND_SIZE = 6
 
 local function removeValue(values, value)
   for index, current in ipairs(values or {}) do
@@ -159,6 +159,10 @@ end
 function PurseSystem.getHandSize(runState)
   local resolved = runState and runState.resolvedValues and runState.resolvedValues["purse.handSize"] or nil
   return math.max(1, tonumber(resolved) or DEFAULT_HAND_SIZE)
+end
+
+function PurseSystem.getMaxFlipSlots(runState)
+  return math.max(1, tonumber(runState and (runState.maxFlipSlots or runState.maxActiveCoinSlots)) or PurseSystem.getHandSize(runState))
 end
 
 function PurseSystem.createInstance(runState, definitionId)
@@ -370,6 +374,181 @@ function PurseSystem.dealHand(runState, stageState, rng)
   return purse.dealtHandSlots, #drawn < handSize and "purse_running_low" or nil
 end
 
+local function findDealtSlot(purse, selector)
+  if not purse then
+    return nil, nil
+  end
+
+  if type(selector) == "number" then
+    return purse.dealtHandSlots and purse.dealtHandSlots[selector] or nil, selector
+  end
+
+  for dealtIndex, slot in ipairs(purse.dealtHandSlots or {}) do
+    if slot and slot.instanceId == selector then
+      return slot, dealtIndex
+    end
+  end
+
+  return nil, nil
+end
+
+local function findSelectedSlot(purse, selector)
+  if not purse then
+    return nil, nil
+  end
+
+  if type(selector) == "number" then
+    return purse.selectedSlots and purse.selectedSlots[selector] or nil, selector
+  end
+
+  for slotIndex, slot in ipairs(purse.selectedSlots or {}) do
+    if slot and slot.instanceId == selector then
+      return slot, slotIndex
+    end
+  end
+
+  return nil, nil
+end
+
+local function recordSelection(purse, stageState, rule, maxSlots)
+  local selectedIds = PurseSystem.getHandInstanceIds(stageState)
+  local entry = {
+    batchIndex = stageState and (stageState.batchIndex + 1) or nil,
+    rule = rule,
+    maxFlipSlots = maxSlots,
+    selectedInstanceIds = Utils.copyArray(selectedIds),
+  }
+
+  table.insert(purse.selectionHistory, entry)
+
+  local latestDraw = purse.drawHistory and purse.drawHistory[#purse.drawHistory] or nil
+  if latestDraw then
+    latestDraw.selectedInstanceIds = Utils.copyArray(selectedIds)
+  end
+
+  return entry
+end
+
+function PurseSystem.selectDealtSlot(runState, stageState, selector)
+  local purse = PurseSystem.getStagePurse(runState, stageState)
+
+  if not purse then
+    return false, "purse_unavailable"
+  end
+
+  local slot, dealtIndex = findDealtSlot(purse, selector)
+
+  if not slot or not slot.instanceId then
+    return false, "dealt_slot_empty"
+  end
+
+  refreshSelectedSlotIndices(purse)
+
+  if slot.selectedSlotIndex ~= nil then
+    return false, "already_selected"
+  end
+
+  local maxSlots = PurseSystem.getMaxFlipSlots(runState)
+
+  if #(purse.selectedSlots or {}) >= maxSlots then
+    return false, "flip_slots_full"
+  end
+
+  table.insert(purse.selectedSlots, slot)
+  resetSelectedSlots(purse, purse.selectedSlots)
+  refreshSelectedSlotIndices(purse)
+  recordSelection(purse, stageState, "manual_select", maxSlots)
+
+  return true, buildSlotEntry(runState, slot, #(purse.selectedSlots or {})), dealtIndex
+end
+
+function PurseSystem.deselectSelectedSlot(runState, stageState, selector)
+  local purse = PurseSystem.getStagePurse(runState, stageState)
+
+  if not purse then
+    return false, "purse_unavailable"
+  end
+
+  local slot, slotIndex = findSelectedSlot(purse, selector)
+
+  if not slot or not slot.instanceId then
+    return false, "selected_slot_empty"
+  end
+
+  local entry = buildSlotEntry(runState, slot, slotIndex)
+  table.remove(purse.selectedSlots, slotIndex)
+  resetSelectedSlots(purse, purse.selectedSlots)
+  refreshSelectedSlotIndices(purse)
+  recordSelection(purse, stageState, "manual_deselect", PurseSystem.getMaxFlipSlots(runState))
+
+  return true, entry
+end
+
+function PurseSystem.toggleDealtSelection(runState, stageState, selector)
+  local purse = PurseSystem.getStagePurse(runState, stageState)
+
+  if not purse then
+    return false, "purse_unavailable"
+  end
+
+  refreshSelectedSlotIndices(purse)
+
+  local slot = findDealtSlot(purse, selector)
+
+  if not slot or not slot.instanceId then
+    return false, "dealt_slot_empty"
+  end
+
+  if slot.selectedSlotIndex ~= nil then
+    local ok, result = PurseSystem.deselectSelectedSlot(runState, stageState, slot.selectedSlotIndex)
+    return ok, result, "deselect"
+  end
+
+  local ok, result = PurseSystem.selectDealtSlot(runState, stageState, selector)
+  return ok, result, "select"
+end
+
+function PurseSystem.setSelectedSlotsFromEntries(runState, stageState, entries, options)
+  local purse = PurseSystem.getStagePurse(runState, stageState)
+
+  if not purse then
+    return false, "purse_unavailable"
+  end
+
+  local maxSlots = PurseSystem.getMaxFlipSlots(runState)
+  local selected = {}
+  local seen = {}
+
+  for _, entry in ipairs(entries or {}) do
+    local selector = entry and entry.instanceId or nil
+    local slot = selector and findDealtSlot(purse, selector) or nil
+
+    if not slot or not slot.instanceId then
+      return false, "selected_slot_not_dealt"
+    end
+
+    if seen[slot.instanceId] then
+      return false, "duplicate_selected_slot"
+    end
+
+    if #selected >= maxSlots then
+      return false, "too_many_selected_slots"
+    end
+
+    seen[slot.instanceId] = true
+    table.insert(selected, slot)
+  end
+
+  resetSelectedSlots(purse, selected)
+  refreshSelectedSlotIndices(purse)
+
+  if not (options and options.suppressHistory) then
+    recordSelection(purse, stageState, options and options.rule or "transcript_selection", maxSlots)
+  end
+
+  return true, PurseSystem.getSelectedSlotEntries(runState, stageState)
+end
+
 function PurseSystem.selectDefaultFlipSlots(runState, stageState)
   local purse = PurseSystem.getStagePurse(runState, stageState)
 
@@ -381,7 +560,7 @@ function PurseSystem.selectDefaultFlipSlots(runState, stageState)
     return purse.selectedSlots, nil
   end
 
-  local maxSlots = math.max(1, tonumber(runState and (runState.maxFlipSlots or runState.maxActiveCoinSlots)) or PurseSystem.getHandSize(runState))
+  local maxSlots = PurseSystem.getMaxFlipSlots(runState)
   local selected = {}
 
   for _, slot in ipairs(purse.dealtHandSlots or {}) do
@@ -397,19 +576,7 @@ function PurseSystem.selectDefaultFlipSlots(runState, stageState)
   resetSelectedSlots(purse, selected)
   refreshSelectedSlotIndices(purse)
 
-  local selectedIds = PurseSystem.getHandInstanceIds(stageState)
-  local selectionEntry = {
-    batchIndex = stageState.batchIndex + 1,
-    rule = "first_legal_flip_slots",
-    maxFlipSlots = maxSlots,
-    selectedInstanceIds = Utils.copyArray(selectedIds),
-  }
-  table.insert(purse.selectionHistory, selectionEntry)
-
-  local latestDraw = purse.drawHistory and purse.drawHistory[#purse.drawHistory] or nil
-  if latestDraw then
-    latestDraw.selectedInstanceIds = Utils.copyArray(selectedIds)
-  end
+  recordSelection(purse, stageState, "first_legal_flip_slots", maxSlots)
 
   return purse.selectedSlots, #selected == 0 and "hand_empty" or nil
 end
@@ -424,64 +591,6 @@ function PurseSystem.drawHand(runState, stageState, rng)
 
   local selectedSlots, selectWarning = PurseSystem.selectDefaultFlipSlots(runState, stageState)
   return selectedSlots, selectWarning or dealWarning
-end
-
-function PurseSystem.sleightSlot(runState, stageState, slotIndex, rng, call)
-  local purse = PurseSystem.getStagePurse(runState, stageState)
-  local slot = purse and purse.handSlots and purse.handSlots[slotIndex] or nil
-
-  if not slot then
-    return false, "slot_empty"
-  end
-
-  if slot.sleightUsed then
-    return false, "sleight_already_used"
-  end
-
-  local definition = PurseSystem.getDefinition(runState, slot.instanceId)
-
-  if definition and definition.cannotSleight == true then
-    return false, "cannot_sleight"
-  end
-
-  local returnedInstanceId = slot.instanceId
-  slot.sleightUsed = true
-  table.insert(purse.availableInstanceIds, returnedInstanceId)
-
-  local replacementIndex = nil
-
-  if #purse.availableInstanceIds == 1 then
-    replacementIndex = 1
-  elseif #purse.availableInstanceIds > 1 then
-    repeat
-      replacementIndex = rng:nextInt(1, #purse.availableInstanceIds)
-    until purse.availableInstanceIds[replacementIndex] ~= returnedInstanceId
-  end
-
-  local replacementInstanceId = nil
-
-  if replacementIndex then
-    replacementInstanceId = table.remove(purse.availableInstanceIds, replacementIndex)
-    slot.instanceId = replacementInstanceId
-    slot.definitionId = PurseSystem.getDefinitionId(runState, replacementInstanceId)
-  else
-    slot.instanceId = nil
-    slot.definitionId = nil
-  end
-
-  local entry = {
-    batchIndex = stageState.batchIndex + 1,
-    slotIndex = slotIndex,
-    returnedInstanceId = returnedInstanceId,
-    returnedDefinitionId = PurseSystem.getDefinitionId(runState, returnedInstanceId),
-    replacementInstanceId = replacementInstanceId,
-    replacementDefinitionId = replacementInstanceId and PurseSystem.getDefinitionId(runState, replacementInstanceId) or nil,
-    call = call,
-  }
-  table.insert(purse.sleightHistory, entry)
-  refreshSelectedSlotIndices(purse)
-
-  return true, entry
 end
 
 function PurseSystem.moveHandSlot(stageState, slotIndex, direction)

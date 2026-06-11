@@ -11,6 +11,7 @@ Terminology.terms = {
   active_coin = { label = "Pouch Coin", lower = "pouch coin", plural = "Pouch coins" },
   hand = { label = "Hand", lower = "hand", plural = "hands" },
   purse = { label = "Pouch", lower = "pouch", plural = "pouches" },
+  trick_charm = { label = "Trick Charm", lower = "trick charm", plural = "Trick Charms" },
   sleight = { label = "Sleight", lower = "Sleight", plural = "Sleights" },
   replacement_coin = { label = "Replacement Coin", lower = "replacement coin", plural = "replacement coins" },
   reorder = { label = "Reorder", lower = "reorder", plural = "reorders" },

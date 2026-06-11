@@ -63,13 +63,12 @@ return {
     A.equal(forged.mode, "replace_identity", "Borrowed Name forge mode")
     A.equal(forged.scope, "one_payout_only", "Borrowed Name forge scope")
     A.equal(forged.sourceResolutionIndex, 1, "slot 1 should be the identity source")
-    A.equal(forged.sourceCoinId, "copper_weighted_coin", "seeded slot 1 source coin")
-    A.equal(forged.targetResolutionIndex, 3, "seeded failed target slot")
+    A.equal(forged.sourceCoinId, resolutionEntries[forged.sourceResolutionIndex].coinId, "source coin should match resolved source slot")
+    A.truthy(forged.targetResolutionIndex > 1, "forged target should be a non-source failed slot")
     A.equal(forged.forgedCoinId, forged.sourceCoinId, "target should borrow source identity")
 
     local targetEntry = A.truthy(findByInstance(resolutionEntries, forged.targetInstanceId), "forged target should resolve")
     A.equal(targetEntry.coinId, forged.targetCoinId, "resolution keeps real target identity")
-    A.equal(targetEntry.coinId, "copper_marked_coin", "seeded real target coin")
 
     local scoreEvent = A.truthy(scoreEvents[forged.targetResolutionIndex], "forged target should have a score event")
     A.equal(scoreEvent.instanceId, forged.targetInstanceId, "score event target instance")
@@ -102,7 +101,7 @@ return {
     A.falsy(forgedReplay.ok, "tampered forged identity metadata should fail replay")
 
     local actionTamper = Utils.clone(env.transcript)
-    actionTamper.expected.batchSignatures[1].actions[actionIndex].forgedCoinId = forged.targetCoinId
+    actionTamper.expected.batchSignatures[1].actions[actionIndex].forgedCoinId = tostring(forged.sourceCoinId) .. "_tampered"
     local actionReplay = ReplaySystem.replayTranscript(actionTamper)
     A.falsy(actionReplay.ok, "tampered forge action metadata should fail replay")
   end,

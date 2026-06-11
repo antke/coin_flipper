@@ -43,8 +43,9 @@ return {
 
     local move = A.truthy((trace.sleightMoves or {})[1], "Switcheroo should record one sleight move")
     A.equal(move.op, "swap_coins", "Switcheroo move op")
-    A.equal(move.failedSlotIndex, 3, "seeded failed slot")
-    A.equal(move.successSlotIndex, 1, "seeded success slot")
+    A.truthy(move.failedSlotIndex ~= move.successSlotIndex, "Switcheroo should swap different slots")
+    A.truthy(move.failedSlotIndex >= 1 and move.failedSlotIndex <= #selectedSlots, "failed slot should be selected")
+    A.truthy(move.successSlotIndex >= 1 and move.successSlotIndex <= #selectedSlots, "success slot should be selected")
 
     A.equal(selectedSlots[move.successSlotIndex].instanceId, move.successInstanceId, "selected success slot starts with success body")
     A.equal(selectedSlots[move.failedSlotIndex].instanceId, move.failedInstanceId, "selected failed slot starts with failed body")

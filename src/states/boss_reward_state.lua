@@ -26,17 +26,6 @@ local function formatRewardError(errorCode)
   return tostring(errorCode)
 end
 
-local function getWrappedLineCount(text, width)
-  local font = love.graphics.getFont()
-  local _, wrapped = font:getWrap(tostring(text or ""), math.max(1, width))
-  return math.max(1, #wrapped)
-end
-
-local function getRewardCardHeight(card, width)
-  local descriptionLines = getWrappedLineCount(card.description, math.max(1, width - 18))
-  return 24 + (descriptionLines * Theme.spacing.lineHeight) + 8
-end
-
 function BossRewardState.new()
   return setmetatable({
     statusMessage = "Choose one final reward, then continue to the summary.",
@@ -47,34 +36,19 @@ end
 
 function BossRewardState:getLayout(app)
   local padding = Theme.spacing.screenPadding
-  local gap = Theme.spacing.blockGap
   local width = love.graphics.getWidth()
   local height = love.graphics.getHeight()
   local footerMetrics = Layout.getFooterMetrics(height)
   local topY = 128
   local availableHeight = math.max(260, footerMetrics.contentBottomY - topY)
-  local topHeight = math.max(180, math.floor((availableHeight - gap) * 0.38))
-  local bottomY = topY + topHeight + gap
-  local bottomHeight = math.max(160, footerMetrics.contentBottomY - bottomY)
-  local columnWidth = math.floor((width - (padding * 2) - gap) / 2)
-  local middleX = padding + columnWidth + gap
-  local rightX = middleX
-  local rightWidth = width - rightX - padding
 
   return {
     padding = padding,
-    gap = gap,
     width = width,
     height = height,
     footerMetrics = footerMetrics,
     topY = topY,
-    topHeight = topHeight,
-    bottomY = bottomY,
-    bottomHeight = bottomHeight,
-    columnWidth = columnWidth,
-    middleX = middleX,
-    rightX = rightX,
-    rightWidth = rightWidth,
+    topHeight = availableHeight,
   }
 end
 
@@ -203,20 +177,13 @@ function BossRewardState:draw(app)
   local layout = self:getLayout(app)
   local rewardSession = app:ensureBossRewardEvent()
   local rewardLines = app:getBossRewardLines()
-  local projectedOutcome = app:getProjectedRewardOutcome()
-  local projectedImpactLines = app:getProjectedRewardImpactLines({ finalReward = true }, projectedOutcome)
-  local handoffLines = app:getSummaryMetaHandoffLines()
 
   love.graphics.setFont(app.fonts.title)
   Layout.centeredText("Victory Reward", 64, app.fonts.title, Theme.colors.success)
 
   Panel.draw(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Choose Final Reward")
-  Panel.draw(layout.padding, layout.bottomY, layout.columnWidth, layout.bottomHeight, "Projected Impact")
-  Panel.draw(layout.rightX, layout.bottomY, layout.rightWidth, layout.bottomHeight, "Meta Handoff")
 
   local rewardArea = Panel.getContentArea(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Choose Final Reward")
-  local projectedArea = Panel.getContentArea(layout.padding, layout.bottomY, layout.columnWidth, layout.bottomHeight, "Projected Impact")
-  local handoffArea = Panel.getContentArea(layout.rightX, layout.bottomY, layout.rightWidth, layout.bottomHeight, "Meta Handoff")
 
   table.insert(rewardLines, "")
   table.insert(rewardLines, self.statusMessage)
@@ -231,8 +198,6 @@ function BossRewardState:draw(app)
 
   love.graphics.setFont(app.fonts.body)
   Layout.drawWrappedLines(rewardLines, rewardArea.x, rewardArea.y, rewardArea.width, Theme.colors.text, Theme.spacing.lineHeight, math.max(0, rewardArea.height - rewardButtonsHeight))
-  Layout.drawWrappedLines(projectedImpactLines, projectedArea.x, projectedArea.y, projectedArea.width, Theme.colors.text, Theme.spacing.lineHeight, projectedArea.height)
-  Layout.drawWrappedLines(handoffLines, handoffArea.x, handoffArea.y, handoffArea.width, Theme.colors.text, Theme.spacing.lineHeight, handoffArea.height)
 
   if rewardButtonsHeight > 0 then
     local mouseX, mouseY = love.mouse.getPosition()

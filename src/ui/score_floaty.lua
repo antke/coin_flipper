@@ -84,7 +84,8 @@ local function getScale(floaty)
 end
 
 local function drawCenteredText(label, font, x, y, color, alpha)
-  local width = math.max(1, font:getWidth(label))
+  local padding = Theme.scale(8)
+  local width = math.max(1, font:getWidth(label) + (padding * 2))
   love.graphics.setColor(color[1], color[2], color[3], (color[4] or 1.0) * alpha)
   love.graphics.printf(label, x - math.floor(width / 2), y, width, "center")
 end

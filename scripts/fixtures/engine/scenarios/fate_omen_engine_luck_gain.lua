@@ -85,7 +85,12 @@ return {
       amount = 1,
       reason = "omen_engine",
     }, "Omen Engine should trace its add_luck action")
-    A.equal(luckTrace.after.value, 5, "seeded first batch Luck Meter total")
+    local expectedLuckTotal = (luckTrace.before and luckTrace.before.value or 0)
+    for _, delta in ipairs(deltas) do
+      expectedLuckTotal = expectedLuckTotal + (delta.appliedAmount or 0)
+    end
+
+    A.equal(luckTrace.after.value, expectedLuckTotal, "first batch Luck Meter total should match applied deltas")
     A.replayOk(env.replay, "Fate replay should succeed")
 
     local luckTamper = Utils.clone(env.transcript)

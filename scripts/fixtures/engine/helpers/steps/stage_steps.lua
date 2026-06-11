@@ -1,5 +1,7 @@
 local FlipResolver = require("src.systems.flip_resolver")
 local LoadoutSystem = require("src.systems.loadout_system")
+local PurseHookSystem = require("src.systems.purse_hook_system")
+local PurseSystem = require("src.systems.purse_system")
 local RunHistorySystem = require("src.systems.run_history_system")
 local RunInitializer = require("src.systems.run_initializer")
 
@@ -23,11 +25,32 @@ local function commitLoadout(env, step)
 end
 
 local function resolveBatch(env, step)
+  local call = step.call or "heads"
+  local _, dealWarning = PurseSystem.dealHand(env.runState, env.stageState, env:ensureRng())
+  PurseHookSystem.runAfterDealBeforeSelection(env.runState, env.stageState, env.metaProjection, { call = call, rng = env:ensureRng() })
+
+  if dealWarning ~= "purse_empty" then
+    if step.selectedSlots then
+      local selectedOk, selectedError = PurseSystem.setSelectedSlotsFromEntries(env.runState, env.stageState, step.selectedSlots, {
+        rule = "fixture_selection",
+      })
+      assert(selectedOk, selectedError)
+    elseif step.selectedDealtIndexes then
+      for _, dealtIndex in ipairs(step.selectedDealtIndexes) do
+        local selectedOk, selectedError = PurseSystem.selectDealtSlot(env.runState, env.stageState, dealtIndex)
+        assert(selectedOk, selectedError)
+      end
+    else
+      local selectedSlots, selectionWarning = PurseSystem.selectDefaultFlipSlots(env.runState, env.stageState)
+      assert(selectedSlots and #selectedSlots > 0, selectionWarning)
+    end
+  end
+
   local batchResult, errorMessage = FlipResolver.resolveBatch(
     env.runState,
     env.stageState,
     env.metaProjection,
-    step.call or "heads",
+    call,
     env:ensureRng()
   )
   assert(batchResult, errorMessage)

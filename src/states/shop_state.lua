@@ -7,7 +7,6 @@ local PurseView = require("src.ui.purse_view")
 local ShopSystem = require("src.systems.shop_system")
 local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
-local Upgrades = require("src.content.upgrades")
 
 local ShopState = {}
 ShopState.__index = ShopState
@@ -28,28 +27,6 @@ function ShopState.new()
     selectedFountainInstanceId = nil,
     fountainStatusMessage = "",
   }, ShopState)
-end
-
-local function getTrickMetadataLine(contentId)
-  local definition = Upgrades.getById(contentId)
-  local trick = definition and definition.trick or nil
-
-  if not trick then
-    return nil
-  end
-
-  local category = trick.category and Terminology.getTagLabel(trick.category) or nil
-  local tier = trick.tier and string.format("Tier %d", trick.tier) or nil
-
-  if category and tier then
-    return string.format("Trick: %s, %s", category, tier)
-  end
-
-  if category then
-    return string.format("Trick: %s", category)
-  end
-
-  return tier and string.format("Trick: %s", tier) or nil
 end
 
 function ShopState:canBuyOffer(app, offer)
@@ -225,7 +202,7 @@ function ShopState:getLayout(app)
   local gap = Theme.spacing.blockGap
   local width = love.graphics.getWidth()
   local height = love.graphics.getHeight()
-  local infoY = padding + 34
+  local infoY = padding + 76
   local infoHeight = 64
   local offerPanelY = infoY + infoHeight + gap
   local footerMetrics = Layout.getFooterMetrics(height, {
@@ -281,7 +258,7 @@ function ShopState:buildOfferButtons(app, panelLayout)
       y = buttonY,
       width = contentArea.width,
       height = buttonHeight,
-      label = offer.purchased and "Purchased" or string.format("Buy Offer %d", entry.index),
+      label = offer.purchased and "Purchased" or "Buy",
       variant = "primary",
       disabled = not self:canBuyOffer(app, offer),
       onClick = function()
@@ -492,7 +469,7 @@ end
 function ShopState:scrollFountainPurse(app, direction)
   local layout = self:getFountainOverlayLayout()
   local contentArea = Panel.getContentArea(layout.purse.x, layout.purse.y, layout.purse.width, layout.purse.height, "Pouch")
-  local maxScrollOffset = PurseView.getMaxScrollOffset(app, contentArea, nil)
+  local maxScrollOffset = PurseView.getMaxScrollOffset(app, contentArea, nil, { includeTricks = false })
 
   self.fountainScrollOffset = math.max(0, math.min((self.fountainScrollOffset or 0) + direction, maxScrollOffset))
   return true
@@ -575,12 +552,13 @@ function ShopState:drawFountainOverlay(app)
   Panel.draw(layout.purse.x, layout.purse.y, layout.purse.width, layout.purse.height, "Pouch")
   Panel.draw(layout.fountain.x, layout.fountain.y, layout.fountain.width, layout.fountain.height, "Lucky Fountain")
 
-  local maxPurseScrollOffset = PurseView.getMaxScrollOffset(app, purseContentArea, nil)
+  local maxPurseScrollOffset = PurseView.getMaxScrollOffset(app, purseContentArea, nil, { includeTricks = false })
   self.fountainScrollOffset = math.max(0, math.min(self.fountainScrollOffset or 0, maxPurseScrollOffset))
 
   PurseView.draw(app, purseContentArea, nil, {
     scrollOffset = self.fountainScrollOffset,
     selectedCoinId = self.selectedFountainCoinId,
+    includeTricks = false,
     note = "Pick a coin for the fountain.",
   })
   self.fountainScrollButtons = PurseView.getScrollButtons(
@@ -664,7 +642,6 @@ function ShopState:keypressed(app, key)
 end
 
 function ShopState:draw(app)
-  local upcomingStage = app:getUpcomingStageDefinition()
   local layout = self:getLayout(app)
 
   love.graphics.setFont(app.fonts.heading)
@@ -672,19 +649,11 @@ function ShopState:draw(app)
   love.graphics.print("Black Market", layout.padding, layout.padding)
   love.graphics.setFont(app.fonts.body)
   Theme.applyColor(Theme.colors.mutedText)
-  love.graphics.print(string.format("Influence: %d", app.runState.influence), layout.padding, layout.padding + 30)
+  love.graphics.print(string.format("Influence: %d", app.runState.influence), layout.padding, layout.padding + 44)
 
   local infoLines = {
-    string.format("Pouch: %d coin(s)", #(app.runState.coinInstances or {})),
     string.format("Free rerolls: %d", app.runState.shopRerollsRemaining or 0),
   }
-  if upcomingStage then
-    table.insert(infoLines, 1, string.format("Next stage: %s", upcomingStage.label))
-
-    if upcomingStage.variantName then
-      table.insert(infoLines, 2, string.format("Variant: %s", upcomingStage.variantName))
-    end
-  end
 
   love.graphics.setFont(app.fonts.body)
   Layout.drawWrappedLines(infoLines, layout.padding, layout.infoY, layout.width - (layout.padding * 2), Theme.colors.mutedText, Theme.spacing.lineHeight, layout.infoHeight)
@@ -722,20 +691,10 @@ function ShopState:draw(app)
 
     local lines = {
       string.format("%s", offer.name),
-      string.format("Rarity: %s", offer.rarity),
       string.format("Price: %d Influence", offer.price),
       "",
       Terminology.getMechanicRichText(app:getOfferDescription(offer)),
     }
-
-    if offer.type == "coin" then
-      table.insert(lines, 4, "Adds +1 coin instance to your pouch.")
-    else
-      local trickMetadataLine = getTrickMetadataLine(offer.contentId)
-      if trickMetadataLine then
-        table.insert(lines, 4, trickMetadataLine)
-      end
-    end
 
     Layout.drawWrappedLines(lines, textX, textY, textWidth, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height - (buttonHeight + 8))
   end
@@ -744,8 +703,10 @@ function ShopState:draw(app)
   Button.drawButtons(self:buildOfferButtons(app, layout.panelLayout), mouseX, mouseY)
   Button.drawButtons(self:buildFooterButtons(app, layout), mouseX, mouseY)
 
-  Theme.applyColor(Theme.colors.warning)
-  love.graphics.printf(self.statusMessage, layout.padding, layout.height - layout.footerMetrics.statusHeight + Theme.spacing.statusPadding, layout.width - (layout.padding * 2), "left")
+  if self.statusMessage ~= "" then
+    Theme.applyColor(Theme.colors.warning)
+    love.graphics.printf(self.statusMessage, layout.padding, layout.height - layout.footerMetrics.statusHeight + Theme.spacing.statusPadding, layout.width - (layout.padding * 2), "left")
+  end
   self:drawPurseDialog(app)
   self:drawFountainOverlay(app)
 end
@@ -795,6 +756,7 @@ function ShopState:mousepressed(app, x, y, button)
 
     local card = PurseView.getCardAtPoint(app, purseContentArea, nil, x, y, {
       scrollOffset = self.fountainScrollOffset,
+      includeTricks = false,
     })
 
     if card then

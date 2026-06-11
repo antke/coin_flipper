@@ -4,6 +4,8 @@ local GameConfig = require("src.app.config")
 local FlipResolver = require("src.systems.flip_resolver")
 local LoadoutSystem = require("src.systems.loadout_system")
 local MetaState = require("src.domain.meta_state")
+local PurseHookSystem = require("src.systems.purse_hook_system")
+local PurseSystem = require("src.systems.purse_system")
 local ReplaySystem = require("src.systems.replay_system")
 local RNG = require("src.core.rng")
 local RunHistorySystem = require("src.systems.run_history_system")
@@ -20,6 +22,16 @@ end
 local runCount = parseArg(1, "simulation.runCount")
 local baseSeed = parseArg(2, "simulation.baseSeed")
 local seedStep = parseArg(3, "simulation.seedStep")
+
+local function selectDefaultFlipSlots(runState, stageState, metaProjection, call, rng)
+  local _, dealWarning = PurseSystem.dealHand(runState, stageState, rng)
+  PurseHookSystem.runAfterDealBeforeSelection(runState, stageState, metaProjection, { call = call, rng = rng })
+
+  if dealWarning ~= "purse_empty" then
+    local selectedSlots, selectionWarning = PurseSystem.selectDefaultFlipSlots(runState, stageState)
+    assert(selectedSlots and #selectedSlots > 0, selectionWarning)
+  end
+end
 
 local function runTargetedShopScenario(seed)
   local metaState = MetaState.new()
@@ -92,6 +104,7 @@ local function runTargetedQueueScenario(baseSeed)
     local sawConsume = false
 
     while stageState.stageStatus == "active" do
+      selectDefaultFlipSlots(runState, stageState, metaProjection, "heads", rng)
       local batchResult, batchError = FlipResolver.resolveBatch(runState, stageState, metaProjection, "heads", rng)
       assert(batchResult, batchError)
       table.insert(runState.history.flipBatches, Utils.clone(batchResult.batch))
@@ -129,6 +142,7 @@ local function runTargetedForcedResultScenario(seed)
   local rng = RNG.new(seed)
   table.insert(runState.pendingForcedCoinResults, "tails")
 
+  selectDefaultFlipSlots(runState, stageState, metaProjection, "heads", rng)
   local firstBatch, batchError = FlipResolver.resolveBatch(runState, stageState, metaProjection, "heads", rng)
   assert(firstBatch, batchError)
   table.insert(runState.history.flipBatches, Utils.clone(firstBatch.batch))
@@ -144,6 +158,7 @@ local function runTargetedForcedResultScenario(seed)
   })
 
   while stageState.stageStatus == "active" do
+    selectDefaultFlipSlots(runState, stageState, metaProjection, "heads", rng)
     local batchResult, nextBatchError = FlipResolver.resolveBatch(runState, stageState, metaProjection, "heads", rng)
     assert(batchResult, nextBatchError)
     table.insert(runState.history.flipBatches, Utils.clone(batchResult.batch))

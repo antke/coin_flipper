@@ -146,6 +146,71 @@ function CoinDetailOverlay.draw(app, coin, x, y, options)
 
   local detail = CoinDetailContent.build(coin)
 
+  if options.compact == true then
+    local bounds = getBounds(options)
+    local margin = bounds.screenPadding or Theme.spacing.screenPadding
+    local availableWidth = math.max(1, bounds.width - (margin * 2))
+    local availableHeight = math.max(1, bounds.height - (margin * 2))
+    local width = math.min(options.width or Theme.scale(300), availableWidth)
+    local padding = Theme.scale(12)
+    local contentWidth = math.max(1, width - (padding * 2))
+    local nameLineHeight = app.fonts.body:getHeight() + Theme.scale(2)
+    local bodyLineHeight = app.fonts.small:getHeight() + Theme.scale(4)
+    local chanceText = detail.chanceText ~= "50H 50T" and detail.chanceText or nil
+    local effectText = hasText(detail.effectText) and detail.effectText or detail.description
+    local nameHeight = getWrappedHeight(app.fonts.body, detail.title, contentWidth, nameLineHeight)
+    local chanceHeight = chanceText and bodyLineHeight or 0
+    local effectHeight = hasText(effectText) and getWrappedHeight(app.fonts.small, effectText, contentWidth, bodyLineHeight) or 0
+    local height = math.min(padding + nameHeight + chanceHeight + effectHeight + padding + Theme.scale(6), availableHeight)
+    local overlayX = math.min(x + Theme.scale(18), bounds.x + bounds.width - width - margin)
+    local overlayY = math.min(y + Theme.scale(18), bounds.y + bounds.height - height - margin)
+
+    overlayX = math.max(bounds.x + margin, overlayX)
+    overlayY = math.max(bounds.y + margin, overlayY)
+
+    local radius = Theme.scale(10)
+    local shadowOffset = Theme.scale(4)
+
+    love.graphics.setColor(0.03, 0.04, 0.07, 0.96)
+    love.graphics.rectangle("fill", overlayX + shadowOffset, overlayY + shadowOffset, width, height, radius, radius)
+    love.graphics.setColor(0.08, 0.10, 0.15, 0.98)
+    love.graphics.rectangle("fill", overlayX, overlayY, width, height, radius, radius)
+    Theme.applyColor(Theme.colors.accent)
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle("line", overlayX, overlayY, width, height, radius, radius)
+    love.graphics.setLineWidth(1)
+
+    local contentX = overlayX + padding
+    local currentY = overlayY + padding
+
+    love.graphics.setFont(app.fonts.body)
+    Theme.applyColor(Theme.colors.text)
+    love.graphics.printf(detail.title, contentX, currentY, contentWidth, "left")
+    currentY = currentY + nameHeight + Theme.scale(4)
+
+    if chanceText then
+      love.graphics.setFont(app.fonts.small)
+      Theme.applyColor(Theme.colors.warning)
+      love.graphics.printf(chanceText, contentX, currentY, contentWidth, "left")
+      currentY = currentY + chanceHeight
+    end
+
+    if hasText(effectText) then
+      love.graphics.setFont(app.fonts.small)
+      Layout.drawRichWrappedText(
+        Terminology.getMechanicRichText(effectText),
+        contentX,
+        currentY,
+        contentWidth,
+        Theme.colors.mutedText,
+        bodyLineHeight,
+        math.max(1, height - (currentY - overlayY) - padding)
+      )
+    end
+
+    return
+  end
+
   local bounds = getBounds(options)
   local margin = bounds.screenPadding or Theme.spacing.screenPadding
   local availableWidth = math.max(1, bounds.width - (margin * 2))

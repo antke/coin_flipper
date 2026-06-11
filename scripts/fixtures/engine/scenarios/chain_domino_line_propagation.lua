@@ -19,7 +19,7 @@ return {
   setup = function()
     return {
       runOptions = {
-        seed = 1,
+        seed = 6,
         starterCollection = { "copper_weighted_coin", "copper_marked_coin", "copper_lucky_coin" },
         ownedTrickIds = { "domino_line" },
       },

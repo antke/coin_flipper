@@ -2,6 +2,7 @@ local CoinArt = require("src.ui.coin_art")
 local Layout = require("src.ui.layout")
 local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
+local Box = require("src.ui.box")
 
 local CoinCard = {}
 
@@ -29,11 +30,10 @@ function CoinCard.draw(app, card, x, y, width, height, options)
   local textX = artX + coinSize + padding
   local textWidth = math.max(Theme.scale(40), x + width - textX - padding)
 
-  setColorWithAlpha(Theme.colors.panel, 0.92)
-  love.graphics.rectangle("fill", x, y, width, height, 12, 12)
-  setColorWithAlpha(Theme.colors.panelBorder, 0.90)
-  love.graphics.setLineWidth(1)
-  love.graphics.rectangle("line", x, y, width, height, 12, 12)
+  Box.drawFrame(x, y, width, height, {
+    fill = { Theme.colors.panel[1], Theme.colors.panel[2], Theme.colors.panel[3], 0.92 },
+    border = { Theme.colors.panelBorder[1], Theme.colors.panelBorder[2], Theme.colors.panelBorder[3], 0.90 },
+  })
 
   love.graphics.setFont(app.fonts.body)
   Theme.applyColor(Theme.colors.text)

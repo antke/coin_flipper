@@ -2,13 +2,30 @@
   box-sizing: border-box;
 }
 
+:root {
+  --color-background: #151420;
+  --color-screen: #25242f;
+  --color-panel: #25242f;
+  --color-panel-raised: #28365a;
+  --color-panel-border: #334570;
+  --color-text: #f5f5f3;
+  --color-muted-text: #adcdd6;
+  --color-primary: #f09039;
+  --color-accent: #5c91b8;
+  --color-deep-magic: #661b3f;
+  --color-magic: #ee7399;
+  --color-warning: #f09039;
+  --color-panel-line: rgba(245, 245, 243, 0.35);
+  --color-panel-glass: rgba(255, 255, 255, 0.06);
+}
+
 body {
   margin: 0;
   min-height: 100vh;
   display: grid;
   place-items: center;
-  background: #10131a;
-  color: #f5f0dc;
+  background: var(--color-background);
+  color: var(--color-text);
   font-family: system-ui, sans-serif;
 }
 
@@ -18,15 +35,15 @@ body {
   display: grid;
   gap: var(--gap, 20px);
   padding: var(--screen-padding, 28px);
-  background: #171b24;
-  border: 2px solid #6f7890;
+  background: var(--color-screen);
+  border: 2px solid var(--color-panel-border);
 }
 
 .parent {
   width: min(100vw, 1280px);
   aspect-ratio: 16 / 9;
-  background: #171b24;
-  border: 2px solid #6f7890;
+  background: var(--color-screen);
+  border: 2px solid var(--color-panel-border);
 }
 
 .parent > div,
@@ -34,9 +51,9 @@ body {
 .region {
   display: grid;
   place-items: center;
-  border: 2px solid rgba(245, 240, 220, 0.35);
-  background: rgba(255, 255, 255, 0.06);
-  color: #f5f0dc;
+  border: 2px solid var(--color-panel-line);
+  background: var(--color-panel-glass);
+  color: var(--color-text);
   font-weight: 700;
 }
 

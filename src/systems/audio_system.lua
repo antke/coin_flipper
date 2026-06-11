@@ -78,6 +78,15 @@ local CUES = {
       { wave = "triangle", frequency = 240, duration = 0.08, attack = 0.002, release = 0.03, glide = -30 },
     },
   },
+  opponent_hit = {
+    volume = 0.30,
+    cooldown = 0.06,
+    sequence = {
+      { wave = "saw", frequency = 180, duration = 0.070, attack = 0.001, release = 0.030, amplitude = 0.70, glide = -62 },
+      { wave = "triangle", frequency = 92, duration = 0.105, attack = 0.001, release = 0.045, amplitude = 0.85, glide = -18 },
+      { wave = "square", frequency = 420, duration = 0.034, attack = 0.001, release = 0.014, amplitude = 0.32 },
+    },
+  },
   shop_gain = {
     volume = 0.20,
     cooldown = 0.05,

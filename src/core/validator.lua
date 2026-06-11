@@ -137,7 +137,6 @@ local VALID_ACTIVE_RUN_ARTIFACT_KEYS = {
   fountainSession = true,
   shopOffers = true,
   shopSession = true,
-  draftSession = true,
   lastShopGenerationTrace = true,
   lastShopPurchaseTrace = true,
   currentStageDefinitionId = true,
@@ -155,7 +154,6 @@ local VALID_ACTIVE_RUN_STATES = {
   encounter = true,
   fountain = true,
   shop = true,
-  coin_draft = true,
 }
 
 local VALID_POST_RESULT_NEXT_STATES = {
@@ -741,6 +739,13 @@ local function validateBatchSnapshot(batch)
   return true
 end
 
+local function isSkipCurrencyRewardOption(option)
+  return type(option) == "table"
+    and option.type == "currency"
+    and option.contentId == "skip_influence"
+    and option.currency == "influence"
+end
+
 local function validateRewardOption(option, label)
   local Coins = require("src.content.coins")
   local Upgrades = require("src.content.upgrades")
@@ -750,6 +755,14 @@ local function validateRewardOption(option, label)
   end
 
   local optionType = canonicalContentType(option.type)
+
+  if isSkipCurrencyRewardOption(option) then
+    if type(option.amount) ~= "number" then
+      return false, string.format("%s amount must be numeric", label)
+    end
+
+    return true
+  end
 
   if optionType ~= "coin" and optionType ~= "trick" then
     return false, string.format("%s type must be coin|trick", label)
@@ -1625,7 +1638,7 @@ function Validator.validateActiveRunArtifactPayload(artifact)
         tostring(artifact.rewardPreviewSession.choice.contentId)
       )
 
-      if not seenOptions[choiceKey] then
+      if not isSkipCurrencyRewardOption(artifact.rewardPreviewSession.choice) and not seenOptions[choiceKey] then
         return false, "active run artifact reward choice is not present in reward options"
       end
     end
@@ -3156,7 +3169,7 @@ function Validator.validateRunHistory(runState)
         end
 
         local choiceKey = string.format("%s:%s", tostring(stageRecord.rewardChoice.type), tostring(stageRecord.rewardChoice.contentId))
-        if not seenRewardOptionKeys[choiceKey] then
+        if not isSkipCurrencyRewardOption(stageRecord.rewardChoice) and not seenRewardOptionKeys[choiceKey] then
           return false, string.format("stageResults[%d].rewardChoice is not present in rewardOptions", index)
         end
       end
@@ -3536,10 +3549,21 @@ function Validator.validateBatchInput(runState, stageState, call)
     return false, "no flips remain"
   end
 
+  local selectedCount = #(stageState.purse and stageState.purse.handSlots or {})
+  local maxSlots = PurseSystem.getMaxFlipSlots(runState)
+
+  if selectedCount == 0 then
+    return false, "select at least one coin before flipping"
+  end
+
+  if selectedCount > maxSlots then
+    return false, string.format("select no more than %d coin(s)", maxSlots)
+  end
+
   local resolutionOrder = PurseSystem.getResolutionOrder(runState, stageState)
 
   if #resolutionOrder == 0 then
-    return false, "hand is empty"
+    return false, "select at least one coin before flipping"
   end
 
   return true, resolutionOrder

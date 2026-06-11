@@ -1,33 +1,14 @@
 local CoinArt = require("src.ui.coin_art")
-local CoinDetailContent = require("src.content.coin_detail_content")
 local CoinDetailOverlay = require("src.ui.coin_detail_overlay")
 local Coins = require("src.content.coins")
 local Theme = require("src.ui.theme")
+local TrickCharm = require("src.ui.trick_charm")
+local Box = require("src.ui.box")
 
 local PurseView = {}
 
 local POUCH_COIN_JITTER_X = 0.105
 local POUCH_COIN_JITTER_Y = 0.135
-
-local RARITY_COLORS = {
-  common = Theme.colors.mutedText,
-  uncommon = Theme.colors.accent,
-  rare = Theme.colors.highlight,
-}
-
-local TYPE_TAG_COLORS = {
-  basic = Theme.colors.mutedText,
-  combo = Theme.colors.highlight,
-  influence = Theme.colors.warning,
-  heads = { 0.94, 0.46, 0.25, 1.0 },
-  motion = Theme.colors.accent,
-  neighbor = Theme.colors.accent,
-  odds = Theme.colors.success,
-  perfect = Theme.colors.highlight,
-  safety = Theme.colors.success,
-  score_scaling = Theme.colors.highlight,
-  tails = { 0.45, 0.62, 1.0, 1.0 },
-}
 
 local function setColorWithAlpha(color, alpha)
   love.graphics.setColor(color[1], color[2], color[3], alpha)
@@ -48,14 +29,6 @@ local function getStableSignedValue(key, salt)
   return ((hash % 2001) / 1000) - 1
 end
 
-local function getPillColor(pill)
-  if pill.kind == "rarity" then
-    return RARITY_COLORS[pill.value] or Theme.colors.mutedText
-  end
-
-  return TYPE_TAG_COLORS[pill.value] or Theme.colors.mutedText
-end
-
 local function getGridMetrics(app, area, cardCount, options)
   local gap = Theme.spacing.itemGap
   local headerHeight = Theme.scale(34)
@@ -66,10 +39,8 @@ local function getGridMetrics(app, area, cardCount, options)
   local cellWidth = math.floor((area.width - (gap * (columnCount - 1))) / columnCount)
   local cellSize = math.min(options.cellSize or Theme.scale(145), math.max(Theme.scale(82), cellWidth))
   local titleHeight = app.fonts.body:getHeight() + Theme.scale(4)
-  local pillRowsHeight = (app.fonts.small:getHeight() + Theme.scale(8)) * 2 + Theme.scale(4)
   local countHeight = app.fonts.small:getHeight() + Theme.scale(4)
-  local zonesHeight = options.showZones and (app.fonts.small:getHeight() + Theme.scale(4)) or 0
-  local cellHeight = cellSize + Theme.scale(8) + titleHeight + Theme.scale(6) + pillRowsHeight + countHeight + zonesHeight
+  local cellHeight = cellSize + Theme.scale(8) + titleHeight + Theme.scale(4) + countHeight
   local visibleRows = math.max(1, math.floor((gridHeight + gap) / (cellHeight + gap)))
   local rowCount = math.max(1, math.ceil(cardCount / columnCount))
 
@@ -87,52 +58,25 @@ local function getGridMetrics(app, area, cardCount, options)
   }
 end
 
-function PurseView.getMaxScrollOffset(app, area, stageState, options)
+local function getCards(app, stageState, options)
   options = options or {}
+
   local cards = app:getPurseCardData(stageState)
-  if options.showZones == nil then
-    options.showZones = stageState ~= nil
+
+  if options.includeTricks ~= false and app.getTrickCharmData then
+    for _, charm in ipairs(app:getTrickCharmData()) do
+      table.insert(cards, charm)
+    end
   end
-  local metrics = getGridMetrics(app, area, #cards, options)
-  return metrics.maxScrollOffset
+
+  return cards
 end
 
-local function drawPills(app, card, x, y, width)
-  local coin = Coins.getById(card.coinId)
-  local detail = CoinDetailContent.build(coin)
-  local pills = detail and detail.pills or {}
-  local font = app.fonts.small
-  local pillHeight = font:getHeight() + Theme.scale(8)
-  local rowGap = Theme.scale(4)
-  local columnGap = Theme.scale(6)
-  local cursorX = x
-  local cursorY = y
-  local row = 1
-
-  love.graphics.setFont(font)
-
-  for _, pill in ipairs(pills) do
-    local label = tostring(pill.label or "")
-    local pillWidth = math.min(width, math.max(Theme.scale(54), font:getWidth(label) + Theme.scale(16)))
-
-    if cursorX > x and cursorX + pillWidth > x + width then
-      row = row + 1
-      if row > 2 then
-        return
-      end
-
-      cursorX = x
-      cursorY = cursorY + pillHeight + rowGap
-    end
-
-    local color = getPillColor(pill)
-    setColorWithAlpha(color, 0.16)
-    love.graphics.rectangle("fill", cursorX, cursorY, pillWidth, pillHeight, Theme.scale(7), Theme.scale(7))
-    Theme.applyColor(color)
-    love.graphics.printf(label, cursorX + Theme.scale(8), cursorY + Theme.scale(3), pillWidth - Theme.scale(16), "center")
-
-    cursorX = cursorX + pillWidth + columnGap
-  end
+function PurseView.getMaxScrollOffset(app, area, stageState, options)
+  options = options or {}
+  local cards = getCards(app, stageState, options)
+  local metrics = getGridMetrics(app, area, #cards, options)
+  return metrics.maxScrollOffset
 end
 
 local function drawPouchCell(app, card, x, y, width, metrics, options)
@@ -155,30 +99,24 @@ local function drawPouchCell(app, card, x, y, width, metrics, options)
   local selected = options.selectedCoinId == card.coinId
 
   if selected then
-    setColorWithAlpha(Theme.colors.warning, 0.18)
-    love.graphics.rectangle("fill", squareX, squareY, metrics.cellSize, metrics.cellSize, Theme.scale(10), Theme.scale(10))
-    Theme.applyColor(Theme.colors.warning)
-    love.graphics.setLineWidth(3)
-    love.graphics.rectangle("line", squareX, squareY, metrics.cellSize, metrics.cellSize, Theme.scale(10), Theme.scale(10))
-    love.graphics.setLineWidth(1)
+    Box.drawFrame(squareX, squareY, metrics.cellSize, metrics.cellSize, {
+      fill = { Theme.colors.warning[1], Theme.colors.warning[2], Theme.colors.warning[3], 0.18 },
+      border = Theme.colors.warning,
+    })
   end
 
-  if hovered then
-    setColorWithAlpha(Theme.colors.accent, 0.12)
-    love.graphics.circle("fill", coinCenterX, coinCenterY, math.floor(coinSize / 2) + Theme.scale(12))
-    setColorWithAlpha(Theme.colors.accent, 0.36)
-    love.graphics.setLineWidth(2)
-    love.graphics.circle("line", coinCenterX, coinCenterY, math.floor(coinSize / 2) + Theme.scale(7))
-    love.graphics.setLineWidth(1)
-  end
+  local hoverScale = hovered and 1.10 or 1.0
+  local visualCoinSize = math.floor(coinSize * hoverScale)
+  local visualCoinX = coinCenterX - math.floor(visualCoinSize / 2)
+  local visualCoinY = coinCenterY - math.floor(visualCoinSize / 2)
 
   setColorWithAlpha(Theme.colors.shadow, 0.28)
-  love.graphics.ellipse("fill", coinCenterX, coinY + coinSize + Theme.scale(7), math.floor(coinSize * 0.42), Theme.scale(7))
+  love.graphics.ellipse("fill", coinCenterX, visualCoinY + visualCoinSize + Theme.scale(7), math.floor(visualCoinSize * 0.42), Theme.scale(7))
 
-  CoinArt.draw(card.coinId, coinX, coinY, coinSize, {
+  CoinArt.draw(card.coinId, visualCoinX, visualCoinY, visualCoinSize, {
     glow = false,
     shadow = false,
-    selected = selected,
+    selected = false,
     tilt = tilt,
   })
 
@@ -186,26 +124,54 @@ local function drawPouchCell(app, card, x, y, width, metrics, options)
   Theme.applyColor(Theme.colors.text)
   love.graphics.printf(card.name or card.coinId, x, textY, width, "center")
 
-  local pillY = textY + app.fonts.body:getHeight() + Theme.scale(6)
-  drawPills(app, card, x + Theme.scale(4), pillY, math.max(1, width - Theme.scale(8)))
-
-  local countY = pillY + ((app.fonts.small:getHeight() + Theme.scale(8)) * 2) + Theme.scale(8)
+  local countY = textY + app.fonts.body:getHeight() + Theme.scale(4)
   love.graphics.setFont(app.fonts.small)
   Theme.applyColor(Theme.colors.warning)
-  love.graphics.printf(string.format("owned: %d", card.count or 0), x, countY, width, "center")
-
-  if options.showZones then
-    Theme.applyColor(Theme.colors.mutedText)
-    love.graphics.printf(
-      string.format("avail %d | dealt %d | slots %d | used %d", card.available or 0, card.dealt or 0, card.selected or card.hand or 0, card.exhausted or 0),
-      x,
-      countY + app.fonts.small:getHeight() + Theme.scale(4),
-      width,
-      "center"
-    )
-  end
+  love.graphics.printf(string.format("×%d", card.count or 0), x, countY, width, "center")
 
   return hovered
+end
+
+local function drawTrickCharmCell(app, card, x, y, width, metrics)
+  local mouseX, mouseY = love.mouse.getPosition()
+  local cellRect = { x = x, y = y, width = width, height = metrics.cellHeight }
+  local hovered = containsPoint(cellRect, mouseX, mouseY)
+  local squareX = x + math.floor((width - metrics.cellSize) / 2)
+  local squareY = y
+  local charmSize = math.min(Theme.scale(72), math.floor(metrics.cellSize * 0.58))
+  local charmX = squareX + math.floor((metrics.cellSize - charmSize) / 2)
+  local charmY = squareY + math.floor((metrics.cellSize - charmSize) / 2)
+  local textY = squareY + metrics.cellSize + Theme.scale(8)
+
+  if hovered then
+    Box.drawFrame(squareX, squareY, metrics.cellSize, metrics.cellSize, {
+      fill = { Theme.colors.highlight[1], Theme.colors.highlight[2], Theme.colors.highlight[3], 0.12 },
+      border = { Theme.colors.highlight[1], Theme.colors.highlight[2], Theme.colors.highlight[3], 0.36 },
+    })
+  end
+
+  TrickCharm.draw(app, card, charmX, charmY, charmSize, {
+    hovered = hovered,
+  })
+
+  love.graphics.setFont(app.fonts.body)
+  Theme.applyColor(Theme.colors.text)
+  love.graphics.printf(card.name or card.trickId or "Trick", x, textY, width, "center")
+
+  local countY = textY + app.fonts.body:getHeight() + Theme.scale(4)
+  love.graphics.setFont(app.fonts.small)
+  Theme.applyColor(Theme.colors.highlight)
+  love.graphics.printf(card.familyLabel or TrickCharm.getFamilyLabel(card), x, countY, width, "center")
+
+  return hovered
+end
+
+local function drawCardCell(app, card, x, y, width, metrics, options)
+  if card.kind == "trick_charm" then
+    return drawTrickCharmCell(app, card, x, y, width, metrics)
+  end
+
+  return drawPouchCell(app, card, x, y, width, metrics, options)
 end
 
 function PurseView.getScrollButtons(area, scrollOffset, maxScrollOffset, onPrevious, onNext)
@@ -245,10 +211,7 @@ end
 
 function PurseView.getCardAtPoint(app, area, stageState, x, y, options)
   options = options or {}
-  local cards = app:getPurseCardData(stageState)
-  if options.showZones == nil then
-    options.showZones = stageState ~= nil
-  end
+  local cards = getCards(app, stageState, options)
   local metrics = getGridMetrics(app, area, #cards, options)
 
   if x < area.x or x > area.x + area.width or y < metrics.gridY or y > metrics.gridY + metrics.gridHeight then
@@ -276,39 +239,25 @@ end
 
 function PurseView.draw(app, area, stageState, options)
   options = options or {}
-  local cards, summary = app:getPurseCardData(stageState)
-  if options.showZones == nil then
-    options.showZones = stageState ~= nil
-  end
+  local cards = getCards(app, stageState, options)
   local metrics = getGridMetrics(app, area, #cards, options)
   local scrollOffset = math.max(0, math.min(options.scrollOffset or 0, metrics.maxScrollOffset))
-  local headerLines = {
-    string.format("Pouch: %d coin(s)", summary.purseSize or 0),
-    string.format("Deal: %d", summary.dealSize or summary.handSize or 0),
-  }
-
-  if options.note then
-    table.insert(headerLines, options.note)
-  end
-
-  if metrics.maxScrollOffset > 0 then
-    table.insert(headerLines, string.format("Scroll %d/%d", scrollOffset + 1, metrics.maxScrollOffset + 1))
-  end
 
   love.graphics.setFont(app.fonts.small)
   Theme.applyColor(Theme.colors.mutedText)
-  love.graphics.printf(table.concat(headerLines, "  |  "), area.x, area.y, area.width, "left")
+  love.graphics.printf("Pouch", area.x, area.y, area.width, "left")
 
   if #cards == 0 then
     love.graphics.setFont(app.fonts.body)
     Theme.applyColor(Theme.colors.mutedText)
-    love.graphics.printf("No coins in pouch.", area.x, area.y + Theme.scale(46), area.width, "center")
+    love.graphics.printf("No coins or Trick Charms in pouch.", area.x, area.y + Theme.scale(46), area.width, "center")
     return
   end
 
   local previousScissorX, previousScissorY, previousScissorWidth, previousScissorHeight = love.graphics.getScissor()
   local scrollY = scrollOffset * (metrics.cellHeight + metrics.gap)
   local hoveredCoin = nil
+  local hoveredTrickCharm = nil
   local mouseX, mouseY = love.mouse.getPosition()
 
   love.graphics.setScissor(area.x, metrics.gridY, area.width, metrics.gridHeight)
@@ -322,8 +271,12 @@ function PurseView.draw(app, area, stageState, options)
     local cardY = metrics.gridY + (row * (metrics.cellHeight + metrics.gap)) - scrollY
 
     if cardY + metrics.cellHeight >= metrics.gridY and cardY <= metrics.gridY + metrics.gridHeight then
-      if drawPouchCell(app, card, cardX, cardY, metrics.cellWidth, metrics, options) then
-        hoveredCoin = Coins.getById(card.coinId)
+      if drawCardCell(app, card, cardX, cardY, metrics.cellWidth, metrics, options) then
+        if card.kind == "trick_charm" then
+          hoveredTrickCharm = card
+        else
+          hoveredCoin = Coins.getById(card.coinId)
+        end
       end
     end
   end
@@ -336,6 +289,17 @@ function PurseView.draw(app, area, stageState, options)
 
   if hoveredCoin then
     CoinDetailOverlay.draw(app, hoveredCoin, mouseX, mouseY, {
+      compact = true,
+      bounds = {
+        x = area.x,
+        y = area.y,
+        width = area.width,
+        height = area.height,
+        screenPadding = Theme.scale(8),
+      },
+    })
+  elseif hoveredTrickCharm then
+    TrickCharm.drawDetailOverlay(app, hoveredTrickCharm, mouseX, mouseY, {
       bounds = {
         x = area.x,
         y = area.y,

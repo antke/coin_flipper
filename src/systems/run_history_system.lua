@@ -17,6 +17,8 @@ local function serializeRewardOption(option)
     name = option.name,
     rarity = option.rarity,
     description = option.description,
+    amount = option.amount,
+    currency = option.currency,
     rewardSource = option.rewardSource,
     enemyClass = option.enemyClass,
     enemyClassLabel = option.enemyClassLabel,

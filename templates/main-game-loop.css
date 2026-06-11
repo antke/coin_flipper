@@ -12,7 +12,7 @@
 }
 
 .div2 {
-  /* STAGE STATS - basic info, X/Y flips remaining, chips etc */
+  /* STAGE STATS - opponent HP, score applied, flips remaining, Influence etc */
   grid-column: span 9 / span 9;
   grid-row: span 2 / span 2;
   grid-column-start: 3;

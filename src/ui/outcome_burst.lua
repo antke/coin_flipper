@@ -124,12 +124,6 @@ local function getAlpha(burst)
   return flashIn * fadeOut
 end
 
-local function getScale(burst)
-  local flashInDuration = math.max(0.01, burst.flashInDuration or 0.12)
-  local progress = math.min(1, burst.elapsed / flashInDuration)
-  return 1 + ((burst.popScale or 1.28) - 1) * (1 - progress)
-end
-
 local function drawTextPass(label, width, offsetX, offsetY, color, alpha)
   love.graphics.setColor(color[1], color[2], color[3], (color[4] or 1.0) * alpha)
   love.graphics.printf(label, offsetX - width * 0.5, offsetY, width, "center")
@@ -146,7 +140,7 @@ function OutcomeBurst.draw(burst, fonts, viewportRect)
   local labelWidth = math.max(font:getWidth(burst.label), 1)
   local drawWidth = math.min(math.max(1, rect.width - 32), labelWidth + 48)
   local alpha = getAlpha(burst)
-  local scale = getScale(burst)
+  local scale = 1
   local x = rect.x + math.floor(rect.width * 0.5)
   local y = rect.y + math.floor((rect.height - font:getHeight()) * 0.5)
   local outline = math.max(3, math.floor(font:getHeight() * 0.08))

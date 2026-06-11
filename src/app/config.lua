@@ -23,6 +23,13 @@ local GameConfig = {
     lineHeight = 22,
     batchRevealDuration = 0.75,
     batchRevealEndDuration = 1.05,
+    coinRevealMotionDuration = 0.176,
+    coinRevealBaseHoldDuration = 0.096,
+    coinRevealEffectHoldDuration = 0.128,
+    coinRevealScoreHoldDuration = 0.056,
+    coinRevealLinkDuration = 0.208,
+    opponentHpHitDuration = 0.68,
+    trickCalloutStyle = "combo",
   },
 
   audio = {
@@ -42,7 +49,7 @@ local GameConfig = {
   },
 
   purse = {
-    handSize = 5,
+    handSize = 6,
   },
 
   shop = {

@@ -1,11 +1,11 @@
-local Coins = require("src.content.coins")
 local EncounterSystem = require("src.systems.encounter_system")
 local FlipResolver = require("src.systems.flip_resolver")
 local Loadout = require("src.domain.loadout")
 local LoadoutSystem = require("src.systems.loadout_system")
 local MetaState = require("src.domain.meta_state")
-local ProgressionSystem = require("src.systems.progression_system")
+local PurseHookSystem = require("src.systems.purse_hook_system")
 local PurseSystem = require("src.systems.purse_system")
+local ProgressionSystem = require("src.systems.progression_system")
 local RNG = require("src.core.rng")
 local RewardSystem = require("src.systems.reward_system")
 local RunHistorySystem = require("src.systems.run_history_system")
@@ -21,41 +21,6 @@ local ReplaySystem = {
   TRANSCRIPT_ARTIFACT_TYPE = "replay_transcript",
 }
 
-local COIN_TAG_SCORES = {
-  score = 4,
-  match = 3,
-  weight = 2,
-  score_scaling = 2,
-  influence = 1,
-}
-
-local function hasTag(definition, tag)
-  for _, currentTag in ipairs(definition and definition.tags or {}) do
-    if currentTag == tag then
-      return true
-    end
-  end
-
-  return false
-end
-
-local function scoreDraftCoin(coinId)
-  local definition = Coins.getById(coinId)
-  local score = 0
-
-  for tag, value in pairs(COIN_TAG_SCORES) do
-    if hasTag(definition, tag) then
-      score = score + value
-    end
-  end
-
-  if hasTag(definition, "boss") then
-    score = score - 1
-  end
-
-  return score
-end
-
 local function copyBatchCall(batch)
   return {
     batchId = batch.batchId,
@@ -69,18 +34,6 @@ local function copyBatchCall(batch)
     forcedResults = Utils.clone(batch.forcedResults or {}),
     refillEvent = Utils.clone(batch.refillEvent or {}),
   }
-end
-
-local function buildDraftCandidates(runState)
-  local candidates = {}
-
-  for _, definition in ipairs(Coins.getAll()) do
-    if definition.draftEligible ~= false and Coins.isUnlocked(definition, runState.unlockedCoinIds) then
-      table.insert(candidates, definition.id)
-    end
-  end
-
-  return candidates
 end
 
 local function canonicalSourceType(sourceType)
@@ -109,82 +62,6 @@ end
 
 local function canonicalContentType(contentType)
   return contentType == "upgrade" and "trick" or contentType
-end
-
-local function generateDraftOffers(candidates, rng)
-  local pool = Utils.clone(candidates)
-  local offers = {}
-  local offerCount = math.min(3, #pool)
-
-  for _ = 1, offerCount do
-    local index = rng:nextInt(1, #pool)
-    table.insert(offers, table.remove(pool, index))
-  end
-
-  return offers
-end
-
-local function chooseDraftOffer(offers)
-  local bestCoinId = nil
-  local bestScore = nil
-
-  for _, coinId in ipairs(offers or {}) do
-    local score = scoreDraftCoin(coinId)
-
-    if bestScore == nil or score > bestScore or (score == bestScore and coinId < bestCoinId) then
-      bestCoinId = coinId
-      bestScore = score
-    end
-  end
-
-  return bestCoinId
-end
-
-local function isDefaultStarterPurse(starterPurse)
-  if #(starterPurse or {}) ~= 10 then
-    return false
-  end
-
-  local counts = {
-    copper_bent_coin = 0,
-    copper_blank_coin = 0,
-    copper_hollow_coin = 0,
-    copper_marked_coin = 0,
-    copper_lucky_coin = 0,
-    copper_weighted_coin = 0,
-  }
-
-  for _, coinId in ipairs(starterPurse) do
-    if counts[coinId] == nil then
-      return false
-    end
-
-    counts[coinId] = counts[coinId] + 1
-  end
-
-  return counts.copper_bent_coin == 2
-    and counts.copper_blank_coin == 2
-    and counts.copper_hollow_coin == 2
-    and counts.copper_marked_coin == 2
-    and counts.copper_lucky_coin == 1
-    and counts.copper_weighted_coin == 1
-end
-
-local function replayInitialDraftIfNeeded(runState, bootstrap, rng)
-  if not isDefaultStarterPurse(bootstrap and bootstrap.starterPurse) then
-    return
-  end
-
-  local candidates = buildDraftCandidates(runState)
-
-  for _ = 1, PurseSystem.getHandSize(runState) do
-    local offers = generateDraftOffers(candidates, rng)
-    local chosenCoinId = chooseDraftOffer(offers)
-
-    if chosenCoinId then
-      PurseSystem.createInstance(runState, chosenCoinId)
-    end
-  end
 end
 
 local function buildTriggeredSourceSignature(source)
@@ -1111,7 +988,6 @@ function ReplaySystem.replayTranscript(transcript)
     startingShopRerolls = getBootstrapResolvedValue(resolvedBootstrapValues, "run.startingShopRerolls", "startingShopRerolls"),
   })
   local rng = RNG.new(runState.seed)
-  replayInitialDraftIfNeeded(runState, normalizedTranscript.bootstrap, rng)
   local consumedStageCount = 0
 
   for _, stageInput in ipairs(normalizedTranscript.stages or {}) do
@@ -1205,6 +1081,23 @@ function ReplaySystem.replayTranscript(transcript)
 
       for _, forcedEntry in ipairs(batchInput.forcedResults or {}) do
         table.insert(runState.pendingForcedCoinResults, forcedEntry.result)
+      end
+
+      local _, dealWarning = PurseSystem.dealHand(runState, stageState, rng)
+      PurseHookSystem.runAfterDealBeforeSelection(runState, stageState, metaProjection, { call = batchInput.call, rng = rng })
+
+      if dealWarning ~= "purse_empty" then
+        local selectedOk, selectedError = PurseSystem.setSelectedSlotsFromEntries(runState, stageState, batchInput.selectedSlots or {}, {
+          rule = "replay_transcript_selection",
+        })
+
+        if not selectedOk then
+          return {
+            ok = false,
+            error = selectedError or "batch_selection_failed",
+            mismatches = { tostring(selectedError or "batch_selection_failed") },
+          }
+        end
       end
 
       local batchResult, batchError = FlipResolver.resolveBatch(runState, stageState, metaProjection, batchInput.call, rng)

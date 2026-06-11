@@ -37,7 +37,7 @@ function DebugOverlay:draw()
     string.format("%s: %s", batchLabel, self.app.lastBatchResult and self.app.lastBatchResult.batchId or "n/a"),
     string.format("%s: %s", stageStatusLabel, self.app.stageState and self.app.stageState.stageStatus or "n/a"),
     string.format("%s: %s", flipsLabel, self.app.stageState and self.app.stageState.flipsRemaining or "n/a"),
-    string.format("Loadout Key: %s", self.app:getCurrentLoadoutKey()),
+    string.format("Pouch Key: %s", self.app:getCurrentLoadoutKey()),
     "",
     "Forced Result Queue:",
   }
