@@ -14,7 +14,7 @@ end
 return {
   id = "prestige_encore_replay_packet",
   tags = { "prestige", "replay" },
-  description = "Verifies Encore replays one completed resolution packet at discounted value and is replay-checked.",
+  description = "Verifies Encore replays one completed resolution packet at specialized discounted value and is replay-checked.",
 
   setup = function()
     return {
@@ -53,7 +53,7 @@ return {
     A.equal(replay.prestigeReplay, true, "Encore should mark Prestige replay")
     A.equal(replay.packetCoinId, "copper_bent_coin", "Encore should prefer a Bent Coin packet")
     A.equal(replay.packetResolutionIndex, 1, "seeded Encore packet resolution index")
-    A.equal(replay.scale, 0.2, "Encore replay scale")
+    A.equal(replay.scale, 0.4, "Bent Coin should double Encore replay scale")
     A.equal(replay.replayedScore, 1, "Encore applies a minimum visible discounted score for a positive packet")
     A.equal(breakdown.totalStageScoreDelta, (breakdown.finalBaseScore or 0) + replay.replayedScore, "Prestige replay should add to batch score delta")
 
@@ -65,7 +65,20 @@ return {
     A.equal(replayAction.prestigeReplay, true, "Encore action should be marked as Prestige replay")
     A.traceHasAction(trace, {
       op = "replay_resolution_packet",
-      target = "encore_bent_or_random_selected_packet",
+      target = {
+        zone = "resolution_packets",
+        filters = {
+          { op = "selected" },
+          { op = "positive_score" },
+          { op = "not_prestige_replay" },
+        },
+        prefer = {
+          { op = "family", value = "prestige" },
+          { op = "archetype", value = "bent" },
+        },
+        orderBy = "random",
+        pick = { op = "slot_at_position", value = 1 },
+      },
       packetId = replay.packetId,
       replayedScore = replay.replayedScore,
       prestigeReplay = true,

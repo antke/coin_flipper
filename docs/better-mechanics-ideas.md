@@ -13,7 +13,7 @@ Coins are simple objects. Tricks, scams, marks, counterfeits and hidden moves ar
 
 Use these as code-facing mechanic families:
 
-- `loaded`
+- `weighted`
 - `marked`
 - `sleight`
 - `counterfeit`
@@ -25,11 +25,11 @@ Use these as code-facing mechanic families:
 
 ---
 
-# `loaded`
+# `weighted`
 
 Manipulates probability before results exist by adding Weight toward a side, usually the player's call.
 
-Loaded does not convert, reroll, or repair outcomes after the flip. Post-result fixes belong to other Trick families.
+Weighted does not convert, reroll, or repair outcomes after the flip. Post-result fixes belong to other Trick families.
 
 ## Weighted Palm
 
@@ -38,7 +38,7 @@ Example: base 50/50 becomes 75/25 toward the call.
 
 Tags:
 
-- `loaded`
+- `weighted`
 - `weight`
 - `call_bias`
 - `auto`
@@ -49,13 +49,13 @@ Hook:
 
 ---
 
-## Loaded Edge
+## Weighted Edge
 
 Before flip, adjacent coins gain Heads/Tails Weight based on the player call or position.
 
 Tags:
 
-- `loaded`
+- `weighted`
 - `weight`
 - `position`
 
@@ -71,7 +71,7 @@ Weighted coins score double when their weighted result succeeds.
 
 Tags:
 
-- `loaded`
+- `weighted`
 - `weight`
 - `weighted_payoff`
 - `score_scaling`
@@ -104,7 +104,7 @@ Known problems:
 - If fulfillment rewards are uncapped, Foretold coins become automatic value instead of a selection puzzle.
 - If too many Ancient Patterns exist, the mechanic can devolve into passive "sometimes extra score" variance.
 - The mechanic depends on clear pre-selection UI; the coin itself must show the foretold result without slowing the round.
-- Implementation must define whether a foretold result is locked at deal time and how later Loaded, Fate, or result-modifying Tricks interact with it.
+- Implementation must define whether a foretold result is locked at deal time and how later Weighted, Fate, or result-modifying Tricks interact with it.
 
 ## See Behind the Veil
 
@@ -464,7 +464,7 @@ Boundaries:
 - Sleight moves existing selected coin bodies through resolved slots.
 - Forgery changes identity, payout or trigger checks; it does not add physical resolving bodies.
 - Misdirection reroutes targets or score credit.
-- Loaded/Fate/Prediction affect probability, information or outcomes, not board capacity.
+- Weighted/Fate/Prediction affect probability, information or outcomes, not board capacity.
 
 Multiplication rule:
 
@@ -559,7 +559,7 @@ Fate Tricks are about the Luck Meter and Fated Flip only.
 
 They accelerate Luck gain, amplify Fountain Favor, reward Fated Flips, and eventually let advanced builds keep filling Luck during Fated Flips so Fated Flips can chain.
 
-Fate does not create coins, copy coins, move coins, forge identities, reroute score credit, reroll coins, Weight odds, or change individual coin results. Loaded owns individual probability/result manipulation. Fate owns the global meter and the global Fated Flip payoff layer.
+Fate does not create coins, copy coins, move coins, forge identities, reroute score credit, reroll coins, Weight odds, or change individual coin results. Weighted owns individual probability/result manipulation. Fate owns the global meter and the global Fated Flip payoff layer.
 
 Core direction:
 
@@ -1000,7 +1000,7 @@ The player should feel like they are building a scam engine.
 
 Early run:
 
-- Loaded Tricks that add small Weight
+- Weighted Tricks that add small Weight
 - small rerolls
 - small result manipulation
 

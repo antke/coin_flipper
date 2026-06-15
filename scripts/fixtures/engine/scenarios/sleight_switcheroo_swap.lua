@@ -64,7 +64,25 @@ return {
 
     A.traceHasAction(trace, {
       op = "swap_coins",
-      target = "switcheroo_failed_success",
+      target = {
+        source = {
+          zone = "selected_coins",
+          filters = {
+            { op = "failed_call" },
+          },
+          orderBy = "base_score_desc",
+          pick = { op = "slot_at_position", value = 1 },
+        },
+        target = {
+          zone = "selected_coins",
+          filters = {
+            { op = "matched_call" },
+            { op = "not_context_instance" },
+          },
+          orderBy = "base_score",
+          pick = { op = "slot_at_position", value = 1 },
+        },
+      },
       failedInstanceId = move.failedInstanceId,
       successInstanceId = move.successInstanceId,
     }, "Switcheroo action should be traced with swap metadata")

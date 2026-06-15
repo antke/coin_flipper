@@ -70,7 +70,18 @@ return {
     A.equal(chainAction.chainedInstanceId, chainLink.targetInstanceId, "Domino Line action target instance")
     A.traceHasAction(trace, {
       op = "trigger_random_neighbor",
-      target = "random_neighbor",
+      target = {
+        zone = "selected_coins",
+        filters = {
+          { op = "neighbor_of_current" },
+          { op = "not_used_resolution_index" },
+        },
+        prefer = {
+          { op = "family", value = "chain" },
+        },
+        orderBy = "random",
+        pick = { op = "slot_at_position", value = 1 },
+      },
       chainTriggered = true,
       chainedInstanceId = chainLink.targetInstanceId,
     }, "Domino Line action should be traced with Chain metadata")

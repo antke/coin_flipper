@@ -41,7 +41,7 @@ The current codebase already has useful foundations, but they are mostly legacy-
 - `src/systems/luck_system.lua` has a Luck Meter and Fated Flip state.
 - `src/systems/reward_system.lua` offers mixed coin/upgrade rewards.
 - `src/systems/shop_system.lua` sells coins and upgrades using `shopPoints`.
-- `src/content/coins.lua` still contains bespoke effect coins such as Heads/Tails-loaded and economy coins.
+- `src/content/coins.lua` still contains bespoke effect coins such as Heads/Tails-weighted and economy coins.
 - `src/content/upgrades.lua` still contains legacy run upgrades that can become the first internal Trick substrate.
 - `src/content/meta_upgrades.lua` still contains persistent upgrades that should later become Tattoos.
 
@@ -195,7 +195,7 @@ Initial canonical archetypes:
 - **Hollow Coin**: Smuggling synergy
 - **Marked Coin**: Prediction / Foretold synergy
 - **Lucky Coin**: Fate / Luck Meter synergy
-- **Weighted Coin**: Loaded / probability synergy
+- **Weighted Coin**: Weighted / probability synergy
 
 Recommended data direction:
 
@@ -206,9 +206,9 @@ archetype = "weighted"
 material = "copper"
 materialRank = 1
 base_score = 1
-tags = { "loaded", "weight", "odds", "reliable" }
-mechanic_terms = { "Loaded", "Weight" }
-trick_synergy = { "loaded" }
+tags = { "weighted", "weight", "odds", "reliable" }
+mechanic_terms = { "Weighted", "Weight" }
+trick_synergy = { "weighted" }
 ```
 
 Tasks:
@@ -239,8 +239,8 @@ lua scripts/invariant_verify.lua 5 1001 1
 
 Likely legacy IDs that need fixture migration:
 
-- `heads_loaded_penny`
-- `tails_loaded_penny`
+- `heads_weighted_penny`
+- `tails_weighted_penny`
 - `regular_dollar`
 - `heads_cache`
 - `heads_anchor`
@@ -270,8 +270,8 @@ Recommended Trick metadata:
 
 ```lua
 trick = {
-  category = "loaded",
-  tags = { "loaded", "weight" },
+  category = "weighted",
+  tags = { "weighted", "weight" },
   tier = 1,
   timing = "before_flip",
   targetRule = "one_selected_weighted_coin_or_random_selected_coin",
@@ -281,7 +281,7 @@ trick = {
 
 Canonical categories/tags:
 
-- `loaded`
+- `weighted`
 - `prediction`
 - `sleight`
 - `forgery`
@@ -313,9 +313,9 @@ lua scripts/replay_verify.lua 5 1001 1
 lua scripts/invariant_verify.lua 5 1001 1
 ```
 
-## Phase 4: MVP Loaded / Weight Engine Slice
+## Phase 4: MVP Weighted / Weight Engine Slice
 
-Goal: add the smallest canonical engine operation support needed by early Loaded Tricks.
+Goal: add the smallest canonical engine operation support needed by early Weighted Tricks.
 
 Likely files:
 
@@ -328,7 +328,7 @@ Likely files:
 Good first Tricks:
 
 - **Weighted Palm**: before flip, add Weight toward the player's call.
-- **Loaded Edge**: before flip, skew one eligible coin toward the player's call.
+- **Weighted Edge**: before flip, skew one eligible coin toward the player's call.
 
 Do not implement true **Heavy Payout** until per-coin scoring support exists. If a temporary aggregate version exists, label it as temporary and do not let it block the later per-coin refactor.
 
@@ -346,8 +346,8 @@ Migration approach:
 
 Exit criteria:
 
-- Early Loaded Tricks affect probability before results exist.
-- Loaded Tricks do not repair failures after the flip.
+- Early Weighted Tricks affect probability before results exist.
+- Weighted Tricks do not repair failures after the flip.
 - New Weight operations are deterministic and visible in traces/logs.
 - Replay fails if weighted action metadata is tampered.
 
@@ -361,7 +361,7 @@ lua scripts/invariant_verify.lua 5 1001 1
 
 Suggested new fixture:
 
-- `loaded_trick_weighted_payout.lua`, but include payout assertions only after per-coin scoring exists.
+- `weighted_trick_weighted_payout.lua`, but include payout assertions only after per-coin scoring exists.
 
 ## Phase 5: New Round Flow and Pouch Zones
 
@@ -499,7 +499,7 @@ lua scripts/invariant_verify.lua 5 1001 1
 
 Goal: implement advanced Trick families only after their prerequisites exist.
 
-Do not start this phase until early Loaded Tricks, new round flow, and per-coin score events are stable.
+Do not start this phase until early Weighted Tricks, new round flow, and per-coin score events are stable.
 
 Recommended family order:
 
@@ -701,7 +701,7 @@ Enemy class reward pools:
 
 - **Forger** -> Forgery Tricks
 - **Smuggler** -> Smuggling Tricks
-- **Card Shark** -> Prediction and Loaded Tricks
+- **Card Shark** -> Prediction and Weighted Tricks
 - **Fortune Teller** -> Fate Tricks
 - **Pit Boss** -> Misdirection and control Tricks
 - **Magician** -> Sleight Tricks
@@ -817,7 +817,7 @@ Do not begin broad internal renames until the corresponding player-facing behavi
 Audit search:
 
 ```sh
-rg -n "chip|chips|shopPoints|upgrade|upgrades|active coin slot|equippedCoinSlots|persistedLoadoutSlots|targetScore|stageScore|heads_loaded_penny|tails_loaded_penny|economy|attunement|multiplier" src scripts docs/game
+rg -n "chip|chips|shopPoints|upgrade|upgrades|active coin slot|equippedCoinSlots|persistedLoadoutSlots|targetScore|stageScore|heads_weighted_penny|tails_weighted_penny|economy|attunement|multiplier" src scripts docs/game
 ```
 
 Cleanup targets:

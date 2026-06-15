@@ -27,7 +27,7 @@ local ENEMY_CLASS_POOLS = {
   },
   card_shark = {
     label = "Card Shark",
-    categories = { "prediction", "loaded" },
+    categories = { "prediction", "weighted" },
   },
   fortune_teller = {
     label = "Fortune Teller",

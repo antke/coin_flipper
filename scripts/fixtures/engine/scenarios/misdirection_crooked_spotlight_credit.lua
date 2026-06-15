@@ -80,7 +80,26 @@ return {
     A.equal(redirectAction.redirectedCredit, true, "redirect action should carry redirected flag")
     A.traceHasAction(trace, {
       op = "redirect_score_credit",
-      target = "crooked_spotlight_lowest_success_to_highest_success",
+      target = {
+        target = {
+          zone = "selected_coins",
+          filters = {
+            { op = "matched_call" },
+          },
+          orderBy = "base_score_desc",
+          pick = { op = "slot_at_position", value = 1 },
+        },
+        source = {
+          zone = "selected_coins",
+          filters = {
+            { op = "matched_call" },
+            { op = "not_context_instance" },
+            { op = "not_redirected_credit" },
+          },
+          orderBy = "base_score",
+          pick = { op = "slot_at_position", value = 1 },
+        },
+      },
       sourceInstanceId = redirect.sourceInstanceId,
       spotlightInstanceId = redirect.spotlightInstanceId,
     }, "Crooked Spotlight action should be traced with redirect metadata")

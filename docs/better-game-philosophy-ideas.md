@@ -263,7 +263,7 @@ Use these coin archetypes instead:
 | Hollow Coin | Hand overflow, contraband capacity | Smuggling, Sleeve Pocket, Planted Double |
 | Marked Coin | Readable coin, foretold results | Prediction?, Foretold coins, Ancient Patterns |
 | Lucky Coin | Luck Meter fuel, Fated Flip payoff | Fate, Omen Engine, Fountain Pact, Twist of Fate |
-| Weighted Coin | Weight, commitment, reliability | Loaded, Weight, probability builds |
+| Weighted Coin | Weight, commitment, reliability | Weighted, probability builds |
 
 ---
 
@@ -327,7 +327,7 @@ Canonical trick categories:
 
 | Code tag | Player-facing category | Role |
 | --- | --- | --- |
-| `loaded` | Loaded Tricks | Pre-flip probability Weight and weighted payoffs |
+| `weighted` | Weighted Tricks | Pre-flip probability Weight and weighted payoffs |
 | `marked` | Prediction Tricks (?) | Foretold coins, pre-selection reads and Ancient Patterns |
 | `sleight` | Sleight Tricks | Physical coin movement, slot swaps, substitutions and movement-based rescores |
 | `counterfeit` | Forgery Tricks | Position-based identity fraud, forged credentials and copied payout/trigger behavior |
@@ -337,7 +337,7 @@ Canonical trick categories:
 | `prestige` | Prestige Tricks | Discounted replays of completed resolution packets |
 | `chain` | Chain Tricks | Live coin-to-coin trigger propagation |
 
-Loaded Tricks act before results exist by adding or increasing Weight toward a side, usually the player's call. They do not convert, reroll or repair outcomes after the flip.
+Weighted Tricks act before results exist by adding or increasing Weight toward a side, usually the player's call. They do not convert, reroll or repair outcomes after the flip.
 
 Prediction Tricks are still a question-mark category. Current direction: reveal future results on dealt coins as Foretold coins before selection, then reward selected Foretold coins that fulfill the call or match visible Ancient Patterns. They should not add individual coin-call UI, convert failures, reroll coins or fix outcomes after the flip.
 
@@ -363,7 +363,7 @@ Smuggling adds physical board bodies. It does not merely move selected coins lik
 
 Fate Tricks are Luck Meter engines and Fated Flip payoffs. They fill the Luck Meter faster, improve Luck gain, amplify Fountain Favor, reward Fated Flips and eventually allow capped Fated Flip chains.
 
-Fate only affects the global Luck Meter and Fated Flip layer. It does not create or copy coins, move coin bodies, forge identities, reroute score credit, reroll coins, Weight odds or change individual coin results. Loaded owns individual odds/results; Fate owns meter acceleration and whole-flip Fated payoff.
+Fate only affects the global Luck Meter and Fated Flip layer. It does not create or copy coins, move coin bodies, forge identities, reroute score credit, reroll coins, Weight odds or change individual coin results. Weighted owns individual odds/results; Fate owns meter acceleration and whole-flip Fated payoff.
 
 Fate risks: flat `+1 Luck` can feel like plain math, Fated Flip chaining can dominate if uncapped, and Fated retriggers can become Chain/Prestige confusion if they replay arbitrary triggers. Keep Fate effects meter-only, clearly logged and scoped with `once_per_fated_flip`, `no_individual_coin_targeting` and chain caps.
 
@@ -626,7 +626,7 @@ Reading coins and manipulating odds.
 
 Reward Pool:
 
-Prediction? and Loaded Tricks.
+Prediction? and Weighted Tricks.
 
 ---
 

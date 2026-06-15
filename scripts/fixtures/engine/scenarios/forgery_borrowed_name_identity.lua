@@ -89,7 +89,27 @@ return {
     A.equal(forgeAction.forgedCoinId, forged.sourceCoinId, "forge action source identity")
     A.traceHasAction(trace, {
       op = "forge_identity",
-      target = "slot_1_to_lowest_failed_selected_coin",
+      target = {
+        source = {
+          zone = "selected_coins",
+          filters = {
+            { op = "slot_index", value = 1 },
+          },
+          pick = { op = "slot_at_position", value = 1 },
+        },
+        target = {
+          zone = "selected_coins",
+          filters = {
+            { op = "failed_call" },
+            { op = "not_current_coin" },
+          },
+          prefer = {
+            { op = "family", value = "forgery" },
+          },
+          orderBy = "base_score",
+          pick = { op = "slot_at_position", value = 1 },
+        },
+      },
       targetInstanceId = forged.targetInstanceId,
       forgedCoinId = forged.sourceCoinId,
     }, "Borrowed Name action should be traced with forged metadata")

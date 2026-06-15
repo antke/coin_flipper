@@ -127,7 +127,7 @@ local definitions = {
       description = "The house's last obstacle: no attacks, just an HP wall to break.",
       hp = 14,
     },
-    bossModifierIds = { "loaded_ledger" },
+    bossModifierIds = { "weighted_ledger" },
     bossVariants = {
       {
         id = "boss_variant_embargo",
@@ -139,7 +139,7 @@ local definitions = {
           enemyClass = "pit_boss",
           description = "A boss who taxes every Heads-heavy plan.",
         },
-        bossModifierIds = { "heads_embargo", "loaded_ledger" },
+        bossModifierIds = { "heads_embargo", "weighted_ledger" },
       },
       {
         id = "boss_variant_tails_embargo",

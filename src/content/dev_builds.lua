@@ -6,7 +6,7 @@ local definitions = {
   {
     id = "weighted_coin_test",
     label = "Weighted Coins",
-    description = "Loaded purse with odds and luck tricks.",
+    description = "Weighted purse with odds and luck tricks.",
     runOptions = {
       starterCollection = {
         "copper_weighted_coin",

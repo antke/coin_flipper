@@ -101,7 +101,7 @@ The game is now framed as coin-flip showdowns against opponents:
 - Internal code still has legacy names such as `stageScore` and `targetScore`; docs should translate those to damage and opponent HP.
 - Fixed-slot language should be avoided unless explicitly discussing old/historical behavior.
 - Coin removal, thinning, merging, and upgrades are now purse-quality tools.
-- Interventions, mulligans, offerings, and non-Fate meters must avoid duplicating Sleight, Loaded or Fate’s Luck Meter role.
+- Interventions, mulligans, offerings, and non-Fate meters must avoid duplicating Sleight, Weighted or Fate’s Luck Meter role.
 
 ### Known cleanup issue
 
@@ -521,7 +521,7 @@ Add rare special actions that manipulate results, protect against a bad outcome,
 
 - Post-flip manipulation is extremely powerful because it uses full information.
 - Too many interventions can make the initial flip feel less important.
-- It can overlap with Sleight, Loaded result manipulation, Fate/Luck Meter payoffs, Karma, and mulligans.
+- It can overlap with Sleight, Weighted result manipulation, Fate/Luck Meter payoffs, Karma, and mulligans.
 
 ### Evaluation criteria
 
@@ -546,7 +546,7 @@ Fate now owns Luck Meter direction: correct guesses and Fate Tricks fill Luck, F
 - Correct guesses increase Luck.
 - Fate Tricks can accelerate Luck gain or Fountain Favor contributions.
 - Fated Flips are the main Luck payoff.
-- Luck should not become individual coin odds manipulation; that belongs to Loaded/Weight.
+- Luck should not become individual coin odds manipulation; that belongs to Weighted.
 
 ### Possible Karma behavior
 
@@ -576,7 +576,7 @@ Fate now owns Luck Meter direction: correct guesses and Fate Tricks fill Luck, F
 ### Risks
 
 - If both meters just “improve odds,” the system adds UI without much payoff.
-- Meter spending can overlap with Sleight, Loaded and interventions if it starts fixing individual coins.
+- Meter spending can overlap with Sleight, Weighted and interventions if it starts fixing individual coins.
 - Too many manipulation layers can make the game feel overcontrolled.
 
 ### Evaluation criteria

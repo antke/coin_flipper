@@ -138,7 +138,7 @@ Avoid coin identities such as Heads Coin, Tails Coin, Heads-Weighted Coin, Tails
 | Hollow Coin | hand overflow, contraband capacity        | Smuggling, Sleeve Pocket, Planted Double      |
 | Marked Coin | readable coin, foretold results           | Prediction?, Foretold coins, Ancient Patterns |
 | Lucky Coin  | Luck Meter fuel, Fated Flip payoff        | Fate, Omen Engine, Fountain Pact, Twist of Fate |
-| Weighted Coin | weight, commitment, reliability         | Loaded, Weight, probability builds            |
+| Weighted Coin | weight, commitment, reliability         | Weighted, probability builds                  |
 
 ### Coin Materials
 
@@ -192,7 +192,7 @@ Only actual coins should be named `X Coin`. Trick names should avoid colliding w
 
 | Code tag       | Player-facing category | Role                                           |
 | -------------- | ---------------------- | ---------------------------------------------- |
-| `loaded`       | Loaded Tricks          | pre-flip probability Weight and weighted payoffs |
+| `weighted`     | Weighted Tricks        | pre-flip probability Weight and weighted payoffs |
 | `marked`       | Prediction Tricks (?)   | foretold coins, pre-selection reads and Ancient Patterns |
 | `sleight`      | Sleight Tricks         | physical coin movement, slot swaps, substitutions and movement-based rescores |
 | `counterfeit`  | Forgery Tricks         | position-based identity fraud, forged credentials and copied payout/trigger behavior |
@@ -202,7 +202,7 @@ Only actual coins should be named `X Coin`. Trick names should avoid colliding w
 | `prestige`     | Prestige Tricks        | discounted replays of completed resolution packets |
 | `chain`        | Chain Tricks           | live coin-to-coin trigger propagation          |
 
-Loaded Tricks act before results exist by adding or increasing Weight toward a side, usually the player's call. They do not convert, reroll or repair outcomes after the flip.
+Weighted Tricks act before results exist by adding or increasing Weight toward a side, usually the player's call. They do not convert, reroll or repair outcomes after the flip.
 
 Prediction Tricks are still a question-mark category. Current direction: reveal future results on dealt coins as Foretold coins before selection, then reward selected Foretold coins that fulfill the call or match visible Ancient Patterns. They should not add individual coin-call UI, convert failures, reroll coins or fix outcomes after the flip.
 
@@ -228,7 +228,7 @@ Smuggling adds physical board bodies. It does not merely move selected coins lik
 
 Fate Tricks are Luck Meter engines and Fated Flip payoffs. They fill the Luck Meter faster, improve Luck gain, amplify Fountain Favor, reward Fated Flips and eventually allow capped Fated Flip chains.
 
-Fate only affects the global Luck Meter and Fated Flip layer. It does not create or copy coins, move coin bodies, forge identities, reroute score credit, reroll coins, Weight odds or change individual coin results. Loaded owns individual odds/results; Fate owns meter acceleration and whole-flip Fated payoff.
+Fate only affects the global Luck Meter and Fated Flip layer. It does not create or copy coins, move coin bodies, forge identities, reroute score credit, reroll coins, Weight odds or change individual coin results. Weighted owns individual odds/results; Fate owns meter acceleration and whole-flip Fated payoff.
 
 Fate risks: flat `+1 Luck` can feel like plain math, Fated Flip chaining can dominate if uncapped, and Fated retriggers can become Chain/Prestige confusion if they replay arbitrary triggers. Keep Fate effects meter-only, clearly logged and scoped with `once_per_fated_flip`, `no_individual_coin_targeting` and chain caps.
 
@@ -338,7 +338,7 @@ Positioning can matter for Tricks, but the complexity should remain readable.
 
 The player calls Heads or Tails.
 
-Heads/Tails should support build directions through Tricks, calls, Loaded Weight effects and probability manipulation. They should not become primary coin archetypes.
+Heads/Tails should support build directions through Tricks, calls, Weighted effects and probability manipulation. They should not become primary coin archetypes.
 
 ### Flip Phase
 
@@ -378,7 +378,7 @@ Instead, enemies modify encounter rules through active Tricks.
 | -------------- | -------------------------------------- | -------------------------------------- |
 | Forger         | forged credentials and copied payouts  | Forgery Tricks                         |
 | Smuggler       | hand overflow, contraband coins and illegal board capacity | Smuggling Tricks                       |
-| Card Shark     | reading coins and manipulating odds    | Prediction? and Loaded Tricks          |
+| Card Shark     | reading coins and manipulating odds    | Prediction? and Weighted Tricks        |
 | Fortune Teller | Luck Meter engines and Fated Flip payoffs | Fate Tricks                            |
 | Pit Boss       | control, pressure and house rules      | Misdirection and control-oriented Tricks       |
 | Magician       | fast hands, cup work and substitutions | Sleight Tricks                         |

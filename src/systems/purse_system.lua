@@ -139,23 +139,6 @@ local function buildSlotEntry(runState, slot, slotIndex)
   }
 end
 
-local function slotHasTag(slot, tag)
-  local definition = slot and slot.definitionId and Coins.getById(slot.definitionId) or nil
-
-  for _, currentTag in ipairs(definition and definition.tags or {}) do
-    if currentTag == tag then
-      return true
-    end
-  end
-
-  return false
-end
-
-local function isHollowSlot(slot)
-  local definition = slot and slot.definitionId and Coins.getById(slot.definitionId) or nil
-  return definition and (definition.archetype == "hollow" or slotHasTag(slot, "hollow"))
-end
-
 function PurseSystem.getHandSize(runState)
   local resolved = runState and runState.resolvedValues and runState.resolvedValues["purse.handSize"] or nil
   return math.max(1, tonumber(resolved) or DEFAULT_HAND_SIZE)
@@ -719,21 +702,21 @@ function PurseSystem.smuggleCoinFromHand(runState, stageState, options)
 
   refreshSelectedSlotIndices(purse)
 
-  local fallback = nil
   local chosen = nil
+  local targetInstanceId = options and options.instanceId or nil
+
+  if not targetInstanceId then
+    return nil, "target_instance_required"
+  end
 
   for _, slot in ipairs(purse.dealtHandSlots or {}) do
     if slot.instanceId and slot.selectedSlotIndex == nil and slot.smuggled ~= true then
-      fallback = fallback or slot
-
-      if isHollowSlot(slot) then
+      if slot.instanceId == targetInstanceId then
         chosen = slot
         break
       end
     end
   end
-
-  chosen = chosen or fallback
 
   if not chosen then
     return nil, "no_unselected_dealt_coin"

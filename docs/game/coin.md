@@ -235,14 +235,14 @@ Material Variants:
 Notes:
 
 - Lucky Coin identity is meter fuel and Fated Flip payoff, not individual result manipulation
-- Loaded/Weighted effects handle coin-level odds; Fate handles the global Luck Meter
+- Weighted effects handle coin-level odds; Fate handles the global Luck Meter
 - Fated Flip chaining needs explicit caps so Lucky Coin does not create endless destiny loops
 
 ## Weighted Coin
 
 Archetype: Weighted
 
-Tags: `loaded`, `weight`, `odds`, `reliable`
+Tags: `weighted`, `weight`, `odds`, `reliable`
 
 Base Score: 10
 
@@ -259,7 +259,7 @@ Behavior:
 Trick Synergy:
 
 - Weighted Palm
-- Loaded Edge
+- Weighted Edge
 - Heavy Payout
 
 Material Variants:

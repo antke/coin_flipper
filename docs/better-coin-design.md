@@ -384,7 +384,7 @@ Reliability.
 
 Preferred Builds:
 
-- Loaded
+- Weighted
 - Weight
 - Heads/Tails Specialists
 
@@ -452,7 +452,7 @@ Marked -> Prediction? / Foretold coins
 
 Lucky -> Fate / Luck Meter / Fated Flip
 
-Weighted -> Loaded / Weight
+Weighted -> Weighted / Weight
 
 ---
 
@@ -512,7 +512,7 @@ Heads/Tails should exist primarily through:
 
 - Scams
 - Calls
-- Loaded Weight effects
+- Weighted effects
 - Probability manipulation
 
 Not through coin identity.

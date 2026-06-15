@@ -2,6 +2,7 @@ local Bosses = require("src.content.bosses")
 local Coins = require("src.content.coins")
 local PurseSystem = require("src.systems.purse_system")
 local StageModifiers = require("src.content.stage_modifiers")
+local TriggerScope = require("src.core.trigger_scope")
 local Upgrades = require("src.content.upgrades")
 local Utils = require("src.core.utils")
 
@@ -61,6 +62,14 @@ HookRegistry.PURSE_COIN_PHASES = {
   after_hand_reorder = true,
   after_call_before_flip = true,
   before_hand_flip = true,
+}
+
+local SELECTED_TRICK_COIN_PHASES = {
+  before_hand_flip = true,
+  before_coin_roll = true,
+  after_coin_roll = true,
+  before_coin_score = true,
+  after_coin_score = true,
 }
 
 local CALL_CONDITION_PHASES = {
@@ -126,6 +135,24 @@ HookRegistry.CONDITION_SCHEMAS = {
     phases = {
       before_coin_roll = true,
       after_coin_roll = true,
+      before_coin_score = true,
+      after_coin_score = true,
+    },
+    validate = function(value)
+      return type(value) == "boolean", "must be boolean"
+    end,
+  },
+  smuggled = {
+    phases = {
+      before_coin_score = true,
+      after_coin_score = true,
+    },
+    validate = function(value)
+      return type(value) == "boolean", "must be boolean"
+    end,
+  },
+  forged = {
+    phases = {
       before_coin_score = true,
       after_coin_score = true,
     },
@@ -304,6 +331,18 @@ local function matchesCondition(condition, context)
       if isChained ~= expectedValue then
         return false
       end
+    elseif key == "smuggled" then
+      local isSmuggled = context.currentCoin and context.currentCoin.smuggled == true or false
+
+      if isSmuggled ~= expectedValue then
+        return false
+      end
+    elseif key == "forged" then
+      local isForged = context.currentCoin and context.currentCoin.forged == true or false
+
+      if isForged ~= expectedValue then
+        return false
+      end
     elseif key == "luck_gain_positive" then
       local isPositive = context.currentLuckGainEvent and (context.currentLuckGainEvent.appliedAmount or 0) > 0 or false
 
@@ -315,7 +354,7 @@ local function matchesCondition(condition, context)
         return false
       end
     elseif key == "stage_type" then
-      if context.stageState.stageType ~= expectedValue then
+      if not context.stageState or context.stageState.stageType ~= expectedValue then
         return false
       end
     elseif key == "slot_index" then
@@ -428,8 +467,15 @@ local function runSourceForPhase(phaseName, source, context, targetActionList)
     end
   end
 
-  for _, trigger in ipairs(definition.triggers or {}) do
-    if trigger.hook == phaseName and matchesCondition(trigger.condition, context) then
+  for triggerIndex, trigger in ipairs(definition.triggers or {}) do
+    local condition = trigger.condition or {}
+    local selectedCoinOnlyTrick = (source.sourceType == "trick" or source.sourceType == "run upgrade")
+      and SELECTED_TRICK_COIN_PHASES[phaseName] == true
+      and context.currentCoin
+      and context.currentCoin.selectedSlotIndex == nil
+      and condition.smuggled ~= true
+
+    if not selectedCoinOnlyTrick and trigger.hook == phaseName and matchesCondition(trigger.condition, context) and TriggerScope.shouldRun(phaseName, source, trigger, triggerIndex, context) then
       context.trace.triggeredSources = context.trace.triggeredSources or {}
       table.insert(context.trace.triggeredSources, {
         phase = phaseName,
@@ -559,7 +605,7 @@ function HookRegistry.collectSources(runState, stageState, metaProjection)
   collectFromIds(sources, runState and (runState.ownedTrickIds or runState.ownedUpgradeIds), "trick", Upgrades.getById)
 
   if runState then
-    if stageState and stageState.purse and #(stageState.purse.handSlots or {}) > 0 then
+    if stageState and stageState.purse and (#(stageState.purse.handSlots or {}) > 0 or #(stageState.purse.boardSlots or {}) > 0) then
       for slotIndex, slot in ipairs(stageState.purse.handSlots) do
         local coinId = slot.definitionId or PurseSystem.getDefinitionId(runState, slot.instanceId)
         local definition = coinId and Coins.getById(coinId) or nil
@@ -569,6 +615,21 @@ function HookRegistry.collectSources(runState, stageState, metaProjection)
             instanceId = slot.instanceId,
             coinId = coinId,
             slotIndex = slotIndex,
+          }))
+        end
+      end
+
+      for overloadIndex, slot in ipairs(stageState.purse.boardSlots or {}) do
+        local coinId = slot.definitionId or PurseSystem.getDefinitionId(runState, slot.instanceId)
+        local definition = coinId and Coins.getById(coinId) or nil
+
+        if definition then
+          table.insert(sources, HookRegistry.buildSource("equipped coin", slot.instanceId, definition, {
+            instanceId = slot.instanceId,
+            coinId = coinId,
+            slotIndex = slot.boardSlotIndex or (#(stageState.purse.handSlots or {}) + overloadIndex),
+            boardSlotIndex = slot.boardSlotIndex,
+            overloadSlotIndex = slot.overloadSlotIndex or overloadIndex,
           }))
         end
       end

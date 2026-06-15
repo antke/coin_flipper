@@ -3,11 +3,11 @@ local definitions = {
 		id = "weighted_tail_coating",
 		name = "Tailside Edge",
 		rarity = "uncommon",
-		description = "Before each flip, all selected coins gain +15% Tails chance.",
-		tags = { "loaded", "tails", "weight" },
+    description = "Before each flip, all selected coins gain +15% Tails chance. Weighted Coins gain double the odds shift.",
+		tags = { "weighted", "tails", "weight" },
 		trick = {
-			category = "loaded",
-			tags = { "loaded", "weight", "tails" },
+			category = "weighted",
+			tags = { "weighted", "weight", "tails" },
 			tier = 1,
 			timing = "before_flip",
 			targetRule = "all_selected_coins",
@@ -17,7 +17,7 @@ local definitions = {
 			{
 				hook = "before_coin_roll",
 				effects = {
-					{ op = "add_weight", side = "tails", amount = 0.15 },
+					{ op = "add_weight", side = "tails", amount = 0.15, specializedFamily = "weighted" },
 				},
 			},
 		},
@@ -49,7 +49,7 @@ local definitions = {
 		id = "steady_hand",
 		name = "Steady Finish",
 		rarity = "common",
-		description = "Before scoring, apply 1.10x Score scaling.",
+    description = "Before scoring, total Score is multiplied by 1.10x. Matching Bent Coins score double.",
 		tags = { "prestige", "score_scaling" },
 		trick = {
 			category = "prestige",
@@ -66,20 +66,27 @@ local definitions = {
 					{ op = "apply_score_scaling", value = 1.10 },
 				},
 			},
+			{
+				hook = "before_coin_score",
+				condition = { match = true },
+				effects = {
+					{ op = "apply_score_scaling", value = 1.0, target = "current_coin_score", specializedFamily = "prestige", requireSpecializedFamily = true },
+				},
+			},
 		},
 	},
 	{
 		id = "encore",
 		name = "Encore",
 		rarity = "common",
-		description = "After all effects, replay one selected coin's completed packet at 20% value.",
+    description = "After all effects, replay one Bent Coin’s completed packet if possible, otherwise one selected coin’s packet, at 20% value. Bent Coins replay at double value.",
 		tags = { "prestige", "resolution_packet", "prestige_replay", "encore" },
 		trick = {
 			category = "prestige",
 			tags = { "prestige", "resolution_packet", "prestige_replay", "encore" },
 			tier = 1,
 			timing = "after_all_effects",
-			targetRule = "bent_coin_or_random_selected_packet",
+			targetRule = "selected_positive_packet_prefer_prestige_then_bent_random",
 			scope = {
 				oncePerFlip = true,
 				oncePerPrestige = true,
@@ -92,7 +99,25 @@ local definitions = {
 			{
 				hook = "after_all_effects",
 				effects = {
-					{ op = "replay_resolution_packet", target = "encore_bent_or_random_selected_packet", scale = 0.2 },
+					{
+						op = "replay_resolution_packet",
+						target = {
+							zone = "resolution_packets",
+							filters = {
+								{ op = "selected" },
+								{ op = "positive_score" },
+								{ op = "not_prestige_replay" },
+							},
+							prefer = {
+								{ op = "family", value = "prestige" },
+								{ op = "archetype", value = "bent" },
+							},
+							orderBy = "random",
+							pick = { op = "slot_at_position", value = 1 },
+						},
+						scale = 0.2,
+						specializedFamily = "prestige",
+					},
 				},
 			},
 		},
@@ -101,7 +126,7 @@ local definitions = {
 		id = "roomy_bandolier",
 		name = "Hidden Sleeve",
 		rarity = "rare",
-		description = "+1 max Flip Slot for the run.",
+    description = "Gain +1 max Flip Slot for the run.",
 		tags = { "smuggle", "slots" },
 		trick = {
 			category = "smuggle",
@@ -119,14 +144,14 @@ local definitions = {
 		id = "sleeve_pocket",
 		name = "Sleeve Pocket",
 		rarity = "common",
-		description = "After the call, smuggle one unselected dealt coin into an overload slot for this flip.",
+    description = "After the call, smuggle one Hollow Coin if possible, otherwise one unselected dealt coin, into an overload slot for this flip. Hollow Coins score double.",
 		tags = { "smuggle", "hand", "board_overload", "extra_coin" },
 		trick = {
 			category = "smuggle",
 			tags = { "smuggle", "hand", "board_overload", "extra_coin" },
 			tier = 1,
 			timing = "after_call_before_flip",
-			targetRule = "hollow_coin_or_leftmost_unselected_hand_coin",
+			targetRule = "dealt_hand_unselected_prefer_smuggle_then_hollow_lowest_slot_position",
 			scope = { oncePerFlip = true, maxOverloadSlots = 1 },
 		},
 		triggers = {
@@ -136,9 +161,29 @@ local definitions = {
 				effects = {
 					{
 						op = "smuggle_coin_from_hand",
-						target = "hollow_or_leftmost_unselected_hand_coin",
+						target = {
+							zone = "dealt_hand",
+							filters = {
+								{ op = "not_selected" },
+								{ op = "not_smuggled" },
+							},
+							prefer = {
+								{ op = "family", value = "smuggle" },
+								{ op = "archetype", value = "hollow" },
+							},
+							orderBy = "slot_position",
+							pick = { op = "slot_at_position", value = 1 },
+						},
 						maxOverloadSlots = 1,
+						specializedFamily = "smuggle",
 					},
+				},
+			},
+			{
+				hook = "before_coin_score",
+				condition = { smuggled = true, match = true },
+				effects = {
+					{ op = "apply_score_scaling", value = 1.0, target = "current_coin_score", specializedFamily = "smuggle", requireSpecializedFamily = true },
 				},
 			},
 		},
@@ -147,7 +192,7 @@ local definitions = {
 		id = "starter_grant",
 		name = "Opening Stake",
 		rarity = "common",
-		description = "+2 Influence on acquire.",
+    description = "Gain +2 Influence when acquired.",
 		tags = { "fate", "payout", "influence" },
 		trick = {
 			category = "fate",
@@ -165,7 +210,7 @@ local definitions = {
 		id = "omen_engine",
 		name = "Omen Engine",
 		rarity = "common",
-		description = "Once per flip, the first positive Luck gain adds +1 extra Luck Meter progress.",
+    description = "Once per flip, your first positive Luck gain adds +1 extra Luck Meter progress.",
 		tags = { "fate", "luck_meter", "luck_gain", "accelerator" },
 		trick = {
 			category = "fate",
@@ -189,11 +234,11 @@ local definitions = {
 		id = "heads_varnish",
 		name = "Headside Edge",
 		rarity = "common",
-		description = "Before each flip, all selected coins gain +12% Heads chance.",
-		tags = { "loaded", "heads", "weight" },
+    description = "Before each flip, all selected coins gain +12% Heads chance. Weighted Coins gain double the odds shift.",
+		tags = { "weighted", "heads", "weight" },
 		trick = {
-			category = "loaded",
-			tags = { "loaded", "weight", "heads" },
+			category = "weighted",
+			tags = { "weighted", "weight", "heads" },
 			tier = 1,
 			timing = "before_flip",
 			targetRule = "all_selected_coins",
@@ -203,7 +248,7 @@ local definitions = {
 			{
 				hook = "before_coin_roll",
 				effects = {
-					{ op = "add_weight", side = "heads", amount = 0.12 },
+					{ op = "add_weight", side = "heads", amount = 0.12, specializedFamily = "weighted" },
 				},
 			},
 		},
@@ -212,14 +257,14 @@ local definitions = {
 		id = "weighted_palm",
 		name = "Weighted Palm",
 		rarity = "common",
-		description = "Before each flip, set one selected Weighted Coin—or the leftmost selected coin—to 75% call-match chance.",
-		tags = { "loaded", "weight", "call_bias" },
+    description = "Before each flip, set one selected Weighted Coin, or the leftmost selected coin, to 75% call-match chance.",
+		tags = { "weighted", "weight", "call_bias" },
 		trick = {
-			category = "loaded",
-			tags = { "loaded", "weight", "call_bias" },
+			category = "weighted",
+			tags = { "weighted", "weight", "call_bias" },
 			tier = 1,
 			timing = "before_flip",
-			targetRule = "first_weighted_coin_or_leftmost_selected_coin",
+			targetRule = "selected_coins_prefer_weighted_lowest_slot_position",
 			scope = { oncePerFlip = true },
 		},
 		triggers = {
@@ -227,7 +272,18 @@ local definitions = {
 				hook = "before_coin_roll",
 				condition = { slot_index = 1 },
 				effects = {
-					{ op = "set_call_match_chance", chance = 0.75, target = "first_weighted_or_leftmost" },
+					{
+						op = "set_call_match_chance",
+						chance = 0.75,
+						target = {
+							zone = "selected_coins",
+							prefer = {
+								{ op = "family", value = "weighted" },
+							},
+							orderBy = "slot_position",
+							pick = { op = "slot_at_position", value = 1 },
+						},
+					},
 				},
 			},
 		},
@@ -236,14 +292,14 @@ local definitions = {
 		id = "see_behind_the_veil",
 		name = "See Behind the Veil",
 		rarity = "common",
-		description = "After each deal, reveal the future result of one random dealt coin before selection.",
+    description = "After each deal, Foretell one Marked Coin if possible, otherwise one random dealt coin, before selection.",
 		tags = { "prediction", "marked", "foretold", "read", "auto" },
 		trick = {
 			category = "prediction",
 			tags = { "prediction", "marked", "foretold", "read", "auto" },
 			tier = 1,
 			timing = "after_deal_before_selection",
-			targetRule = "one_random_unrevealed_dealt_coin",
+			targetRule = "dealt_hand_not_foretold_prefer_prediction_random_slot_position",
 			scope = { oncePerDeal = true },
 		},
 		triggers = {
@@ -251,7 +307,21 @@ local definitions = {
 				hook = "after_deal_before_selection",
 				condition = { slot_index = 1 },
 				effects = {
-					{ op = "foretell_coin_result", target = "random_dealt_coin" },
+					{
+						op = "foretell_coin_result",
+						target = {
+							zone = "dealt_hand",
+							filters = {
+								{ op = "not_foretold" },
+							},
+							prefer = {
+								{ op = "family", value = "prediction" },
+							},
+							orderBy = "random",
+							pick = { op = "slot_at_position", value = 1 },
+						},
+						specializedFamily = "prediction",
+					},
 				},
 			},
 		},
@@ -260,14 +330,14 @@ local definitions = {
 		id = "borrowed_name",
 		name = "Borrowed Name",
 		rarity = "common",
-		description = "Before scoring, one failed selected coin borrows the slot 1 coin's identity for one payout check.",
+    description = "Before scoring, one failed Blank Coin if possible, otherwise one failed selected coin, borrows the slot 1 coin’s identity for one payout check. Forged Blank Coins score double.",
 		tags = { "counterfeit", "identity", "slot_1", "replace_identity" },
 		trick = {
 			category = "forgery",
 			tags = { "counterfeit", "identity", "slot_1", "replace_identity" },
 			tier = 1,
 			timing = "before_coin_score",
-			targetRule = "slot_1_template_lowest_base_score_failed_selected_coin",
+			targetRule = "selected_slot_1_to_failed_selected_prefer_forgery_lowest_base_score",
 			scope = { oncePerFlip = true, onePayoutOnly = true },
 		},
 		triggers = {
@@ -275,7 +345,38 @@ local definitions = {
 				hook = "before_coin_score",
 				condition = { slot_index = 1 },
 				effects = {
-					{ op = "forge_identity", target = "slot_1_to_lowest_failed_selected_coin" },
+					{
+						op = "forge_identity",
+						target = {
+							source = {
+								zone = "selected_coins",
+								filters = {
+									{ op = "slot_index", value = 1 },
+								},
+								pick = { op = "slot_at_position", value = 1 },
+							},
+							target = {
+								zone = "selected_coins",
+								filters = {
+									{ op = "failed_call" },
+									{ op = "not_current_coin" },
+								},
+								prefer = {
+									{ op = "family", value = "forgery" },
+								},
+								orderBy = "base_score",
+								pick = { op = "slot_at_position", value = 1 },
+							},
+						},
+						specializedFamily = "forgery",
+					},
+				},
+			},
+			{
+				hook = "before_coin_score",
+				condition = { forged = true, match = true },
+				effects = {
+					{ op = "apply_score_scaling", value = 1.0, target = "current_coin_score", specializedFamily = "forgery", requireSpecializedFamily = true },
 				},
 			},
 		},
@@ -284,7 +385,7 @@ local definitions = {
 		id = "crooked_spotlight",
 		name = "Crooked Spotlight",
 		rarity = "common",
-		description = "Before scoring, one cheap successful coin books its score credit onto the Spotlight coin.",
+    description = "Before scoring, one low-value successful coin gives its score credit to the highest-value successful coin.",
 		tags = { "misdirection", "spotlight", "score_credit", "score_funnel" },
 		trick = {
 			category = "misdirection",
@@ -299,7 +400,29 @@ local definitions = {
 				hook = "before_coin_score",
 				condition = { slot_index = 1 },
 				effects = {
-					{ op = "redirect_score_credit", target = "crooked_spotlight_lowest_success_to_highest_success" },
+					{
+						op = "redirect_score_credit",
+						target = {
+							target = {
+								zone = "selected_coins",
+								filters = {
+									{ op = "matched_call" },
+								},
+								orderBy = "base_score_desc",
+								pick = { op = "slot_at_position", value = 1 },
+							},
+							source = {
+								zone = "selected_coins",
+								filters = {
+									{ op = "matched_call" },
+									{ op = "not_context_instance" },
+									{ op = "not_redirected_credit" },
+								},
+								orderBy = "base_score",
+								pick = { op = "slot_at_position", value = 1 },
+							},
+						},
+					},
 				},
 			},
 		},
@@ -308,7 +431,7 @@ local definitions = {
 		id = "switcheroo",
 		name = "Switcheroo",
 		rarity = "common",
-		description = "After each flip, swap a failed coin body with a successful result slot before scoring.",
+    description = "After each flip, swap one failed coin with one successful result slot before scoring.",
 		tags = { "sleight", "position", "swap", "slot" },
 		trick = {
 			category = "sleight",
@@ -322,7 +445,28 @@ local definitions = {
 			{
 				hook = "after_flip_before_score",
 				effects = {
-					{ op = "swap_coins", target = "switcheroo_failed_success" },
+					{
+						op = "swap_coins",
+						target = {
+							source = {
+								zone = "selected_coins",
+								filters = {
+									{ op = "failed_call" },
+								},
+								orderBy = "base_score_desc",
+								pick = { op = "slot_at_position", value = 1 },
+							},
+							target = {
+								zone = "selected_coins",
+								filters = {
+									{ op = "matched_call" },
+									{ op = "not_context_instance" },
+								},
+								orderBy = "base_score",
+								pick = { op = "slot_at_position", value = 1 },
+							},
+						},
+					},
 				},
 			},
 		},
@@ -332,7 +476,7 @@ local definitions = {
 		name = "House Voucher",
 		rarity = "common",
 		shopEligible = true,
-		description = "On acquire, gain 1 Free Reroll for the rest of the run.",
+    description = "Gain 1 Free Reroll for the rest of the run when acquired.",
 		tags = { "fate", "reroll", "black_market" },
 		trick = {
 			category = "fate",
@@ -380,7 +524,7 @@ local definitions = {
 		unlockedByDefault = false,
 		rewardEligible = false,
 		shopEligible = true,
-		description = "Buying Tricks refunds 1 Influence in future Black Markets.",
+    description = "Buying a Trick refunds 1 Influence in future Black Markets.",
 		tags = { "misdirection", "black_market", "influence" },
 		trick = {
 			category = "misdirection",
@@ -405,14 +549,14 @@ local definitions = {
 		id = "domino_line",
 		name = "Domino Line",
 		rarity = "common",
-		description = "After a scoring coin, there is a 50% chance to trigger a random neighbouring coin in a capped Chain.",
+    description = "After a scoring coin, there is a 50% chance to trigger a neighbouring Bent Coin if possible, otherwise a random neighbouring coin, in a capped Chain. Chained Bent Coins score double.",
 		tags = { "chain", "chained", "random_neighbor", "propagation" },
 		trick = {
 			category = "chain",
 			tags = { "chain", "chained", "random_neighbor", "propagation" },
 			tier = 1,
 			timing = "after_coin_score",
-			targetRule = "random_unused_neighbor",
+			targetRule = "unused_neighbor_prefer_chain_random",
 			scope = { oncePerFlip = true, chainChance = 0.5, maxChainDepth = 2, maxTriggers = 2, noChainReentry = true },
 		},
 		triggers = {
@@ -422,11 +566,30 @@ local definitions = {
 				effects = {
 					{
 						op = "trigger_random_neighbor",
-						target = "random_neighbor",
+						target = {
+							zone = "selected_coins",
+							filters = {
+								{ op = "neighbor_of_current" },
+								{ op = "not_used_resolution_index" },
+							},
+							prefer = {
+								{ op = "family", value = "chain" },
+							},
+							orderBy = "random",
+							pick = { op = "slot_at_position", value = 1 },
+						},
 						chainChance = 0.5,
 						maxChainDepth = 2,
 						maxTriggers = 2,
+						specializedFamily = "chain",
 					},
+				},
+			},
+			{
+				hook = "before_coin_score",
+				condition = { chained = true, match = true },
+				effects = {
+					{ op = "apply_score_scaling", value = 1.0, target = "current_coin_score", specializedFamily = "chain", requireSpecializedFamily = true },
 				},
 			},
 		},
@@ -436,7 +599,7 @@ local definitions = {
 		name = "Echo Wager",
 		rarity = "uncommon",
 		unlockedByDefault = false,
-		description = "At flip start, create a temporary echo: if every coin matches this flip, gain +1 Influence.",
+    description = "At flip start, create a temporary echo. If every coin matches this flip, gain +1 Influence.",
 		tags = { "chain", "temporary", "black_market", "all_match" },
 		trick = {
 			category = "chain",
@@ -455,7 +618,7 @@ local definitions = {
 						effect = {
 							id = "echo_cache_echo",
 							name = "Echo Wager Echo",
-							description = "This flip only: if every coin matches, gain +1 Influence.",
+              description = "This flip only, if every coin matches, gain +1 Influence.",
 							triggers = {
 								{
 									hook = "after_scoring",
@@ -482,7 +645,7 @@ local definitions = {
 		id = "tails_contract",
 		name = "Tails Pact",
 		rarity = "common",
-		description = "Tails calls are worth 1.15x Score.",
+    description = "Tails calls multiply Score by 1.15x.",
 		tags = { "prediction", "tails", "score_scaling" },
 		trick = {
 			category = "prediction",
@@ -506,7 +669,7 @@ local definitions = {
 		id = "heads_notebook",
 		name = "Heads Ledger",
 		rarity = "common",
-		description = "After scoring a Heads call flip, gain +1 Influence.",
+    description = "After scoring a Heads call, gain +1 Influence.",
 		tags = { "prediction", "heads", "payout", "influence" },
 		trick = {
 			category = "prediction",
@@ -530,7 +693,7 @@ local definitions = {
 		id = "heads_contract",
 		name = "Heads Pact",
 		rarity = "common",
-		description = "Heads calls are worth 1.15x Score.",
+    description = "Heads calls multiply Score by 1.15x.",
 		tags = { "prediction", "heads", "score_scaling" },
 		trick = {
 			category = "prediction",
@@ -554,7 +717,7 @@ local definitions = {
 		id = "fulfilled_fate",
 		name = "Fulfilled Fate",
 		rarity = "common",
-		description = "The first selected Foretold coin that matches your call scores 2x.",
+    description = "The first selected Foretold coin that matches your call scores 2x. Marked Coins double this bonus.",
 		tags = { "prediction", "marked", "foretold", "fulfillment", "score_scaling" },
 		trick = {
 			category = "prediction",
@@ -569,7 +732,7 @@ local definitions = {
 				hook = "before_coin_score",
 				condition = { foretold = true, match = true },
 				effects = {
-					{ op = "apply_score_scaling", value = 2.0, target = "current_coin_score" },
+					{ op = "apply_score_scaling", value = 2.0, target = "current_coin_score", specializedFamily = "prediction" },
 				},
 			},
 		},
@@ -630,7 +793,7 @@ local definitions = {
 		unlockedByDefault = false,
 		rewardEligible = false,
 		shopEligible = true,
-		description = "Buying a coin grants 1 Free Reroll.",
+    description = "Buying a Coin grants 1 Free Reroll.",
 		tags = { "misdirection", "black_market", "reroll", "coin" },
 		trick = {
 			category = "misdirection",

@@ -38,7 +38,7 @@ return {
     A.equal(generation.enemyClass, "card_shark", "reward generation should record enemy class")
     A.equal(generation.enemyClassLabel, "Card Shark", "reward generation should record enemy class label")
     A.truthy(pool.prediction, "Card Shark pool should include Prediction")
-    A.truthy(pool.loaded, "Card Shark pool should include Loaded")
+    A.truthy(pool.weighted, "Card Shark pool should include Weighted")
     A.truthy(#(preview.options or {}) > 0, "enemy class should produce Trick offers")
     A.truthy((generation.wildcardOfferCount or 0) <= (generation.wildcardCap or 0), "wildcard offers should stay within cap")
 

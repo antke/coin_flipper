@@ -10,8 +10,8 @@ local definitions = {
     material_variants = {
       copper = { id = "copper_bent_coin", materialRank = 1, base_score = 1 },
     },
-    description = "A crooked build piece for Prestige and Chain Tricks.",
-    effectDescription = "No direct flip effect. Synergizes with Prestige and Chain Tricks.",
+    description = "A crooked coin that strengthens Prestige and Chain Tricks.",
+    effectDescription = "Prestige and Chain Trick bonuses that name Bent Coins apply to this coin.",
     tags = { "prestige", "chain", "bent", "unstable" },
     typeTags = { "prestige", "chain" },
     mechanic_terms = { "resolution_packet", "prestige_replay", "chained_coin", "chain_depth" },
@@ -30,8 +30,8 @@ local definitions = {
     material_variants = {
       copper = { id = "copper_blank_coin", materialRank = 1, base_score = 1 },
     },
-    description = "An unstamped build piece for Forgery Tricks.",
-    effectDescription = "No direct flip effect. Synergizes with Forgery Tricks.",
+    description = "An unstamped coin that strengthens Forgery Tricks.",
+    effectDescription = "Forgery Trick bonuses that name Blank Coins apply to this coin.",
     tags = { "counterfeit", "blank", "forgery", "copyable" },
     typeTags = { "forgery", "copyable" },
     mechanic_terms = { "forged_identity", "forge_identity", "add_forged_identity" },
@@ -50,8 +50,8 @@ local definitions = {
     material_variants = {
       copper = { id = "copper_hollow_coin", materialRank = 1, base_score = 1 },
     },
-    description = "A lightweight build piece for Smuggling Tricks.",
-    effectDescription = "No direct flip effect. Synergizes with Smuggling Tricks.",
+    description = "A hollow coin that strengthens Smuggling Tricks.",
+    effectDescription = "Smuggle Trick bonuses that name Hollow Coins apply to this coin.",
     tags = { "smuggle", "hollow", "contraband", "hand_overflow" },
     typeTags = { "smuggle", "contraband" },
     mechanic_terms = { "smuggle_coin_from_hand", "overloaded_board", "contraband_copy", "increase_refill_count" },
@@ -70,8 +70,8 @@ local definitions = {
     material_variants = {
       copper = { id = "copper_marked_coin", materialRank = 1, base_score = 1 },
     },
-    description = "A readable build piece for Prediction and Foretold Tricks.",
-    effectDescription = "No direct flip effect. Synergizes with Foretold Tricks.",
+    description = "A marked coin that strengthens Prediction Tricks.",
+    effectDescription = "Prediction Trick bonuses that name Marked Coins apply to this coin.",
     tags = { "marked", "foretold", "read" },
     typeTags = { "foretold", "read" },
     mechanic_terms = { "foretell_coin_result", "foretold_result" },
@@ -90,7 +90,7 @@ local definitions = {
     material_variants = {
       copper = { id = "copper_lucky_coin", materialRank = 1, base_score = 1 },
     },
-    description = "A fate-touched build piece for Luck Meter Tricks.",
+    description = "A fate-touched coin that builds the Luck Meter.",
     effectDescription = "+1 Luck Meter progress when this coin matches your call.",
     tags = { "fate", "luck_meter", "fated_flip", "destiny" },
     typeTags = { "fate", "luck_meter" },
@@ -119,12 +119,12 @@ local definitions = {
     material_variants = {
       copper = { id = "copper_weighted_coin", materialRank = 1, base_score = 1, call_match_chance = 0.65 },
     },
-    description = "A loaded build piece that leans toward your declared call.",
-    effectDescription = "65% chance to match your call.",
-    tags = { "loaded", "weight", "odds", "reliable" },
-    typeTags = { "loaded", "reliable" },
+    description = "A weighted coin that leans toward your declared call.",
+    effectDescription = "65% chance to match your call. Counts as a Weighted Coin for Trick bonuses.",
+    tags = { "weighted", "weight", "odds", "reliable" },
+    typeTags = { "weighted", "reliable" },
     mechanic_terms = { "set_call_match_chance", "call_match_chance" },
-    trick_synergy = { "loaded" },
+    trick_synergy = { "weighted" },
     isStarter = true,
     triggers = {
       {

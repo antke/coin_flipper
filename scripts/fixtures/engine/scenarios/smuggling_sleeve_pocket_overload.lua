@@ -100,7 +100,19 @@ return {
     A.equal(move.boardSlotIndex, board.boardSlotIndex, "smuggling move board slot")
     A.traceHasAction(trace, {
       op = "smuggle_coin_from_hand",
-      target = "hollow_or_leftmost_unselected_hand_coin",
+      target = {
+        zone = "dealt_hand",
+        filters = {
+          { op = "not_selected" },
+          { op = "not_smuggled" },
+        },
+        prefer = {
+          { op = "family", value = "smuggle" },
+          { op = "archetype", value = "hollow" },
+        },
+        orderBy = "slot_position",
+        pick = { op = "slot_at_position", value = 1 },
+      },
       smuggledInstanceId = board.instanceId,
       boardSlotIndex = board.boardSlotIndex,
       overloadSlotIndex = board.overloadSlotIndex,

@@ -39,7 +39,7 @@ return {
     { op = "init_run" },
     { op = "create_stage" },
     { op = "commit_loadout" },
-    { op = "resolve_batch", call = "heads", selectedDealtIndexes = { 4, 1, 2 }, label = "first_batch" },
+    { op = "resolve_batch", call = "heads", selectedDealtIndexes = { 6, 1, 2 }, label = "first_batch" },
     { op = "resolve_until_stage_end", call = "heads", maxBatches = 4, label = "remaining_batches" },
     { op = "finalize_stage" },
     { op = "build_transcript" },
@@ -93,6 +93,17 @@ return {
     A.equal(foretellAction.instanceId, foretoldDealt.instanceId, "Foretell action target instance")
     A.equal(foretellAction.foretoldResult, foretoldDealt.foretoldResult, "Foretell action result metadata")
     A.equal(foretellAction.dealtIndex, foretoldDealt.dealtIndex, "Foretell action dealt index")
+    A.equal(foretellAction.target, {
+      zone = "dealt_hand",
+      filters = {
+        { op = "not_foretold" },
+      },
+      prefer = {
+        { op = "family", value = "prediction" },
+      },
+      orderBy = "random",
+      pick = { op = "slot_at_position", value = 1 },
+    }, "Foretell action should use selector target")
 
     local scopedScaling = nil
     local scoreScalings = firstBatch.scoreBreakdown and firstBatch.scoreBreakdown.scoreScalings or {}

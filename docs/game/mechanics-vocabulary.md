@@ -83,6 +83,49 @@ Use this document when adding entries to `coin.md`, `trick.md` or technical cont
 | `after_all_effects` | late cleanup, delayed effects, moved-layout rescores, Prestige packet replays and final retriggers |
 | `encounter_end` | reward and failure flow |
 
+## Engine Hooks
+
+Content files should use hook names from `src/core/hook_registry.lua`. These are the stable engine-facing timing windows for coin, Trick, stage, boss, meta and temporary-effect triggers.
+
+| Hook | Use |
+| --- | --- |
+| `after_deal_before_selection` | dealt coins exist before player selection |
+| `after_hand_draw` | hand draw/refill just produced visible hand coins |
+| `before_sleight` | before Sleight-style layout changes |
+| `after_sleight_return` | after Sleight returns or restores coin bodies |
+| `after_replacement_draw` | after replacement draw effects |
+| `after_hand_reorder` | after selected hand order changes |
+| `after_call_before_flip` | player call exists, results do not; Smuggling belongs here |
+| `before_hand_flip` | selected/board coins are about to flip |
+| `on_batch_start` | flip batch setup begins |
+| `before_batch_validation` | before flip legality and requirements are locked |
+| `before_coin_roll` | per-coin odds can change before result generation |
+| `after_coin_roll` | per-coin result exists before scoring |
+| `after_flip_before_score` | all results exist before scoring starts |
+| `before_scoring` | aggregate score modifiers before per-coin score assembly |
+| `before_coin_score` | one coin score event is active and mutable |
+| `after_coin_score` | one coin score event has been calculated |
+| `after_scoring` | score actions have been applied |
+| `luck_gain` | Luck gain event is active and mutable |
+| `luck_meter_full` | Luck meter just filled |
+| `after_all_effects` | late one-shot effects such as Prestige packet replay |
+| `before_stage_end_check` | final stage-clear/failure checks are about to run |
+| `on_batch_end` | flip batch cleanup and post-resolution effects |
+| shop and purchase hooks | offer generation, pricing, blocking, purchase recording and shop cleanup |
+
+Do not invent content-only hook names. Add the hook to `HookRegistry.PHASES` first, with a clear timing contract, if a new timing window is truly needed.
+
+## Conditions
+
+Triggers use `condition = { ... }` objects checked by `HookRegistry.CONDITION_SCHEMAS`. Current common condition keys include:
+
+- coin/result state: `call`, `result`, `match`, `foretold`, `chained`, `smuggled`, `forged`, `slot_index`
+- batch state: flags such as `all_matched`, `any_matched`, `no_matches`
+- Luck state: current Luck gain amount/source/reason fields
+- stage/shop/purchase state: stage flags, current offer fields, purchase fields and shop flags
+
+Conditions should describe observable state at the hook, not reimplement target selection or action logic.
+
 ## Action Terms
 
 | Action | Meaning |
@@ -143,6 +186,42 @@ Use this document when adding entries to `coin.md`, `trick.md` or technical cont
 | `set_flag` | mark state for later requirements or actions |
 | `satisfy_requirement` | allow an object to count as meeting a requirement |
 
+## Action Operation Categories
+
+`src/core/action_queue.lua` is the mutation boundary. New Trick and coin content should prefer existing operation categories before adding another bespoke operation.
+
+| Category | Current operations | Rule |
+| --- | --- | --- |
+| score and economy primitives | `add_stage_score`, `add_run_score`, `add_influence`, `add_shop_points`, `apply_score_scaling`, `apply_score_multiplier` | generic; should stay usable by many Tricks |
+| coin chance/result primitives | `add_weight`, `set_call_match_chance`, `modify_coin_weight`, `foretell_coin_result` | generic; target via existing coin context/target rules |
+| family mechanics | `smuggle_coin_from_hand`, `replay_resolution_packet`, `trigger_random_neighbor`, `forge_identity`, `redirect_score_credit`, `swap_coins` | allowed when they represent a reusable family verb, not one named Trick |
+| state and flags | `set_batch_flag`, `set_stage_flag`, `set_run_flag`, `set_shop_flag`, `queue_trace_note` | use for scope gates, requirements and traceable state |
+| grants and loadout | `grant_coin`, `grant_trick`, `grant_upgrade`, `increase_coin_slots`, `grant_temporary_effect`, `consume_effect` | use for acquisition/reward effects |
+| shop actions | `add_shop_rerolls`, `add_shop_offer`, `adjust_shop_price`, `block_purchase`, `add_shop_message`, `mark_shop_offer_purchased`, `record_purchase` | shop-only effects; keep out of flip resolution unless a hook explicitly runs in shop |
+| action composition | `queue_actions` | use sparingly for delayed or generated actions with clear trace/source fields |
+
+Adding a new operation is appropriate only when the effect introduces a genuinely new reusable mechanic. If it only combines existing primitives, write the Trick with multiple effects instead.
+
+Action operation implementations and their validation belong in focused modules under `src/core/actions/`; `ActionQueue` should remain the dispatcher and shared tracing/transaction boundary.
+
+Coin chance operations (`add_weight`, `set_call_match_chance`, `modify_coin_weight`) are implemented in `src/core/actions/coin_chance_actions.lua`; they should mutate per-coin flip probabilities through that shared path rather than in family-specific mechanics.
+
+Prediction, identity/layout and purse actions are implemented in focused action modules under `src/core/actions/`: `prediction_actions.lua` owns `foretell_coin_result`, `identity_actions.lua` owns `forge_identity`, `redirect_score_credit` and `swap_coins`, and `purse_actions.lua` owns `smuggle_coin_from_hand`. Keep future verbs in the smallest module that owns their mutation surface instead of adding more implementation branches directly to `ActionQueue`.
+
+Replay/chain family actions are implemented in `replay_actions.lua` and `chain_actions.lua`. Economy and shop operations are implemented in `economy_actions.lua` and `shop_actions.lua`.
+
+## Score Path Rules
+
+Score has one authoritative mutation boundary: score-changing effects must apply through `ActionQueue` score operations, implemented in `src/core/actions/score_actions.lua`.
+
+- Per-coin score changes use `before_coin_score` plus `apply_score_scaling`/`apply_score_multiplier` with `target = "current_coin_score"`.
+- Whole-flip score scaling uses `before_scoring` plus `apply_score_scaling`/`apply_score_multiplier` without a per-coin target.
+- Final score deltas use `add_stage_score` for stage damage/run total or `add_run_score` for run-only score.
+- Score-like replay effects, including Prestige, should calculate their replayed amount and then reuse the same stage/run score application path as `add_stage_score`.
+- Direct writes to `stageState.scoreAppliedToHp`, `runState.runTotalScore` or `scoreBreakdown.total*Delta` outside score action handlers should be treated as architecture debt unless they are part of that shared application path.
+
+Resolution packets are records of completed score events; replaying a packet must not reroll coins, choose new targets or recursively produce another Prestige replay unless a future scope rule explicitly allows it.
+
 ## Requirement Terms
 
 | Requirement | Meaning |
@@ -196,6 +275,36 @@ Use this document when adding entries to `coin.md`, `trick.md` or technical cont
 
 Every automatic Trick must define deterministic targeting.
 
+Prefer selector primitives over bespoke names. A target should describe the zone, filters, preferences, ordering and pick step rather than baking a whole Trick into a string like `first_slot` or `hollow_or_leftmost_unselected_hand_coin`.
+
+Example selector shape:
+
+```lua
+target = {
+  zone = "dealt_hand",
+  filters = {
+    { op = "not_selected" },
+    { op = "not_smuggled" },
+  },
+  prefer = {
+    { op = "family", value = "smuggle" },
+    { op = "archetype", value = "hollow" },
+  },
+  orderBy = "slot_position",
+  pick = { op = "slot_at_position", value = 1 },
+}
+```
+
+Use positional primitives such as `slot_at_position(1)` over prose terms such as “first slot”. The ordering field defines what position means; for example, `orderBy = "slot_position"` and `slot_at_position(1)` means the lowest current slot position among remaining candidates.
+
+Use `orderBy = "random"` only with deterministic run RNG, then pick with `slot_at_position(1)` from the randomized candidate pool.
+
+Current slot selector zones include `dealt_hand` for dealt purse slots, `selected_coins` for the active flip's selected/resolution-order coins and `resolution_packets` for completed scoring packets.
+
+Current selector filters include `not_selected`, `selected`, `not_smuggled`, `not_foretold`, `slot_index`, `failed_call`, `matched_call`, `not_current_coin`, `not_context_instance`, `not_redirected_credit`, `neighbor_of_current`, `not_used_resolution_index`, `positive_score` and `not_prestige_replay`. Current ordering modes include `slot_position`, `random`, `base_score` and `base_score_desc`.
+
+Family, archetype and base-score checks should go through the shared coin trait vocabulary (`src/core/coin_traits.lua`). Do not duplicate family matching against `trick_synergy`, `typeTags` and `tags` inside individual mechanics.
+
 Preferred target vocabulary:
 
 - `leftmost`
@@ -236,6 +345,10 @@ Random targeting is allowed only when the effect explicitly says `random_target`
 ## Scope and Limits
 
 Use these terms to describe how often an effect can happen.
+
+One-shot action mechanics should claim a shared `onceKey` through `ActionQueue` rather than storing bespoke booleans such as one flag per family mechanic. If a content action needs a different collision domain, set `onceKey` explicitly; otherwise the operation's default key should represent the shared once-per-flip gate.
+
+Trigger frequency scopes are enforced by `src/core/trigger_scope.lua` before actions are emitted. Current engine-enforced content scope keys are `oncePerFlip`, `maxTriggersPerFlip`, `maxTriggersPerCoin`, `oncePerDeal`, `maxTriggersPerOffer`, `maxTriggersPerPurchase` and `maxTemporaryEffectsPerFlip`. These limits are counted per source, phase and trigger entry, with coin/offer/purchase identity included for the corresponding per-target scopes. Semantic scope keys such as `meterOnly`, `onePayoutOnly`, `oneRedirectOnly`, `noRedirectedRetrigger`, `noChainReentry`, `packetReplayOnly` and `noRecursivePrestige` still describe action-level contracts and must be enforced by the relevant operation.
 
 | Constraint | Meaning |
 | --- | --- |

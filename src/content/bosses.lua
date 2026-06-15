@@ -1,10 +1,10 @@
 local definitions = {
   {
-    id = "loaded_ledger",
-    name = "Loaded Ledger",
+    id = "weighted_ledger",
+    name = "Weighted Ledger",
     description = "Each coin in the flip gains +6% Tails chance before rolling.",
     tags = { "boss", "weight", "tails" },
-    enemyTrick = { category = "loaded", tags = { "loaded", "weight", "tails" }, timing = "before_flip" },
+    enemyTrick = { category = "weighted", tags = { "weighted", "weight", "tails" }, timing = "before_flip" },
     triggers = {
       {
         hook = "before_coin_roll",
@@ -55,7 +55,7 @@ local definitions = {
     name = "Stacked Deck",
     description = "Each coin in the flip gains +6% Heads chance before rolling.",
     tags = { "boss", "weight", "heads" },
-    enemyTrick = { category = "loaded", tags = { "loaded", "weight", "heads" }, timing = "before_flip" },
+    enemyTrick = { category = "weighted", tags = { "weighted", "weight", "heads" }, timing = "before_flip" },
     triggers = {
       {
         hook = "before_coin_roll",

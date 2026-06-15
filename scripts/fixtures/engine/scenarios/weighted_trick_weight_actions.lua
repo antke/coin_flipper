@@ -6,9 +6,9 @@ local function roundToHundredths(value)
 end
 
 return {
-  id = "loaded_trick_weight_actions",
-  tags = { "loaded", "replay" },
-  description = "Verifies canonical Loaded weight actions affect pre-flip odds and replay signatures.",
+  id = "weighted_trick_weight_actions",
+  tags = { "weighted", "replay" },
+  description = "Verifies canonical Weighted weight actions affect pre-flip odds and replay signatures.",
 
   setup = function()
     return {
@@ -50,9 +50,16 @@ return {
     A.traceHasAction(trace, {
       op = "set_call_match_chance",
       chance = 0.75,
-      target = "first_weighted_or_leftmost",
+      target = {
+        zone = "selected_coins",
+        prefer = {
+          { op = "family", value = "weighted" },
+        },
+        orderBy = "slot_position",
+        pick = { op = "slot_at_position", value = 1 },
+      },
     }, "Weighted Palm should trace set_call_match_chance")
-    A.replayOk(env.replay, "Loaded weight action replay should succeed")
+    A.replayOk(env.replay, "Weighted weight action replay should succeed")
 
     local tamperedTranscript = Utils.clone(env.transcript)
     local tamperedActions = tamperedTranscript.expected.batchSignatures[1].actions or {}
@@ -65,6 +72,6 @@ return {
     end
 
     local tamperedReplay = ReplaySystem.replayTranscript(tamperedTranscript)
-    A.falsy(tamperedReplay.ok, "tampered Loaded action metadata should fail replay")
+    A.falsy(tamperedReplay.ok, "tampered Weighted action metadata should fail replay")
   end,
 }

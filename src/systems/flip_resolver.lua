@@ -310,6 +310,7 @@ function FlipResolver.projectBatchBeforeRoll(runState, stageState, metaProjectio
   context.purseEventCoins = PurseHookSystem.buildHandCoinStates(runState, stageState)
   FlipResolver.runPhase(runState, stageState, context, "after_call_before_flip")
   context.purseEventCoins = nil
+  context.activeSources = HookRegistry.collectSources(runState, stageState, metaProjection)
 
   context.perCoin, context.resolutionOrder = FlipResolver.prepareCoinRollState(runState, stageState, metaProjection, context)
   context.purseEventCoins = context.perCoin

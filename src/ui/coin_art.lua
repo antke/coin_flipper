@@ -317,7 +317,7 @@ local function getFaceKey(definition)
     return "lucky"
   end
 
-  if hasTag(definition, "loaded") or hasTag(definition, "reliable") then
+  if hasTag(definition, "weighted") or hasTag(definition, "reliable") then
     return "weighted"
   end
 
@@ -369,7 +369,7 @@ local function getRimType(definition)
     return "motion"
   end
 
-  if hasTag(definition, "loaded") or hasTag(definition, "weight") then
+  if hasTag(definition, "weighted") or hasTag(definition, "weight") then
     return "weight"
   end
 

@@ -1,12 +1,6 @@
-local Coins = require("src.content.coins")
+local CoinTraits = require("src.core.coin_traits")
 
 local ScoringSystem = {}
-
-local function getCoinBaseScore(coinId)
-  local definition = Coins.getById(coinId)
-
-  return definition and tonumber(definition.base_score) or 1
-end
 
 local function syncScoreCreditFields(scoreEvent, coinState)
   local redirectedCredit = coinState.redirectedCredit == true
@@ -57,7 +51,7 @@ end
 local function buildScoreEvent(context, coinState, index, didMatch)
   local resolutionIndex = coinState.resolutionIndex or index
   local scoringCoinId = coinState.scoringCoinId or coinState.forgedCoinId or coinState.coinId
-  local baseScoreContribution = didMatch and getCoinBaseScore(scoringCoinId) or 0
+  local baseScoreContribution = didMatch and CoinTraits.baseScore(scoringCoinId) or 0
 
   return {
     eventId = string.format("score_%02d", resolutionIndex),

@@ -5,7 +5,7 @@
 ```md
 ## Trick Name
 
-Category: Loaded / Prediction? / Sleight / Forgery / Misdirection / Smuggling / Fate / Prestige / Chain
+Category: Weighted / Prediction? / Sleight / Forgery / Misdirection / Smuggling / Fate / Prestige / Chain
 
 Tags: `tag`, `tag`
 
@@ -44,9 +44,9 @@ Implementation:
 
 ## Weighted Palm I
 
-Category: Loaded
+Category: Weighted
 
-Tags: `loaded`, `weight`, `call_bias`, `auto`
+Tags: `weighted`, `weight`, `call_bias`, `auto`
 
 Tier: I
 
@@ -75,7 +75,7 @@ Synergy:
 
 - Weighted Coin
 - Heavy Payout
-- Loaded Tricks
+- Weighted Tricks
 - probability builds
 
 Enemy Version:
@@ -90,8 +90,8 @@ Implementation:
 
 Notes:
 
-- Loaded Tricks affect probability before results exist
-- Loaded Tricks should not convert or reroll results after the flip
+- Weighted Tricks affect probability before results exist
+- Weighted Tricks should not convert or reroll results after the flip
 - Weight is the player-facing keyword for this family
 
 ## See Behind the Veil I
@@ -180,7 +180,7 @@ Synergy:
 
 - See Behind the Veil
 - Marked Coin
-- Loaded Tricks that make a known call more valuable
+- Weighted Tricks that make a known call more valuable
 
 Enemy Version:
 
@@ -715,7 +715,7 @@ Synergy:
 
 - high-base-score coins
 - all-success flips
-- Loaded Tricks that make multiple cheap coins pass
+- Weighted Tricks that make multiple cheap coins pass
 - Decoy builds that protect the Spotlight
 
 Enemy Version:
@@ -1023,7 +1023,7 @@ Notes:
 
 Fate Tricks are Luck Meter engines and Fated Flip payoffs: omens, fountain bargains, destiny engines and whole-flip blessings.
 
-They do not create coins, copy coins, move coin bodies, forge identities, reroute score credit, reroll coins, add Weight, or change individual coin results. Loaded owns individual odds and result manipulation. Fate owns the global meter and the global Fated Flip payoff layer.
+They do not create coins, copy coins, move coin bodies, forge identities, reroute score credit, reroll coins, add Weight, or change individual coin results. Weighted owns individual odds and result manipulation. Fate owns the global meter and the global Fated Flip payoff layer.
 
 Core directions:
 
