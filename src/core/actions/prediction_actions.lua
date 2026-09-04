@@ -5,6 +5,7 @@ local PredictionActions = {}
 
 local PREDICTION_OPS = {
   foretell_coin_result = true,
+  amplify_foretold_neighbors = true,
 }
 
 local function recordWarning(options, context, message)
@@ -60,6 +61,19 @@ end
 function PredictionActions.validate(action, TargetSelectorsModule)
   local selectors = TargetSelectorsModule or TargetSelectors
 
+  if action.op == "amplify_foretold_neighbors" then
+    if type(action.value) ~= "number" or action.value < 1 then
+      return false, "amplify_foretold_neighbors requires value >= 1"
+    end
+    if action.requireTargetMatch ~= nil and type(action.requireTargetMatch) ~= "boolean" then
+      return false, "amplify_foretold_neighbors requireTargetMatch must be boolean when present"
+    end
+    if action.sacrificeSource ~= nil and type(action.sacrificeSource) ~= "boolean" then
+      return false, "amplify_foretold_neighbors sacrificeSource must be boolean when present"
+    end
+    return true
+  end
+
   if action.target ~= nil and type(action.target) ~= "table" then
     return false, "foretell_coin_result target must be selector when present"
   end
@@ -83,6 +97,50 @@ function PredictionActions.validate(action, TargetSelectorsModule)
 end
 
 function PredictionActions.apply(runState, stageState, context, action, options)
+  if action.op == "amplify_foretold_neighbors" then
+    local source = context.currentCoin
+    if not source or not source.resolutionIndex or source.foretold ~= true then
+      recordWarning(options, context, "amplify_foretold_neighbors requires a Foretold source coin.")
+      return true
+    end
+
+    action.sourceCoinId = source.coinId
+    action.sourceInstanceId = source.instanceId
+    action.sourceResolutionIndex = source.resolutionIndex
+    action.affectedCoinIds = {}
+    action.affectedInstanceIds = {}
+    action.affectedResolutionIndices = {}
+
+    for _, target in ipairs(context.perCoin or {}) do
+      local isCommittedNeighbor = target.selectedSlotIndex ~= nil
+        and target.resolutionIndex ~= nil
+        and math.abs(target.resolutionIndex - source.resolutionIndex) == 1
+      local targetMatches = target.result ~= nil and target.result == context.call
+
+      if isCommittedNeighbor and (action.requireTargetMatch ~= true or targetMatches) then
+        target.rootScoreScalingMultiplier = (tonumber(target.rootScoreScalingMultiplier) or 1) * action.value
+        target.predictionNeighborBonuses = target.predictionNeighborBonuses or {}
+        table.insert(target.predictionNeighborBonuses, {
+          sourceId = action._trace and action._trace.sourceId or nil,
+          sourceInstanceId = source.instanceId,
+          value = action.value,
+          sacrificed = action.sacrificeSource == true,
+        })
+        table.insert(action.affectedCoinIds, target.coinId)
+        table.insert(action.affectedInstanceIds, target.instanceId)
+        table.insert(action.affectedResolutionIndices, target.resolutionIndex)
+      end
+    end
+
+    if action.sacrificeSource == true then
+      source.predictionSacrificed = true
+      source.predictionSacrificedBy = action._trace and action._trace.sourceId or nil
+      action.sourceSacrificed = true
+    end
+
+    return true
+  end
+
   if action.op ~= "foretell_coin_result" then
     return false
   end
@@ -116,6 +174,12 @@ function PredictionActions.apply(runState, stageState, context, action, options)
   targetSlot.foretoldResult = result
   targetSlot.foretoldBy = sourceId
   targetSlot.foretoldRngRoll = roll
+  if context.currentCoin and context.currentCoin.instanceId == targetSlot.instanceId then
+    context.currentCoin.foretold = true
+    context.currentCoin.foretoldResult = result
+    context.currentCoin.foretoldBy = sourceId
+    context.currentCoin.foretoldRngRoll = roll
+  end
 
   action.instanceId = targetSlot.instanceId
   action.coinId = targetSlot.definitionId or PurseSystem.getDefinitionId(runState, targetSlot.instanceId)

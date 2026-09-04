@@ -34,7 +34,7 @@ local definitions = {
     name = "Side Pot",
     description = "+1 extra Influence after each scoring flip in this stage.",
     tags = { "stage", "payout", "influence" },
-    enemyTrick = { category = "misdirection", tags = { "misdirection", "payout" }, timing = "after_score" },
+    enemyTrick = { category = "economy", tags = { "economy", "payout" }, timing = "after_score" },
     triggers = {
       {
         hook = "after_scoring",
@@ -47,7 +47,7 @@ local definitions = {
   {
     id = "crowd_favorite",
     name = "Crowd Favorite",
-    description = "Heads calls are worth 10% more score in this stage.",
+    description = "Heads Flips are worth 10% more Score in this stage.",
     tags = { "stage", "heads", "score" },
     enemyTrick = { category = "fate", tags = { "fate", "heads", "score_scaling" }, timing = "before_score" },
     triggers = {

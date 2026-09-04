@@ -25,7 +25,7 @@ return {
       runOptions = {
         seed = 1,
         starterCollection = { "copper_weighted_coin", "copper_marked_coin", "copper_lucky_coin" },
-        ownedTrickIds = { "see_behind_the_veil", "fulfilled_fate" },
+        ownedTrickIds = { "see_behind_the_veil", "fulfilled_fate", "tails_contract" },
       },
       initialLoadout = {
         [1] = "copper_weighted_coin",
@@ -39,8 +39,8 @@ return {
     { op = "init_run" },
     { op = "create_stage" },
     { op = "commit_loadout" },
-    { op = "resolve_batch", call = "heads", selectedDealtIndexes = { 6, 1, 2 }, label = "first_batch" },
-    { op = "resolve_until_stage_end", call = "heads", maxBatches = 4, label = "remaining_batches" },
+    { op = "resolve_batch", call = "tails", selectedDealtIndexes = { 4, 1, 2 }, label = "first_batch" },
+    { op = "resolve_until_stage_end", call = "tails", maxBatches = 4, label = "remaining_batches" },
     { op = "finalize_stage" },
     { op = "build_transcript" },
     { op = "replay_transcript" },
@@ -101,25 +101,36 @@ return {
       prefer = {
         { op = "family", value = "prediction" },
       },
-      orderBy = "random",
+      orderBy = "material_rank_desc",
       pick = { op = "slot_at_position", value = 1 },
     }, "Foretell action should use selector target")
 
     local scopedScaling = nil
     local scoreScalings = firstBatch.scoreBreakdown and firstBatch.scoreBreakdown.scoreScalings or {}
     for _, scaling in ipairs(scoreScalings) do
-      if scaling.scope == "current_coin_score" and scaling.instanceId == foretoldDealt.instanceId then
+      if scaling.scope == "current_coin_score" and scaling.instanceId == foretoldDealt.instanceId and scaling.appliedValue == 2.0 then
         scopedScaling = scaling
         break
       end
     end
 
     scopedScaling = A.truthy(scopedScaling, "Fulfilled Fate should apply scoped score scaling")
-    A.equal(scopedScaling.value, 2.0, "Fulfilled Fate score scaling value")
+    A.equal(scopedScaling.appliedValue, 2.0, "Fulfilled Fate Copper Marked payoff")
+
+    local tailsPactScaling = nil
+    for _, scaling in ipairs(scoreScalings) do
+      if scaling.scope == "current_coin_score" and scaling.instanceId == foretoldDealt.instanceId and scaling.value == 1.25 then
+        tailsPactScaling = scaling
+        break
+      end
+    end
+
+    tailsPactScaling = A.truthy(tailsPactScaling, "Tails Pact should apply scoped Foretold score scaling")
     A.traceHasAction(trace, {
       op = "apply_score_scaling",
-      value = 2.0,
+      value = 1.0,
       target = "current_coin_score",
+      materialFamily = "prediction",
       instanceId = foretoldDealt.instanceId,
     }, "Fulfilled Fate should trace current-coin score scaling")
     A.replayOk(env.replay, "Prediction replay should succeed")

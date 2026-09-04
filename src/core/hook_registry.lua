@@ -91,6 +91,19 @@ local CALL_CONDITION_PHASES = {
   on_batch_end = true,
 }
 
+local FATED_FLIP_CONDITION_PHASES = {
+  on_batch_start = true,
+  before_batch_validation = true,
+  before_coin_roll = true,
+  after_coin_roll = true,
+  after_flip_before_score = true,
+  before_scoring = true,
+  after_scoring = true,
+  after_all_effects = true,
+  before_stage_end_check = true,
+  on_batch_end = true,
+}
+
 HookRegistry.CONDITION_SCHEMAS = {
   call = {
     phases = CALL_CONDITION_PHASES,
@@ -113,8 +126,10 @@ HookRegistry.CONDITION_SCHEMAS = {
     phases = {
       before_coin_roll = true,
       after_coin_roll = true,
+      after_flip_before_score = true,
       before_coin_score = true,
       after_coin_score = true,
+      after_all_effects = true,
     },
     validate = function(value)
       return type(value) == "boolean", "must be boolean"
@@ -174,6 +189,12 @@ HookRegistry.CONDITION_SCHEMAS = {
     },
     validate = function(value)
       return type(value) == "string" and value ~= "", "must be a non-empty string"
+    end,
+  },
+  fated_flip = {
+    phases = FATED_FLIP_CONDITION_PHASES,
+    validate = function(value)
+      return type(value) == "boolean", "must be boolean"
     end,
   },
   stage_type = {
@@ -275,11 +296,14 @@ for index, phaseName in ipairs(HookRegistry.PHASES) do
 end
 
 local function collectFromIds(target, ids, sourceType, lookupFn)
-  for _, id in ipairs(ids or {}) do
+  for sourceOrder, id in ipairs(ids or {}) do
     local definition = lookupFn(id)
 
-    if definition then
-      table.insert(target, HookRegistry.buildSource(sourceType, id, definition))
+    if definition and not (sourceType == "trick"
+      and (definition.familyTriggerStatus == "held" or definition.familyTriggerStatus == "removed")) then
+      table.insert(target, HookRegistry.buildSource(sourceType, id, definition, {
+        sourceOrder = sourceOrder,
+      }))
     end
   end
 end
@@ -294,6 +318,14 @@ local function sourceComparator(left, right)
 
   if leftPrecedence ~= rightPrecedence then
     return leftPrecedence < rightPrecedence
+  end
+
+  if type(left.slotIndex) == "number" and type(right.slotIndex) == "number" and left.slotIndex ~= right.slotIndex then
+    return left.slotIndex < right.slotIndex
+  end
+
+  if type(left.sourceOrder) == "number" and type(right.sourceOrder) == "number" and left.sourceOrder ~= right.sourceOrder then
+    return left.sourceOrder < right.sourceOrder
   end
 
   return tostring(left.sourceId) < tostring(right.sourceId)
@@ -351,6 +383,12 @@ local function matchesCondition(condition, context)
       end
     elseif key == "luck_gain_source" then
       if not context.currentLuckGainEvent or context.currentLuckGainEvent.source ~= expectedValue then
+        return false
+      end
+    elseif key == "fated_flip" then
+      local isFatedFlip = context.luck and context.luck.wasFatedFlip == true or false
+
+      if isFatedFlip ~= expectedValue then
         return false
       end
     elseif key == "stage_type" then
@@ -411,7 +449,7 @@ local function matchesCondition(condition, context)
   return true
 end
 
-local function prepareResolvedAction(phaseName, source, context, effect)
+local function prepareResolvedAction(phaseName, source, context, effect, triggerIndex, effectIndex)
   local action = Utils.clone(effect)
 
   if context.currentCoin then
@@ -449,6 +487,9 @@ local function prepareResolvedAction(phaseName, source, context, effect)
     instanceId = context.currentCoin and context.currentCoin.instanceId or nil,
     slotIndex = context.currentCoin and context.currentCoin.slotIndex or nil,
     resolutionIndex = context.currentCoin and context.currentCoin.resolutionIndex or nil,
+    sourceOrder = source.sourceOrder,
+    triggerIndex = triggerIndex,
+    effectIndex = effectIndex,
   }
 
   return action
@@ -456,6 +497,7 @@ end
 
 local function runSourceForPhase(phaseName, source, context, targetActionList)
   local definition = source.definition or {}
+  local sourceTriggered = false
 
   if context.currentCoin and source.sourceType == "equipped coin" then
     if source.instanceId then
@@ -476,6 +518,7 @@ local function runSourceForPhase(phaseName, source, context, targetActionList)
       and condition.smuggled ~= true
 
     if not selectedCoinOnlyTrick and trigger.hook == phaseName and matchesCondition(trigger.condition, context) and TriggerScope.shouldRun(phaseName, source, trigger, triggerIndex, context) then
+      sourceTriggered = true
       context.trace.triggeredSources = context.trace.triggeredSources or {}
       table.insert(context.trace.triggeredSources, {
         phase = phaseName,
@@ -488,8 +531,8 @@ local function runSourceForPhase(phaseName, source, context, targetActionList)
         resolutionIndex = context.currentCoin and context.currentCoin.resolutionIndex or nil,
       })
 
-      for _, effect in ipairs(trigger.effects or {}) do
-        local action = prepareResolvedAction(phaseName, source, context, effect)
+      for effectIndex, effect in ipairs(trigger.effects or {}) do
+        local action = prepareResolvedAction(phaseName, source, context, effect, triggerIndex, effectIndex)
         table.insert(targetActionList, action)
       end
     end
@@ -499,8 +542,22 @@ local function runSourceForPhase(phaseName, source, context, targetActionList)
     local resolver = require(definition.customResolver)
     local customActions = resolver.resolve(phaseName, source, context) or {}
 
-    for _, action in ipairs(customActions) do
-      table.insert(targetActionList, prepareResolvedAction(phaseName, source, context, action))
+    if #customActions > 0 and not sourceTriggered then
+      context.trace.triggeredSources = context.trace.triggeredSources or {}
+      table.insert(context.trace.triggeredSources, {
+        phase = phaseName,
+        sourceId = source.sourceId,
+        sourceType = source.sourceType,
+        sourceName = definition.name,
+        coinId = context.currentCoin and context.currentCoin.coinId or nil,
+        instanceId = context.currentCoin and context.currentCoin.instanceId or nil,
+        slotIndex = context.currentCoin and context.currentCoin.slotIndex or nil,
+        resolutionIndex = context.currentCoin and context.currentCoin.resolutionIndex or nil,
+      })
+    end
+
+    for actionIndex, action in ipairs(customActions) do
+      table.insert(targetActionList, prepareResolvedAction(phaseName, source, context, action, 0, actionIndex))
     end
   end
 end
@@ -592,7 +649,8 @@ function HookRegistry.removeSourceById(sourceList, sourceId)
   end
 end
 
-function HookRegistry.collectSources(runState, stageState, metaProjection)
+function HookRegistry.collectSources(runState, stageState, metaProjection, options)
+  options = options or {}
   local sources = {}
 
   collectFromIds(sources, stageState and stageState.activeBossModifierIds, "boss modifier", Bosses.getById)
@@ -602,7 +660,9 @@ function HookRegistry.collectSources(runState, stageState, metaProjection)
     table.insert(sources, HookRegistry.buildSource("meta modifier", metaProjection.id or "meta_projection", metaProjection))
   end
 
-  collectFromIds(sources, runState and (runState.ownedTrickIds or runState.ownedUpgradeIds), "trick", Upgrades.getById)
+  if options.includeTricks ~= false then
+    collectFromIds(sources, runState and (runState.ownedTrickIds or runState.ownedUpgradeIds), "trick", Upgrades.getById)
+  end
 
   if runState then
     if stageState and stageState.purse and (#(stageState.purse.handSlots or {}) > 0 or #(stageState.purse.boardSlots or {}) > 0) then
@@ -656,6 +716,33 @@ function HookRegistry.collectSources(runState, stageState, metaProjection)
 
   table.sort(sources, sourceComparator)
   return sources
+end
+
+function HookRegistry.collectGlobalSources(runState, stageState, metaProjection)
+  return HookRegistry.collectSources(runState, stageState, metaProjection, { includeTricks = false })
+end
+
+function HookRegistry.buildActiveTrickSources(runState)
+  local sources = {}
+  for position, trickId in ipairs(runState and (runState.ownedTrickIds or runState.ownedUpgradeIds) or {}) do
+    local definition = Upgrades.getById(trickId)
+    if definition and definition.familyTriggerStatus == "converted" then
+      table.insert(sources, HookRegistry.buildSource("trick", trickId, definition, {
+        boardPosition = position,
+        sourceOrder = position,
+      }))
+    end
+  end
+  return sources
+end
+
+function HookRegistry.runSourcePhase(phaseName, source, context)
+  local actions = {}
+  if not HookRegistry.isValidPhase(phaseName) then
+    error(string.format("Unknown hook phase: %s", tostring(phaseName)))
+  end
+  runSourceForPhase(phaseName, source, context, actions)
+  return actions
 end
 
 function HookRegistry.runPhase(phaseName, sourceList, context)

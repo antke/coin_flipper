@@ -139,6 +139,20 @@ local function purchase(env, step)
   }
 end
 
+local function purchaseExtortedCoin(env, step)
+  local offerIndex = nil
+
+  for index, offer in ipairs(env.shopFlow and env.shopFlow.offers or {}) do
+    if offer.type == "coin" and offer.extorted == true and offer.purchased ~= true then
+      offerIndex = index
+      break
+    end
+  end
+
+  assert(offerIndex, "expected an extorted coin offer")
+  return purchase(env, Common.mergeTable({ offerIndex = offerIndex }, step or {}))
+end
+
 local function reroll(env, step)
   local mode, errorMessage = ShopFlowSystem.reroll(env.shopFlow)
   env:syncShopFlow(env.shopFlow)
@@ -163,6 +177,7 @@ handlers.ensure_shop_offers = ensureShopOffers
 handlers.set_shop_points = setShopPoints
 handlers.set_shop_rerolls = setShopRerolls
 handlers.purchase = purchase
+handlers.purchase_extorted_coin = purchaseExtortedCoin
 handlers.reroll = reroll
 
 ShopSteps.handlers = handlers

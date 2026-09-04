@@ -8,7 +8,7 @@ return {
       runOptions = {
         seed = 4,
         starterCollection = { "copper_blank_coin", "copper_marked_coin", "copper_lucky_coin", "copper_weighted_coin" },
-        ownedTrickIds = { "sleeve_pocket", "heads_varnish" },
+        ownedTrickIds = { "hidden_in_plain_sight", "heads_varnish" },
       },
       initialLoadout = {
         [1] = "copper_blank_coin",

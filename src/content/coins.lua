@@ -1,21 +1,45 @@
+local RNG = require("src.core.rng")
+
 local definitions = {
   {
     id = "copper_bent_coin",
     name = "Bent Coin",
     rarity = "common",
     archetype = "bent",
+    activationFamily = "prestige",
     material = "copper",
     materialRank = 1,
-    base_score = 1,
+    base_score = 10,
     material_variants = {
-      copper = { id = "copper_bent_coin", materialRank = 1, base_score = 1 },
+      copper = { id = "copper_bent_coin", materialRank = 1, base_score = 10 },
     },
-    description = "A crooked coin that strengthens Prestige and Chain Tricks.",
-    effectDescription = "Prestige and Chain Trick bonuses that name Bent Coins apply to this coin.",
-    tags = { "prestige", "chain", "bent", "unstable" },
-    typeTags = { "prestige", "chain" },
-    mechanic_terms = { "resolution_packet", "prestige_replay", "chained_coin", "chain_depth" },
-    trick_synergy = { "prestige", "chain" },
+    description = "A crooked coin that strengthens Prestige Tricks.",
+    effectDescription = "Prestige Outcome replay bonuses that name Bent Coins apply to this coin.",
+    tags = { "prestige", "bent", "unstable" },
+    typeTags = { "prestige" },
+    mechanic_terms = { "outcome", "prestige_replay" },
+    trick_synergy = { "prestige" },
+    isStarter = true,
+    triggers = {},
+  },
+  {
+    id = "copper_flywheel_coin",
+    name = "Flywheel Coin",
+    rarity = "common",
+    archetype = "flywheel",
+    activationFamily = "momentum",
+    material = "copper",
+    materialRank = 1,
+    base_score = 10,
+    material_variants = {
+      copper = { id = "copper_flywheel_coin", materialRank = 1, base_score = 10 },
+    },
+    description = "A heavy-rimmed coin that keeps motion moving through the flip.",
+    effectDescription = "Momentum bonuses that name Flywheel Coins apply to this coin.",
+    tags = { "momentum", "flywheel", "motion", "propagation" },
+    typeTags = { "momentum", "motion" },
+    mechanic_terms = { "in_motion", "momentum_link", "momentum_depth" },
+    trick_synergy = { "momentum" },
     isStarter = true,
     triggers = {},
   },
@@ -24,17 +48,18 @@ local definitions = {
     name = "Blank Coin",
     rarity = "common",
     archetype = "blank",
+    activationFamily = "forgery",
     material = "copper",
     materialRank = 1,
-    base_score = 1,
+    base_score = 10,
     material_variants = {
-      copper = { id = "copper_blank_coin", materialRank = 1, base_score = 1 },
+      copper = { id = "copper_blank_coin", materialRank = 1, base_score = 10 },
     },
     description = "An unstamped coin that strengthens Forgery Tricks.",
     effectDescription = "Forgery Trick bonuses that name Blank Coins apply to this coin.",
     tags = { "counterfeit", "blank", "forgery", "copyable" },
     typeTags = { "forgery", "copyable" },
-    mechanic_terms = { "forged_identity", "forge_identity", "add_forged_identity" },
+    mechanic_terms = { "forgery_assignment", "acting_family", "copy_outcome", "forge_trick_activations", "forged_activation" },
     trick_synergy = { "forgery" },
     isStarter = true,
     triggers = {},
@@ -44,18 +69,40 @@ local definitions = {
     name = "Hollow Coin",
     rarity = "common",
     archetype = "hollow",
+    activationFamily = "smuggle",
     material = "copper",
     materialRank = 1,
-    base_score = 1,
+    base_score = 10,
     material_variants = {
-      copper = { id = "copper_hollow_coin", materialRank = 1, base_score = 1 },
+      copper = { id = "copper_hollow_coin", materialRank = 1, base_score = 10 },
     },
     description = "A hollow coin that strengthens Smuggling Tricks.",
-    effectDescription = "Smuggle Trick bonuses that name Hollow Coins apply to this coin.",
+    effectDescription = "Smuggling bonuses that name Hollow Coins apply to this coin.",
     tags = { "smuggle", "hollow", "contraband", "hand_overflow" },
     typeTags = { "smuggle", "contraband" },
-    mechanic_terms = { "smuggle_coin_from_hand", "overloaded_board", "contraband_copy", "increase_refill_count" },
+    mechanic_terms = { "smuggle_coin_from_hand", "overloaded_board", "contraband_copy", "add_next_hand_draws" },
     trick_synergy = { "smuggle" },
+    isStarter = true,
+    triggers = {},
+  },
+  {
+    id = "copper_vanishing_coin",
+    name = "Vanishing Coin",
+    rarity = "common",
+    archetype = "vanishing",
+    activationFamily = "sleight",
+    material = "copper",
+    materialRank = 1,
+    base_score = 10,
+    material_variants = {
+      copper = { id = "copper_vanishing_coin", materialRank = 1, base_score = 10 },
+    },
+    description = "A half-seen magician's coin that strengthens Sleight of Hand Tricks.",
+    effectDescription = "Sleight bonuses that name Vanishing Coins apply to this coin.",
+    tags = { "sleight", "vanishing", "palm", "substitution" },
+    typeTags = { "sleight", "vanishing" },
+    mechanic_terms = { "swap_coins", "palm_failed_coin", "monte_rearrange" },
+    trick_synergy = { "sleight" },
     isStarter = true,
     triggers = {},
   },
@@ -64,18 +111,19 @@ local definitions = {
     name = "Marked Coin",
     rarity = "common",
     archetype = "marked",
+    activationFamily = "prediction",
     material = "copper",
     materialRank = 1,
-    base_score = 1,
+    base_score = 10,
     material_variants = {
-      copper = { id = "copper_marked_coin", materialRank = 1, base_score = 1 },
+      copper = { id = "copper_marked_coin", materialRank = 1, base_score = 10 },
     },
-    description = "A marked coin that strengthens Prediction Tricks.",
-    effectDescription = "Prediction Trick bonuses that name Marked Coins apply to this coin.",
-    tags = { "marked", "foretold", "read" },
-    typeTags = { "foretold", "read" },
-    mechanic_terms = { "foretell_coin_result", "foretold_result" },
-    trick_synergy = { "foretold", "prediction" },
+    description = "A marked coin that can fulfill the table's visible Prediction.",
+    effectDescription = "Commit it to the predicted slot to force that slot's shown Heads or Tails result.",
+    tags = { "marked", "prediction", "predicted_slot", "forced_result" },
+    typeTags = { "prediction", "read" },
+    mechanic_terms = { "predicted_slot", "forced_result", "foretold_result" },
+    trick_synergy = { "prediction", "foretold" },
     isStarter = true,
     triggers = {},
   },
@@ -84,11 +132,12 @@ local definitions = {
     name = "Lucky Coin",
     rarity = "common",
     archetype = "lucky",
+    activationFamily = "fate",
     material = "copper",
     materialRank = 1,
-    base_score = 1,
+    base_score = 10,
     material_variants = {
-      copper = { id = "copper_lucky_coin", materialRank = 1, base_score = 1 },
+      copper = { id = "copper_lucky_coin", materialRank = 1, base_score = 10 },
     },
     description = "A fate-touched coin that builds the Luck Meter.",
     effectDescription = "+1 Luck Meter progress when this coin matches your call.",
@@ -112,12 +161,13 @@ local definitions = {
     name = "Weighted Coin",
     rarity = "common",
     archetype = "weighted",
+    activationFamily = "weighted",
     material = "copper",
     materialRank = 1,
-    base_score = 1,
+    base_score = 10,
     call_match_chance = 0.65,
     material_variants = {
-      copper = { id = "copper_weighted_coin", materialRank = 1, base_score = 1, call_match_chance = 0.65 },
+      copper = { id = "copper_weighted_coin", materialRank = 1, base_score = 10, call_match_chance = 0.65 },
     },
     description = "A weighted coin that leans toward your declared call.",
     effectDescription = "65% chance to match your call. Counts as a Weighted Coin for Trick bonuses.",
@@ -137,10 +187,134 @@ local definitions = {
   },
 }
 
+local MATERIALS = {
+  copper = {
+    rank = 1,
+    rarity = "common",
+    namePrefix = nil,
+    weightedMatchChance = 0.65,
+    luckyMatchGain = 2,
+  },
+  silver = {
+    rank = 2,
+    rarity = "uncommon",
+    namePrefix = "Silver",
+    weightedMatchChance = 0.75,
+    luckyMatchGain = 3,
+  },
+  gold = {
+    rank = 3,
+    rarity = "rare",
+    namePrefix = "Gold",
+    weightedMatchChance = 0.85,
+    luckyMatchGain = 4,
+  },
+}
+
+local MATERIAL_ORDER = { "copper", "silver", "gold" }
+
+local function clone(value)
+  if type(value) ~= "table" then
+    return value
+  end
+
+  local copied = {}
+  for key, child in pairs(value) do
+    copied[clone(key)] = clone(child)
+  end
+  return copied
+end
+
+local function materialCoinId(copperId, material)
+  return string.gsub(copperId, "^copper_", material .. "_", 1)
+end
+
+local function configureMaterialBehavior(definition, material)
+  local materialDefinition = MATERIALS[material]
+
+  if definition.archetype == "weighted" then
+    definition.call_match_chance = materialDefinition.weightedMatchChance
+
+    for _, trigger in ipairs(definition.triggers or {}) do
+      for _, effect in ipairs(trigger.effects or {}) do
+        if effect.op == "add_weight" and effect.side == "call" then
+          effect.amount = materialDefinition.weightedMatchChance - 0.5
+        end
+      end
+    end
+
+    definition.effectDescription = string.format(
+      "%d%% chance to match your call. Counts as a Weighted Coin for Trick bonuses.",
+      math.floor(materialDefinition.weightedMatchChance * 100 + 0.5)
+    )
+  elseif definition.archetype == "lucky" then
+    for _, trigger in ipairs(definition.triggers or {}) do
+      for _, effect in ipairs(trigger.effects or {}) do
+        if effect.op == "add_luck" then
+          effect.amount = materialDefinition.luckyMatchGain
+        end
+      end
+    end
+
+    definition.effectDescription = string.format(
+      "+%d Luck Meter progress when this coin matches your call.",
+      materialDefinition.luckyMatchGain
+    )
+  end
+end
+
+local function expandMaterialVariants(copperDefinitions)
+  local expanded = {}
+
+  for _, copperDefinition in ipairs(copperDefinitions) do
+    local variants = {}
+
+    for _, material in ipairs(MATERIAL_ORDER) do
+      local materialDefinition = MATERIALS[material]
+      variants[material] = {
+        id = materialCoinId(copperDefinition.id, material),
+        materialRank = materialDefinition.rank,
+        rarity = materialDefinition.rarity,
+        base_score = 10,
+      }
+
+      if copperDefinition.archetype == "weighted" then
+        variants[material].call_match_chance = materialDefinition.weightedMatchChance
+      elseif copperDefinition.archetype == "lucky" then
+        variants[material].luck_gain = materialDefinition.luckyMatchGain
+      end
+    end
+
+    for _, material in ipairs(MATERIAL_ORDER) do
+      local materialDefinition = MATERIALS[material]
+      local definition = material == "copper" and copperDefinition or clone(copperDefinition)
+
+      definition.id = materialCoinId(copperDefinition.id, material)
+      definition.name = materialDefinition.namePrefix
+        and string.format("%s %s", materialDefinition.namePrefix, copperDefinition.name)
+        or copperDefinition.name
+      definition.material = material
+      definition.materialRank = materialDefinition.rank
+      definition.rarity = materialDefinition.rarity
+      definition.base_score = 10
+      definition.material_variants = clone(variants)
+      definition.isStarter = material == "copper" and copperDefinition.isStarter == true or false
+      configureMaterialBehavior(definition, material)
+      table.insert(expanded, definition)
+    end
+  end
+
+  return expanded
+end
+
+definitions = expandMaterialVariants(definitions)
+
 local visualIdentities = {
   copper_bent_coin = { face = "bent", rim = "combo" },
+  copper_flywheel_coin = { face = "flywheel", rim = "motion" },
   copper_blank_coin = { face = "blank", rim = "score" },
   copper_hollow_coin = { face = "hollow", rim = "motion" },
+  copper_vanishing_coin = { face = "vanishing", rim = "motion" },
   copper_marked_coin = { face = "marked", rim = "safety" },
   copper_lucky_coin = { face = "lucky", rim = "combo" },
   copper_weighted_coin = { face = "weighted", rim = "weight" },
@@ -149,7 +323,8 @@ local visualIdentities = {
 local byId = {}
 
 for _, definition in ipairs(definitions) do
-  definition.art = definition.art or visualIdentities[definition.id]
+  local copperVisualId = string.format("copper_%s_coin", definition.archetype)
+  definition.art = definition.art or visualIdentities[definition.id] or visualIdentities[copperVisualId]
   byId[definition.id] = definition
 end
 
@@ -165,16 +340,6 @@ local function extractSeed(source)
   end
 
   return 1
-end
-
-local function hashText(text)
-  local hash = 0
-
-  for index = 1, #text do
-    hash = (hash * 131 + string.byte(text, index)) % 2147483647
-  end
-
-  return hash
 end
 
 local function buildUnlockedIndex(unlockedCoinIds)
@@ -244,7 +409,6 @@ function Coins.getStarterCoinIds(limit, unlockedCoinIds, source)
     if Coins.isUnlocked(definition, unlockedIndex) then
       local entry = {
         id = definition.id,
-        hash = hashText(string.format("%s:%s", tostring(seed), definition.id)),
       }
 
       if definition.rarity == "common" then
@@ -256,20 +420,15 @@ function Coins.getStarterCoinIds(limit, unlockedCoinIds, source)
   end
 
   table.sort(candidates, function(left, right)
-    if left.hash == right.hash then
-      return left.id < right.id
-    end
-
-    return left.hash < right.hash
+    return left.id < right.id
   end)
 
   table.sort(fallbackCandidates, function(left, right)
-    if left.hash == right.hash then
-      return left.id < right.id
-    end
-
-    return left.hash < right.hash
+    return left.id < right.id
   end)
+
+  RNG.newFromText(string.format("%s:starter_coins:common", tostring(seed))):shuffle(candidates)
+  RNG.newFromText(string.format("%s:starter_coins:fallback", tostring(seed))):shuffle(fallbackCandidates)
 
   for _, candidate in ipairs(candidates) do
     table.insert(starterIds, candidate.id)

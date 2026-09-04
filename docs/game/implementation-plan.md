@@ -1,5 +1,11 @@
 # Tricks Redesign Implementation Plan
 
+> Historical migration plan (superseded): continue to use this document for
+> background on the already-landed terminology, coin-instance, action, and
+> family work. The next implementation target is
+> `../family-trigger-engine-implementation.md`; where the plans conflict, the
+> family-trigger plan wins.
+
 This plan records the migration path from the current coin-special-effect / Chips / upgrades implementation toward the revised Trick-centered game defined in `docs/game/`.
 
 The goal is not a rewrite. The goal is to keep the game runnable while moving terminology, content, flow, and engine support in the dependency order required by the new design.
@@ -28,7 +34,7 @@ Older docs and current code still use legacy terms such as upgrades, chips, shop
 - **Defeated opponents** primarily offer Tricks.
 - **Reputation** is persistent meta currency awarded after runs.
 - **Tattoos** replace persistent upgrades as meta progression.
-- Tricks should usually resolve automatically. Any move, swap, replacement, copy, redirect, smuggle, replay, or chain effect needs an explicit automatic target rule and deterministic cap.
+- Tricks should usually resolve automatically. Any move, swap, replacement, copy, redirect, smuggle, replay, or Momentum effect needs an explicit automatic target rule and deterministic cap.
 
 ## Current Implementation Baseline
 
@@ -52,9 +58,9 @@ Current high-risk mismatches:
 3. Current coins are effect-heavy identities instead of simple archetypes.
 4. Current hand is also the flip board: draw hand, arrange, call, flip all hand coins, exhaust all.
 5. The target flow needs deal N, select M, arrange selected, call, optional Smuggling, flip board, resolve Tricks, score HP, refill.
-6. Current manual pre-flip Sleight conflicts with the new automatic post-result Sleight family.
+6. Current manual pre-flip Sleight of Hand conflicts with the new automatic post-result Sleight of Hand family.
 7. Current Fated Flip forces coin results to match the call; the revised Fate boundary says Fate should be a Luck Meter / Fated Flip payoff layer and should not target individual coin odds/results.
-8. Current scoring is aggregate, blocking Heavy Payout as a true weighted-coin payoff, score-credit redirects, Forgery payout copies, Prestige packet replay, and Chain payoffs.
+8. Current scoring is aggregate, blocking Heavy Payout as a true weighted-coin payoff, score-credit redirects, Forgery payout copies, Prestige Outcome replay, and Momentum payoffs.
 
 ## Migration Principles
 
@@ -64,7 +70,7 @@ Current high-risk mismatches:
 4. Keep legacy internal field names until behavior, save compatibility, replay, and fixtures are stable.
 5. Add only the engine operations needed by the current Trick slice.
 6. Prefer canonical action names from `docs/game/mechanics-vocabulary.md`, but allow narrow aliases to existing internal operations during migration.
-7. Defer recursive Chain, copied-trigger, target-rerouting, board-overload, Fated Flip chaining, Prestige replay, and per-coin scoring mechanics until their prerequisites exist.
+7. Defer recursive Momentum, copied-trigger, target-rerouting, board-overload, Fated Flip chaining, Prestige replay, and per-coin scoring mechanics until their prerequisites exist.
 8. Treat unsupported design ideas as explicit deferred work instead of implying they are implemented.
 9. Run targeted verification after each phase and the full verification set before merging a phase.
 
@@ -90,7 +96,7 @@ Tasks:
 
 Exit criteria:
 
-- Canonical terms are consistent across the plan: Trick, Influence, HP, Score, Coin, Pouch, Black Market, Reputation, Tattoo.
+- Canonical terms are consistent across the plan: Charm, Trick, Influence, HP, Score, Coin, Pouch, Black Market, Spoils, Seize, Crumbles, Reputation, Tattoo.
 - Current implementation constraints are listed.
 - The first code implementation slice can be chosen without re-reading all source notes.
 
@@ -157,7 +163,7 @@ Tasks:
 
 Exit criteria:
 
-- Player-facing language uses Influence, Tricks, HP, Score, Pouch, Black Market, Reputation, and Tattoos consistently.
+- Player-facing language uses Influence, Charms/Tricks, HP, Score, Pouch, Black Market, Spoils, Seize, Crumbles, Reputation, and Tattoos consistently.
 - Remaining legacy terms are internal compatibility fields, fixture names, archived docs, or explicit status notes.
 - Existing saves, replay fixtures, and artifact checks still pass.
 
@@ -190,8 +196,10 @@ Likely files:
 
 Initial canonical archetypes:
 
-- **Bent Coin**: Prestige / Chain synergy
+- **Bent Coin**: Prestige synergy
+- **Flywheel Coin**: Momentum / In Motion synergy
 - **Blank Coin**: Forgery synergy
+- **Vanishing Coin**: Sleight of Hand synergy
 - **Hollow Coin**: Smuggling synergy
 - **Marked Coin**: Prediction / Foretold synergy
 - **Lucky Coin**: Fate / Luck Meter synergy
@@ -285,11 +293,10 @@ Canonical categories/tags:
 - `prediction`
 - `sleight`
 - `forgery`
-- `misdirection`
 - `smuggle`
 - `fate`
 - `prestige`
-- `chain`
+- `momentum`
 
 Tasks:
 
@@ -327,8 +334,9 @@ Likely files:
 
 Good first Tricks:
 
-- **Weighted Palm**: before flip, add Weight toward the player's call.
-- **Weighted Edge**: before flip, skew one eligible coin toward the player's call.
+- **Weighted Palm**: before each selected Weighted Coin rolls, ensure at least a 75% Matching Call chance; Silver and Gold keep their stronger native odds. Matching Weighted Coins then receive their material payoff.
+- **Headside Edge**: on Heads Flip, add Heads Chance to selected coins, doubled for Weighted Coins.
+- **Tailside Edge**: on Tails Flip, add Tails Chance to a random selected Weighted Coin.
 
 Do not implement true **Heavy Payout** until per-coin scoring support exists. If a temporary aggregate version exists, label it as temporary and do not let it block the later per-coin refactor.
 
@@ -451,7 +459,7 @@ Suggested new fixture:
 
 Goal: split aggregate scoring into deterministic per-coin score events while preserving existing aggregate behavior when no advanced Trick intervenes.
 
-This phase must happen before implementing per-coin payout, score-credit redirect, packet replay, and Chain payoff mechanics.
+This phase must happen before implementing per-coin payout, score-credit redirect, Outcome replay, and Momentum payoff mechanics.
 
 Likely files:
 
@@ -469,14 +477,14 @@ Required support:
 - score-credit attribution
 - scoped score multipliers
 - result-slot identity separate from coin-body identity
-- resolution packet seed shape for later Prestige
+- Outcome seed shape for later Prestige
 
 Tasks:
 
 - Preserve current aggregate score total for ordinary flips.
 - Emit deterministic score events for each scoring coin.
 - Allow scoped multipliers against eligible coin events instead of only `pendingScoreMultiplier` against the whole batch.
-- Record enough event metadata for later Forgery, Misdirection, Prestige, and Chain work.
+- Record enough event metadata for later Forgery, Prestige, and Momentum work.
 - Add fixtures that compare old aggregate result and new event breakdown.
 
 Exit criteria:
@@ -484,8 +492,7 @@ Exit criteria:
 - Existing scoring is unchanged when no per-coin Trick intervenes.
 - Per-coin score hooks are deterministic and replay-safe.
 - Heavy Payout can be implemented as a true eligible weighted-coin payoff after this phase.
-- Misdirection can identify and redirect score credit after this phase.
-- Prestige can record replayable completed packets after this phase.
+- Prestige can record replayable completed Outcomes after this phase.
 
 Verification:
 
@@ -513,31 +520,32 @@ Prerequisites:
 
 First candidates:
 
-- **See Behind the Veil**: when dealt, reveal the future result of one random dealt coin before selection.
-- **Fulfilled Fate**: first selected Foretold coin matching the player's call scores extra.
+- **See Behind the Veil**: after deal, Foretell a random Marked Coin, otherwise a random dealt coin.
+- **Fulfilled Fate**: the highest-quality selected Marked Coin is Foretold; when it matches the call, it scores `2x` / `2.5x` / `3x` by material.
+- **Heads Pact / Tails Pact**: on matching Heads/Tails Flip, Foretold Coins with Matching Call score extra.
 - **Ancient Pattern: T-H-T**: selected Foretold coins matching a visible pattern grant a capped fallback reward.
 
 Boundary:
 
 - Prediction reveals/reads future results. It does not repair failures or change odds.
 
-### 7B. Sleight
+### 7B. Sleight of Hand
 
 Prerequisites:
 
 - selected slot/result state separate from coin body identity
 - movement/swap operations
-- loop caps for movement-based rescore effects
+- material/value comparison gates for physical swaps and strictly improving local rearrangements
 
 First candidates:
 
-- **Switcheroo**: after flip, swap a valuable failed-slot coin body into a successful result slot.
-- **False Bottom**: after flip, substitute the weakest selected coin body with a stronger unselected dealt coin while preserving the result slot.
-- **Spin Me Baby One More Time**: after score and normal triggers, move selected coins and rescore the moved layout once.
+- **Switcheroo I–III**: an activating Match trades with a higher-value Miss, with increasingly precise automatic targeting.
+- **Vanishing Act I–III**: palm an eligible failed committed body back into hand instead of spending it.
+- **Three-Card Monte I–III**: choose a strictly score-improving local arrangement while results remain attached to slots.
 
 Boundary:
 
-- Sleight moves physical coin bodies through resolved slots. It does not change results, copy identities, or create coins.
+- Sleight of Hand moves regular committed bodies through resolved slots or palms a failed body. It does not change results, move Contraband, copy identities, or create coins.
 
 ### 7C. Fate
 
@@ -550,17 +558,17 @@ Prerequisites:
 First candidates:
 
 - **Omen Engine**: positive Luck gain adds extra Luck Meter progress.
-- **Fountain Pact**: Fountain Favor contributes more Luck.
-- **Twist of Fate**: a Fated Flip gains an extra whole-flip payoff or retrigger.
+- **Fountain Pact**: global Luck generation is faster.
+- **Twist of Fate**: Fated Flips score `1.5x` / `1.75x` / `2.25x` by tier.
 - **Fate Uncapped**: Luck can keep filling during a Fated Flip and prepare another Fated Flip, with caps.
 
 Boundary:
 
 - Fate modifies Luck Meter and Fated Flip payoff state. It should not target individual coin results or odds.
 
-Required decision:
+Current decision:
 
-- Either preserve the current global “all results match call” Fated Flip as a compatibility rule, or migrate Fated Flip to a whole-flip payoff that does not mutate individual coin results.
+- Preserve the current global “all results match call” Fated Flip as the base payoff, then layer Fate Tricks on top as whole-flip rewards.
 
 ### 7D. Smuggling
 
@@ -574,90 +582,80 @@ Prerequisites:
 
 First candidates:
 
-- **Sleeve Pocket**: after the call, move one real unselected hand coin into an overload slot.
-- **Backroom Refill**: refill one extra hand coin after scoring.
-- **Planted Double**: first smuggled coin creates one temporary contraband copy for this flip.
-- **Overloaded Table**: overloaded boards pay capped bonuses for extra coin bodies.
+- **Hidden Pocket**: gain +1 max Flip Slot for the run.
+- **Hidden in Plain Sight**: after the call, move one real unselected hand coin into an overload slot.
+- **Off the Books**: after a flip with smuggling, draw +1 extra coin into the next hand if available.
+- **Planted Double**: 50% chance to copy a random smuggled coin into a temporary contraband overload slot for this flip.
+- **Embarrassment of Riches**: matching coins that were not originally selected but still got flipped score `1.5x`.
 
 Boundary:
 
-- Smuggling adds extra board bodies or temporary contraband copies. It does not forge identity or reroute score credit.
+- Smuggling adds extra board bodies or temporary contraband copies. It does not forge identity.
 
 ### 7E. Forgery
 
 Prerequisites:
 
-- identity overlays
-- identity source tracking
-- copied payout/trigger caps
-- no copied-history recursion
+- family-trigger activation ledger;
+- per-coin root Outcome packets;
+- stable selected-slot positions;
+- multi-phase custom Trick resolvers;
+- replay signatures for generated activations.
 
-First candidates:
+Implemented lines:
 
-- **Borrowed Name**: one failed coin replaces its identity with the slot 1 template for one payout.
-- **Fake Credentials**: one coin keeps its real identity and adds a forged tag, archetype, or material for one check.
-- **Copycat Jackpot**: forged coins copy a bounded payout or trigger from the slot 1 template.
+- **Fake Credentials I-III**: a missing real Blank Coin copies 50% / 75% / 100% of the genuine left neighbour's completed root Outcome.
+- **Borrowed Name I-III**: before Flip, a real Blank Coin locks and imitates up to one / two / three eligible Tricks, capped at Tier I / II / III, from the genuine family immediately left.
+- **Forged Signature I-III**: before Flip, a real Blank Coin locks one highest-tier eligible Trick, capped at Tier I / II / III, from the genuine family immediately left.
 
-Boundary:
+Runtime contract:
 
-- Forgery changes identity/payout/trigger checks. It does not move physical bodies, change results, redirect targets, or create board coins.
-
-### 7F. Misdirection
-
-Prerequisites:
-
-- target selection exposure
-- score-credit attribution
-- redirect caps
-- anti-recursive redirect behavior
-
-First candidates:
-
-- **Look Over There**: redirect one hostile enemy/automatic target to a cheap Decoy.
-- **Crooked Spotlight**: redirect one cheap successful coin's score credit into a Spotlight coin.
-- **Stolen Applause**: redirect up to two successful score-credit events into the Spotlight with caps.
-
-Boundary:
-
-- Misdirection changes targets, credit, or blame. It does not move coin bodies, forge identity, or change results.
+- `copy_outcome` records score under `forgedOutcomeCopies` rather than Prestige Replay;
+- `forge_trick_activations` creates a separate deterministic forged activation identity;
+- one bounded target package is locked for the entire Flip;
+- copied Tricks run in every original hook phase using the Blank Coin as source, including pre-roll setup;
+- forged activations cannot target Forgery, cannot recurse, and cannot alter locked real families;
+- target Tricks retain Block, Weaken, and Jam pressure;
+- setup preview marks every scheduled target Trick with `F+n`;
+- replay signatures include and validate both `forgeryAssignments` and `forgedActivations`.
 
 ### 7G. Prestige
 
 Prerequisites:
 
-- completed resolution packet records
-- discounted packet replay
+- completed coin Outcome records
+- discounted Outcome replay
 - replay source marking
 - non-recursive replay caps
 
 First candidates:
 
-- **Encore**: replay one resolved coin's completed packet at 20% value.
-- **Curtain Call**: replay the last effect-triggering coin packet at 20% value.
-- **Impossible Finale**: replay the highest-impact eligible packet at reduced value.
+- **Encore**: replay one completed coin Outcome at 20% value, preferring Bent Coins.
+- **Curtain Call I-II**: replay one/two random completed coin Outcomes at 20% value, preferring Bent Coins.
+- **Impossible Finale I-III**: replay the highest-value, top-two, or all completed coin Outcomes; Finale III replays all at 75% recorded Score contribution.
 
 Boundary:
 
-- Prestige replays recorded packets. It does not recalculate targets, reroll results, run at full value, or recursively replay itself.
+- Prestige replays recorded Outcomes. It does not recalculate targets, reroll results, run at full value, or recursively replay itself.
 
-### 7H. Chain
+### 7H. Momentum
 
 Prerequisites:
 
 - live trigger propagation
-- chain source/link/depth tracking
+- Momentum source/link/depth tracking
 - used-coin tracking
-- max chain depth and action count caps
+- max Momentum depth and action count caps
 
 First candidates:
 
-- **Domino Line**: scoring or Chained coins have a capped chance to trigger a random neighbour.
-- **Chained Payout**: Chained coins score 1.25x.
-- **Deep Link**: the third coin or deeper in a Chain gains a payoff.
+- **Keep It Rolling**: after a scoring coin, 50% chance to trigger a neighbouring Flywheel Coin if possible, otherwise a random neighbour.
+- **Follow Through**: each deferred Momentum Score event gains `+25%` per link depth.
+- **Ripple I-II-III**: random, left-neighbour, then both-direction Momentum propagation with capped continuation chances.
 
 Boundary:
 
-- Chain propagates live links with explicit source and depth. It does not copy full trigger history or recurse without caps.
+- Momentum propagates live links with explicit source and depth. It does not copy full trigger history, make Flywheel Coins score double by default, or recurse without caps.
 
 Global avoid list for this phase:
 
@@ -665,12 +663,11 @@ Global avoid list for this phase:
 - temporary contraband copies before cleanup proves only original owned coins persist
 - unbounded coin multiplication before `max_board_coins` and `no_recursive_multiplication` support exists
 - Fate payoffs that target individual coins or alter individual coin results
-- Fated Flip chaining before Luck-gain suppression overrides and chain caps exist
-- Prestige packet replay before completed packets can be recorded and replayed from history
+- Fated Flip chaining before Luck-gain suppression overrides and explicit caps exist
+- Prestige Outcome replay before completed Outcomes can be recorded and replayed from history
 - Prestige replay that recalculates targets, rerolls results, or starts recursive replay
-- Chain propagation before source/depth/used-coin tracking and `max_chain_depth` caps exist
+- Momentum propagation before source/depth/used-coin tracking and max-depth caps exist
 - copied payouts/triggers retaining copied history
-- redirected score credit retriggering recursively
 - highest/lowest per-coin scoring logic before per-coin score events are stable
 
 Verification:
@@ -685,7 +682,7 @@ Add one fixture per family as that family is implemented.
 
 ## Phase 8: Enemy Class Trick Rewards
 
-Goal: make defeated opponents the main source of Tricks.
+Goal: make defeated opponents the main source of Charms through the **Spoils** screen.
 
 This phase depends on Trick metadata/catalog support from Phase 3 at minimum. It should wait until at least a small set of real Tricks exists.
 
@@ -703,23 +700,24 @@ Enemy class reward pools:
 - **Smuggler** -> Smuggling Tricks
 - **Card Shark** -> Prediction and Weighted Tricks
 - **Fortune Teller** -> Fate Tricks
-- **Pit Boss** -> Misdirection and control Tricks
-- **Magician** -> Sleight Tricks
-- **Showman** -> Prestige and Chain Tricks
+- **Pit Boss** -> Weighted and Forgery Tricks
+- **Magician** -> Sleight of Hand Tricks
+- **Showman** -> Prestige and Momentum Tricks
 
 Tasks:
 
 - Add enemy class metadata to stage/opponent definitions.
 - Add optional active enemy Trick metadata.
-- Weight post-encounter Trick offers toward the defeated enemy class.
+- Weight post-encounter Spoils Charm offers toward the defeated enemy class.
 - Keep a bounded wildcard offer chance.
-- Keep Black Market from being the main Trick source.
+- Add **Seize** costs so Influence is spent to take Charms from Spoils.
+- Keep Black Market from being the Charm source; it is the Coin shop.
 - Update reward fixtures that currently assume generic `upgrade` offers.
 
 Exit criteria:
 
-- Winning an encounter offers Tricks from the expected class pool.
-- Trick offer weighting is deterministic for replay/fixtures.
+- Winning an encounter offers Spoils Charms from the expected class pool.
+- Charm offer weighting and Seize costs are deterministic for replay/fixtures.
 - Wildcard offers are bounded and visible in reward generation metadata.
 
 Verification:
@@ -736,7 +734,7 @@ Suggested new fixture:
 
 ## Phase 9: Black Market and Economy Cleanup
 
-Goal: align the shop/economy loop with Influence and the Black Market role.
+Goal: align the shop/economy loop with Influence, the Black Market role and Extortion Charms.
 
 Likely files:
 
@@ -749,15 +747,18 @@ Likely files:
 Tasks:
 
 - Keep Influence as the in-run currency.
-- Bias Black Market offers toward coins and run objects.
-- Reduce or remove Black Market as the main source of Tricks once enemy rewards carry that role.
+- Make the Black Market the Coin shop: Coins, coin refinement/removal, Fountain visits and Coin-stock rerolls.
+- Remove normal Charm generation from the Black Market; Charms come from Spoils.
+- Add **Extortion** Charms that make economy interactions feel like theft/pressure rather than passive discounts.
+- Add **Crumbles** support for temporary economy Charms: tier I/II/III = 1/2/3 uses.
 - Update pricing/copy from Chips/shop points to Influence.
-- Ensure shop/reward generation does not offer removed legacy coin IDs or deprecated upgrade entries.
+- Ensure Black Market/Spoils generation does not offer removed legacy IDs or deprecated entries.
 
 Exit criteria:
 
-- Black Market decisions are synergy choices, not obvious raw upgrades.
-- Influence gain/spend is consistent across stage rewards, Black Market purchases, and any Trick rerolls/costs.
+- Black Market decisions are Coin/pouch synergy choices, not Charm shopping.
+- Influence gain/spend is consistent across stage rewards, Black Market Coin purchases, Spoils Seize costs, and rerolls.
+- Extortion effects are visible in generation/purchase traces and consume/Crumbles deterministically.
 - Shop fixtures pass with canonical terms and offer types.
 
 Verification:
@@ -825,7 +826,7 @@ Cleanup targets:
 - legacy player-facing Chip/Shop/Upgrade/Damage copy
 - removed legacy coin IDs
 - old tags such as `economy`, `attunement`, and aggregate `multiplier` where no longer meaningful
-- obsolete manual Sleight terminology after new Sleight Tricks exist
+- obsolete manual Sleight of Hand terminology after new Sleight of Hand Tricks exist
 - internal names only when their compatibility role is gone
 
 Exit criteria:

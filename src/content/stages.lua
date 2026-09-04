@@ -1,4 +1,5 @@
 local Utils = require("src.core.utils")
+local RNG = require("src.core.rng")
 
 local definitions = {
   {
@@ -7,13 +8,13 @@ local definitions = {
     roundIndex = 1,
     label = "Round 1 — Opening Toss",
     stageType = "normal",
-    opponentHp = 6,
+    opponentHp = 40,
     opponent = {
       id = "bright_lights_dealer",
       name = "Bright-Lights Dealer",
       enemyClass = "card_shark",
       description = "A house dealer trying to rattle your opening call.",
-      hp = 6,
+      hp = 40,
     },
     activeStageModifierIds = { "bright_lights" },
   },
@@ -23,13 +24,13 @@ local definitions = {
     roundIndex = 2,
     label = "Round 2 — Mid Table",
     stageType = "normal",
-    opponentHp = 8,
+    opponentHp = 55,
     opponent = {
       id = "mid_table_sharp",
       name = "Mid-Table Sharp",
       enemyClass = "forger",
       description = "A patient gambler with just enough tricks to test your pouch.",
-      hp = 8,
+      hp = 55,
     },
     activeStageModifierIds = { "crosswind_table" },
     variants = {
@@ -77,13 +78,13 @@ local definitions = {
     roundIndex = 3,
     label = "Round 3 — Build Check",
     stageType = "normal",
-    opponentHp = 11,
+    opponentHp = 65,
     opponent = {
       id = "build_check_hustler",
       name = "Build-Check Hustler",
       enemyClass = "smuggler",
       description = "A harder mark who punishes loose coin choices.",
-      hp = 11,
+      hp = 65,
     },
     activeStageModifierIds = { "side_pot" },
     variants = {
@@ -115,43 +116,104 @@ local definitions = {
   },
   {
     id = "boss_round",
-    name = "Final Table",
+    name = "Boss Round",
     roundIndex = 4,
-    label = "Boss — Final Table",
+    label = "Boss Round",
     stageType = "boss",
-    opponentHp = 14,
+    opponentHp = 80,
     opponent = {
-      id = "final_table_boss",
-      name = "The Final Table",
-      enemyClass = "showman",
-      description = "The house's last obstacle: no attacks, just an HP wall to break.",
-      hp = 14,
+      id = "boss_opponent",
+      name = "Boss",
+      enemyClass = "card_shark",
+      description = "Boss Trick",
+      hp = 80,
     },
-    bossModifierIds = { "weighted_ledger" },
     bossVariants = {
       {
-        id = "boss_variant_embargo",
-        name = "Heads Embargo",
-        label = "Boss — Heads Embargo",
+        id = "boss_betting_betty",
+        name = "Betting Betty",
+        label = "Boss — Betting Betty",
         opponent = {
-          id = "heads_embargo_boss",
-          name = "Heads Embargo",
-          enemyClass = "pit_boss",
-          description = "A boss who taxes every Heads-heavy plan.",
+          id = "betting_betty",
+          name = "Betting Betty",
+          enemyClass = "card_shark",
+          description = "The Favourite",
         },
-        bossModifierIds = { "heads_embargo", "weighted_ledger" },
+        bossModifierIds = { "betting_betty" },
       },
       {
-        id = "boss_variant_tails_embargo",
-        name = "Tails Embargo",
-        label = "Boss — Tails Embargo",
+        id = "boss_washed_up_magician",
+        name = "Washed-up Magician",
+        label = "Boss — Washed-up Magician",
         opponent = {
-          id = "tails_embargo_boss",
-          name = "Tails Embargo",
-          enemyClass = "card_shark",
-          description = "A boss who taxes every Tails-heavy plan.",
+          id = "washed_up_magician",
+          name = "Washed-up Magician",
+          enemyClass = "magician",
+          description = "Centre Stage",
         },
-        bossModifierIds = { "tails_embargo", "stacked_deck" },
+        bossModifierIds = { "washed_up_magician" },
+      },
+      {
+        id = "boss_madcap_lunatic",
+        name = "Madcap Lunatic",
+        label = "Boss — Madcap Lunatic",
+        opponent = {
+          id = "madcap_lunatic",
+          name = "Madcap Lunatic",
+          enemyClass = "showman",
+          description = "Full Throttle",
+        },
+        bossModifierIds = { "madcap_lunatic" },
+      },
+      {
+        id = "boss_the_impostor",
+        name = "The Impostor",
+        label = "Boss — The Impostor",
+        opponent = {
+          id = "the_impostor",
+          name = "The Impostor",
+          enemyClass = "forger",
+          description = "Stolen Identity",
+        },
+        bossModifierIds = { "the_impostor" },
+      },
+      {
+        id = "boss_the_quickhand",
+        name = "The Quickhand",
+        label = "Boss — The Quickhand",
+        opponentHp = 60,
+        opponent = {
+          id = "the_quickhand",
+          name = "The Quickhand",
+          enemyClass = "card_shark",
+          description = "Three Cups",
+          hp = 60,
+        },
+        bossModifierIds = { "the_quickhand" },
+      },
+      {
+        id = "boss_the_taxman",
+        name = "The Taxman",
+        label = "Boss — The Taxman",
+        opponent = {
+          id = "the_taxman",
+          name = "The Taxman",
+          enemyClass = "pit_boss",
+          description = "Nothing to Declare",
+        },
+        bossModifierIds = { "the_taxman" },
+      },
+      {
+        id = "boss_blind_prophet",
+        name = "Blind Prophet",
+        label = "Boss — Blind Prophet",
+        opponent = {
+          id = "blind_prophet",
+          name = "Blind Prophet",
+          enemyClass = "seer",
+          description = "Written in Stone",
+        },
+        bossModifierIds = { "blind_prophet" },
       },
     },
   },
@@ -175,16 +237,6 @@ end
 
 local Stages = {}
 
-local function hashText(text)
-  local hash = 0
-
-  for index = 1, #text do
-    hash = (hash * 131 + string.byte(text, index)) % 2147483647
-  end
-
-  return hash
-end
-
 local function extractSeed(source)
   if type(source) == "number" then
     return source
@@ -205,24 +257,23 @@ local function resolveVariant(definition, variants, source)
   end
 
   local seed = extractSeed(source) or 1
-  local keyedVariants = {}
+  local orderedVariants = {}
 
   for _, variant in ipairs(variants) do
-    table.insert(keyedVariants, {
-      variant = variant,
-      hash = hashText((definition.id or "") .. ":" .. (variant.id or "") .. ":" .. tostring(seed) .. ":" .. tostring(definition.roundIndex or 1)),
-    })
+    table.insert(orderedVariants, variant)
   end
 
-  table.sort(keyedVariants, function(left, right)
-    if left.hash == right.hash then
-      return (left.variant.id or "") < (right.variant.id or "")
-    end
-
-    return left.hash < right.hash
+  table.sort(orderedVariants, function(left, right)
+    return (left.id or "") < (right.id or "")
   end)
 
-  local variant = keyedVariants[1] and keyedVariants[1].variant or nil
+  local decisionKey = table.concat({
+    tostring(seed),
+    "stage_variant",
+    tostring(definition.roundIndex or 1),
+    tostring(definition.id or "unknown_stage"),
+  }, ":")
+  local variant = RNG.newFromText(decisionKey):choose(orderedVariants)
 
   if not variant then
     return definition

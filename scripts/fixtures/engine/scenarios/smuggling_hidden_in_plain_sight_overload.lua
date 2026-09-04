@@ -12,16 +12,16 @@ local function indexById(values)
 end
 
 return {
-  id = "smuggling_sleeve_pocket_overload",
+  id = "smuggling_hidden_in_plain_sight_overload",
   tags = { "smuggling", "replay" },
-  description = "Verifies Sleeve Pocket smuggles a real unselected dealt coin into an overload slot and is replay-checked.",
+  description = "Verifies Hidden in Plain Sight smuggles a real unselected dealt coin into an overload slot and is replay-checked.",
 
   setup = function()
     return {
       runOptions = {
         seed = 2,
         starterCollection = { "copper_weighted_coin", "copper_marked_coin", "copper_lucky_coin", "copper_hollow_coin" },
-        ownedTrickIds = { "sleeve_pocket" },
+        ownedTrickIds = { "hidden_in_plain_sight" },
       },
       initialLoadout = {
         [1] = "copper_weighted_coin",
@@ -53,11 +53,11 @@ return {
     local refillEvent = A.truthy(batch.refillEvent, "missing refill event")
     local scoreEvents = firstBatch.scoreBreakdown and firstBatch.scoreBreakdown.scoreEvents or {}
 
-    A.equal(#boardSlots, 1, "Sleeve Pocket should create one overload board slot")
+    A.equal(#boardSlots, 1, "Hidden in Plain Sight should create one overload board slot")
     A.equal(#resolutionEntries, #selectedSlots + 1, "overload slot should resolve after selected Flip Slots")
 
     local board = A.truthy(boardSlots[1], "missing overload board slot")
-    A.equal(board.coinId, "copper_hollow_coin", "Sleeve Pocket should prefer an unselected Hollow Coin")
+    A.equal(board.coinId, "copper_hollow_coin", "Hidden in Plain Sight should prefer an unselected Hollow Coin")
     A.equal(board.smuggled, true, "board slot should be marked smuggled")
     A.equal(board.overloadSlotIndex, 1, "overload slot index")
     A.equal(board.boardSlotIndex, #selectedSlots + 1, "board slot index should follow legal Flip Slots")
@@ -94,7 +94,7 @@ return {
     A.falsy(returned[board.instanceId], "smuggled coin should not return as unselected dealt")
     A.equal(refillEvent.boardSlotCount, 1, "refill should record board slot count")
 
-    local move = A.truthy((trace.smugglingMoves or {})[1], "Sleeve Pocket should record a smuggling move")
+    local move = A.truthy((trace.smugglingMoves or {})[1], "Hidden in Plain Sight should record a smuggling move")
     A.equal(move.op, "smuggle_coin_from_hand", "smuggling move op")
     A.equal(move.instanceId, board.instanceId, "smuggling move instance")
     A.equal(move.boardSlotIndex, board.boardSlotIndex, "smuggling move board slot")
@@ -110,13 +110,13 @@ return {
           { op = "family", value = "smuggle" },
           { op = "archetype", value = "hollow" },
         },
-        orderBy = "slot_position",
+        orderBy = "material_rank_desc",
         pick = { op = "slot_at_position", value = 1 },
       },
       smuggledInstanceId = board.instanceId,
       boardSlotIndex = board.boardSlotIndex,
       overloadSlotIndex = board.overloadSlotIndex,
-    }, "Sleeve Pocket action should be traced with smuggling metadata")
+    }, "Hidden in Plain Sight action should be traced with smuggling metadata")
 
     A.replayOk(env.replay, "Smuggling replay should succeed")
 

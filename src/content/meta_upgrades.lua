@@ -60,19 +60,6 @@ local definitions = {
     },
   },
   {
-    id = "meta_unlock_merchant_tools",
-    name = "Merchant Toolbelt Tattoo",
-    description = "Unlock Kickback Mark, Backroom Display, and Recovery Voucher for future Black Markets.",
-    cost = 4,
-    tags = { "tattoo", "unlock", "black_market" },
-    tattoo = {
-      category = "unlock",
-      tags = { "unlock", "black_market" },
-      tier = 1,
-    },
-    unlockUpgradeIds = { "cashback_badge", "showcase_rack", "recovery_coupon" },
-  },
-  {
     id = "meta_unlock_tactical_notes",
     name = "Tactical Notes Tattoo",
     description = "Unlock Echo Wager and Rainy Day Voucher for future runs and Black Markets.",

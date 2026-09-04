@@ -11,11 +11,13 @@ end
 local runCount = parseArg(1, "simulation.runCount")
 local baseSeed = parseArg(2, "simulation.baseSeed")
 local seedStep = parseArg(3, "simulation.seedStep")
+local policy = arg[4] or GameConfig.get("simulation.policy", "strategic")
 
 local results = SimulationSystem.simulateRuns({
   runCount = runCount,
   baseSeed = baseSeed,
   seedStep = seedStep,
+  policy = policy,
 })
 
 local report = AnalyticsSystem.buildSimulationReport(results)

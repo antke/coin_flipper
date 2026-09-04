@@ -16,11 +16,11 @@ function PostStageAnalyticsState:buildButtons(app)
   local label = "Continue to Summary"
 
   if destination == "reward_preview" then
-    label = "Continue to Reward Preview"
+    label = "Continue to Spoils"
   elseif destination == "shop" then
     label = "Continue to Black Market"
   elseif destination == "boss_reward" then
-    label = "Continue to Victory Reward"
+    label = "Continue to Victory Spoils"
   end
   local buttonWidth = 300
 

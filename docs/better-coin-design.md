@@ -30,6 +30,7 @@ Good:
 
 - Bent Coin
 - Hollow Coin
+- Vanishing Coin
 - Blank Coin
 - Marked Coin
 - Lucky Coin
@@ -40,7 +41,7 @@ Bad:
 - Gold Heads Hunter Coin
 - Hollow Smuggler Coin
 
-The game should avoid stacking multiple permanent identities onto a single coin. Forgery Tricks may add temporary fake identities during resolution, and Smuggling Tricks may create temporary physical contraband copies, but the coin's readable owned archetype stays singular.
+The game should avoid stacking multiple permanent identities onto a single coin. Forgery Tricks may schedule temporary copied Outcomes or bounded activations during resolution, and Smuggling Tricks may create temporary physical contraband copies, but the coin's readable owned archetype stays singular.
 
 ---
 
@@ -52,13 +53,25 @@ Examples:
 
 ### Bent Coin
 
-Prestige / Chain instability archetype.
+Prestige instability archetype.
+
+---
+
+### Flywheel Coin
+
+Momentum archetype.
 
 ---
 
 ### Blank Coin
 
 Forgery archetype.
+
+---
+
+### Vanishing Coin
+
+Sleight of Hand archetype.
 
 ---
 
@@ -100,7 +113,13 @@ Not:
 
 Good:
 
-Bent Coin supports encores and Chain links.
+Bent Coin supports encores and Prestige Outcome replays.
+
+---
+
+Good:
+
+Flywheel Coin supports Momentum links.
 
 ---
 
@@ -171,25 +190,25 @@ Example:
 
 Fantasy:
 
-This coin does not stay resolved: it supports discounted Prestige packet replays and live Chain propagation.
+This coin does not stay resolved: it supports discounted Prestige Outcome replays.
 
 ---
 
 Copper Bent
 
-Baseline eligibility for packet replay or Chain-link effects.
+Baseline eligibility for Outcome replay effects.
 
 ---
 
 Silver Bent
 
-Stronger replay priority, Chain-link priority or Chained payoff eligibility.
+Stronger replay priority or premium Outcome-replay eligibility.
 
 ---
 
 Gold Bent
 
-Strongest finale priority, deeper Chain support or premium packet-replay eligibility.
+Strongest finale priority or premium Outcome-replay eligibility.
 
 ---
 
@@ -239,14 +258,12 @@ Unstable.
 
 Never truly stays resolved.
 
-Good at supporting Prestige packet replays and Chain links.
+Good at supporting Prestige Outcome replays.
 
 Preferred Builds:
 
 - Prestige
 - Encore
-- Chain
-- Domino Line
 
 Good Everywhere:
 
@@ -254,9 +271,34 @@ Yes.
 
 Exceptional In:
 
-Prestige builds.
+Prestige builds that care about completed Outcomes.
 
-Chain builds that care about Chained coins.
+---
+
+## Flywheel Coin
+
+Theme:
+
+Motion.
+
+Keeps force moving through the flip.
+
+Good at supporting Momentum links and In Motion payoffs.
+
+Preferred Builds:
+
+- Momentum
+- Keep It Rolling
+- Follow Through
+- Ripple
+
+Good Everywhere:
+
+Medium.
+
+Exceptional In:
+
+Momentum builds.
 
 ---
 
@@ -264,28 +306,28 @@ Chain builds that care about Chained coins.
 
 Theme:
 
-Blank papers.
+Forgery medium: an unstamped coin waiting for stolen credentials.
 
-Forgery medium.
+Mechanical Identity:
 
-Identity can be stamped, borrowed or replaced during Forgery checks.
+- activates Forgery Tricks through its real family;
+- reads the genuine non-Forgery coin immediately to its left and locks that coin's family as its acting family before Flip;
+- can copy part of that coin's completed Outcome through Fake Credentials;
+- can imitate bounded Tricks from that coin's family through Borrowed Name;
+- can repeat one valuable eligible Trick through Forged Signature;
+- never permanently changes owned identity or real activation family;
+- runs its bounded copied Trick package through pre-roll and post-result phases alike.
 
 Preferred Builds:
 
-- Forgery
-- Borrowed Name
-- Fake Credentials
-- Copycat Jackpot
+- hybrid engines with an established primary family;
+- deliberate left-to-right coin positioning;
+- upgraded Borrowed Name and Forged Signature lines;
+- compact pouches that can reliably draw a genuine source beside a Blank.
 
-Good Everywhere:
+Risks:
 
-Sometimes.
-
-Exceptional In:
-
-Forgery builds that turn weak or failed coins into convincing copies of a chosen template.
-
----
+A Blank without a genuine left source or compatible family Tricks provides no Forgery payoff. This is intentional opportunity cost, not a fallback that should silently choose another source.
 
 ## Hollow Coin
 
@@ -302,10 +344,11 @@ Easier to put onto the board when resolving the flip, easier to smuggle in.
 Preferred Builds:
 
 - Smuggling
-- Sleeve Pocket
-- Backroom Refill
+- Hidden Pocket
+- Hidden in Plain Sight
+- Off the Books
 - Planted Double
-- Overloaded Table
+- Embarrassment of Riches
 
 Good Everywhere:
 
@@ -314,6 +357,35 @@ Sometimes.
 Exceptional In:
 
 Smuggling builds that overload the board with extra hand coins or temporary contraband copies.
+
+---
+
+## Vanishing Coin
+
+Theme:
+
+Magician's coin.
+
+Half-seen body.
+
+Palms, swaps and impossible rearrangements.
+
+Good at moving through already-resolved result slots without changing those results.
+
+Preferred Builds:
+
+- Sleight of Hand
+- Switcheroo
+- Vanishing Act
+- Three-Card Monte
+
+Good Everywhere:
+
+Sometimes.
+
+Exceptional In:
+
+Sleight builds that need a coin body that is easy to palm, swap or rearrange.
 
 ---
 
@@ -330,7 +402,7 @@ Ancient Patterns.
 Preferred Builds:
 
 - Card Shark
-- Prediction?
+- Prediction
 - Foretold coins
 - Ancient Patterns
 
@@ -340,7 +412,7 @@ Sometimes.
 
 Exceptional In:
 
-Prediction? builds that reveal and fulfill Foretold coins.
+Prediction builds that reveal and fulfill Foretold coins.
 
 ---
 
@@ -412,13 +484,19 @@ Example:
 
 Bent Coin
 
-Provides unstable packet replay or Chain-link support.
+Provides unstable Outcome replay support.
+
+---
+
+Flywheel Coin
+
+Provides live Momentum-link support.
 
 ---
 
 Prestige
 
-Exploits completed resolution packets.
+Exploits completed Outcomes.
 
 ---
 
@@ -442,13 +520,15 @@ Every coin should answer:
 
 Example:
 
-Bent -> Prestige / Chain / packet replay
+Bent -> Prestige / Outcome replay
 
-Blank -> Forgery / forged identity
+Flywheel -> Momentum / In Motion links
+
+Blank -> Forgery / copied Outcome and activation credentials
 
 Hollow -> Smuggling
 
-Marked -> Prediction? / Foretold coins
+Marked -> Prediction / Foretold coins
 
 Lucky -> Fate / Luck Meter / Fated Flip
 
@@ -597,11 +677,16 @@ without opening a tooltip.
 
 Examples:
 
-Bent Coin -> encores and Chain links
+Bent Coin -> encores and Outcome replays
+
+Flywheel Coin -> Momentum links
 
 Blank Coin -> forgery medium
 
-Hollow Coin -> smuggling
+Hollow Coin -> Smuggling
+
+Vanishing Coin -> Sleight of Hand
+
 
 Marked Coin -> foretold/readable results
 

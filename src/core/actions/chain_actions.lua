@@ -9,6 +9,12 @@ local CHAIN_OPS = {
   trigger_random_neighbor = true,
 }
 
+local VALID_DIRECTIONS = {
+  random = true,
+  left = true,
+  right = true,
+}
+
 local function ensureScoreBreakdown(context)
   context.scoreBreakdown = context.scoreBreakdown or ScoreBreakdown.new()
 
@@ -61,8 +67,40 @@ local function getSpecializedCandidates(candidates, family)
   return CoinTraits.filterByFamily(candidates, family)
 end
 
-local function chooseChainNeighbor(context, source, usedResolutionIndices, family, selector)
-  if type(selector) == "table" then
+local function directionMatches(sourceResolutionIndex, targetResolutionIndex, direction)
+  if direction == "left" then
+    return targetResolutionIndex == sourceResolutionIndex - 1
+  end
+
+  if direction == "right" then
+    return targetResolutionIndex == sourceResolutionIndex + 1
+  end
+
+  return math.abs(targetResolutionIndex - sourceResolutionIndex) == 1
+end
+
+local function normalizeDirections(action)
+  local directions = {}
+
+  if type(action.directions) == "table" then
+    for _, direction in ipairs(action.directions) do
+      if VALID_DIRECTIONS[direction] then
+        table.insert(directions, direction)
+      end
+    end
+  elseif VALID_DIRECTIONS[action.direction] then
+    table.insert(directions, action.direction)
+  end
+
+  if #directions == 0 then
+    table.insert(directions, "random")
+  end
+
+  return directions
+end
+
+local function chooseChainNeighbor(context, source, usedResolutionIndices, family, selector, direction)
+  if (direction == nil or direction == "random") and type(selector) == "table" then
     return TargetSelectors.resolveSlot(nil, nil, selector, contextWithFields(context, {
       currentCoin = source,
       usedResolutionIndices = usedResolutionIndices,
@@ -80,7 +118,7 @@ local function chooseChainNeighbor(context, source, usedResolutionIndices, famil
     local resolutionIndex = coinState.resolutionIndex
 
     if resolutionIndex
-      and math.abs(resolutionIndex - sourceResolutionIndex) == 1
+      and directionMatches(sourceResolutionIndex, resolutionIndex, direction or "random")
       and not usedResolutionIndices[resolutionIndex]
       and coinState.instanceId ~= source.instanceId then
       table.insert(candidates, coinState)
@@ -133,6 +171,54 @@ local function markChainedCoin(context, source, target, sourceId, depth, linkInd
   annotateChainRoll(findCoinRollByResolutionIndex(context, target.resolutionIndex), target, source, sourceId, depth, linkIndex)
 end
 
+local function queueTriggeredCoinScore(context, target, sourceId, depth)
+  if not target then
+    return 0, 1
+  end
+
+  local materialMultiplier = 1
+  if CoinTraits.hasRealFamily(target, "momentum") then
+    materialMultiplier = CoinTraits.materialPayoffMultiplier(target, 1, 0.25, true)
+  end
+
+  local followThroughMultiplier = context.batchFlags and context.batchFlags.momentum_follow_through == true
+    and (1 + (0.25 * depth))
+    or 1
+  local scoreMultiplier = materialMultiplier * followThroughMultiplier
+  local amount = math.max(1, math.floor((CoinTraits.baseScore(target) * scoreMultiplier) + 0.00001))
+  local queuedAction = {
+    op = "add_stage_score",
+    amount = amount,
+    category = "momentum",
+    label = "Momentum trigger",
+    _trace = {
+      phase = "after_coin_score",
+      sourceId = sourceId,
+      sourceType = "trick",
+      slotIndex = target.selectedSlotIndex or target.anchorSelectedSlotIndex,
+      originSlotIndex = context.currentActivation and context.currentActivation.sourceSlotIndex,
+    },
+  }
+
+  context.pendingActions = context.pendingActions or {}
+  context.pendingActions.after_scoring = context.pendingActions.after_scoring or {}
+  table.insert(context.pendingActions.after_scoring, {
+    phase = "after_scoring",
+    chainDepth = (context.currentChainDepth or 0) + 1,
+    actions = { queuedAction },
+    queuedBy = Utils.clone(queuedAction._trace),
+  })
+
+  context.trace.queuedActions = context.trace.queuedActions or {}
+  table.insert(context.trace.queuedActions, {
+    phase = "after_scoring",
+    chainDepth = (context.currentChainDepth or 0) + 1,
+    actionCount = 1,
+  })
+
+  return amount, scoreMultiplier
+end
+
 local function applyTriggerRandomNeighbor(context, action, options)
   ensureScoreBreakdown(context)
 
@@ -154,12 +240,13 @@ local function applyTriggerRandomNeighbor(context, action, options)
   end
 
   local chance = tonumber(action.chainChance) or 0.5
+  local continuationChance = tonumber(action.continuationChance) or chance
   local maxDepth = tonumber(action.maxChainDepth) or 2
   local maxTriggers = tonumber(action.maxTriggers) or maxDepth
   local sourceId = action._trace and action._trace.sourceId or nil
   local usedResolutionIndices = {}
-  local currentSource = source
   local links = {}
+  local directions = normalizeDirections(action)
 
   context.trace.chainLinks = context.trace.chainLinks or {}
   context.scoreBreakdown.chainLinks = context.scoreBreakdown.chainLinks or {}
@@ -169,73 +256,91 @@ local function applyTriggerRandomNeighbor(context, action, options)
   action.sourceSlotIndex = source.slotIndex
   action.sourceResolutionIndex = source.resolutionIndex
   action.chainChance = chance
+  action.continuationChance = continuationChance
   action.maxChainDepth = maxDepth
   action.maxTriggers = maxTriggers
   usedResolutionIndices[source.resolutionIndex] = true
 
-  for triggerIndex = 1, maxTriggers do
-    local sourceDepth = tonumber(currentSource.chainDepth) or 0
+  for branchIndex, direction in ipairs(directions) do
+    local currentSource = source
+    local branchStep = 1
 
-    if sourceDepth >= maxDepth then
-      break
+    while #links < maxTriggers do
+      local sourceDepth = tonumber(currentSource.chainDepth) or 0
+
+      if sourceDepth >= maxDepth then
+        break
+      end
+
+      local rollChance = branchStep == 1 and chance or continuationChance
+      local roll = context.rng and context.rng.nextFloat and context.rng:nextFloat() or 1
+      local success = roll <= rollChance
+      local rollEntry = {
+        sourceCoinId = currentSource.coinId,
+        sourceInstanceId = currentSource.instanceId,
+        sourceSlotIndex = currentSource.slotIndex,
+        sourceResolutionIndex = currentSource.resolutionIndex,
+        chainDepth = sourceDepth,
+        roll = roll,
+        chance = rollChance,
+        success = success,
+        direction = direction,
+        branchIndex = branchIndex,
+        branchStep = branchStep,
+      }
+      table.insert(action.chainRolls, rollEntry)
+
+      if not success then
+        break
+      end
+
+      local target, chosenNeighborIndex = chooseChainNeighbor(context, currentSource, usedResolutionIndices, action.specializedFamily, action.target, direction)
+
+      if not target then
+        recordWarning(options, context, "trigger_random_neighbor had no eligible unused neighbour.")
+        break
+      end
+
+      local depth = sourceDepth + 1
+      local linkIndex = #links + 1
+
+      markChainedCoin(context, currentSource, target, sourceId, depth, linkIndex)
+      usedResolutionIndices[target.resolutionIndex] = true
+
+      local triggeredScore, triggeredScoreMultiplier = queueTriggeredCoinScore(context, target, sourceId, depth)
+
+      local link = {
+        op = "trigger_random_neighbor",
+        sourceId = sourceId,
+        sourceCoinId = currentSource.coinId,
+        sourceInstanceId = currentSource.instanceId,
+        sourceSlotIndex = currentSource.slotIndex,
+        sourceResolutionIndex = currentSource.resolutionIndex,
+        targetCoinId = target.coinId,
+        targetInstanceId = target.instanceId,
+        targetSlotIndex = target.slotIndex,
+        targetResolutionIndex = target.resolutionIndex,
+        chained = true,
+        chainedBy = sourceId,
+        chainDepth = depth,
+        chainLinkIndex = linkIndex,
+        chainChance = rollChance,
+        chainRoll = roll,
+        chosenNeighborIndex = chosenNeighborIndex,
+        maxChainDepth = maxDepth,
+        direction = direction,
+        branchIndex = branchIndex,
+        branchStep = branchStep,
+        triggeredScore = triggeredScore,
+        triggeredScoreMultiplier = triggeredScoreMultiplier,
+      }
+
+      table.insert(links, link)
+      table.insert(context.trace.chainLinks, link)
+      table.insert(context.scoreBreakdown.chainLinks, Utils.clone(link))
+      currentSource = target
+      branchStep = branchStep + 1
     end
-
-    local roll = context.rng and context.rng.nextFloat and context.rng:nextFloat() or 1
-    local success = roll <= chance
-    local rollEntry = {
-      sourceCoinId = currentSource.coinId,
-      sourceInstanceId = currentSource.instanceId,
-      sourceSlotIndex = currentSource.slotIndex,
-      sourceResolutionIndex = currentSource.resolutionIndex,
-      chainDepth = sourceDepth,
-      roll = roll,
-      chance = chance,
-      success = success,
-    }
-    table.insert(action.chainRolls, rollEntry)
-
-    if not success then
-      break
-    end
-
-    local target, chosenNeighborIndex = chooseChainNeighbor(context, currentSource, usedResolutionIndices, action.specializedFamily, action.target)
-
-    if not target then
-      recordWarning(options, context, "trigger_random_neighbor had no eligible unused neighbour.")
-      break
-    end
-
-    local depth = sourceDepth + 1
-    local linkIndex = #links + 1
-
-    markChainedCoin(context, currentSource, target, sourceId, depth, linkIndex)
-    usedResolutionIndices[target.resolutionIndex] = true
-
-    local link = {
-      op = "trigger_random_neighbor",
-      sourceId = sourceId,
-      sourceCoinId = currentSource.coinId,
-      sourceInstanceId = currentSource.instanceId,
-      sourceSlotIndex = currentSource.slotIndex,
-      sourceResolutionIndex = currentSource.resolutionIndex,
-      targetCoinId = target.coinId,
-      targetInstanceId = target.instanceId,
-      targetSlotIndex = target.slotIndex,
-      targetResolutionIndex = target.resolutionIndex,
-      chained = true,
-      chainedBy = sourceId,
-      chainDepth = depth,
-      chainLinkIndex = linkIndex,
-      chainChance = chance,
-      chainRoll = roll,
-      chosenNeighborIndex = chosenNeighborIndex,
-      maxChainDepth = maxDepth,
-    }
-
-    table.insert(links, link)
-    table.insert(context.trace.chainLinks, link)
-    table.insert(context.scoreBreakdown.chainLinks, Utils.clone(link))
-    currentSource = target
   end
 
   if #links > 0 then
@@ -281,6 +386,26 @@ function ChainActions.validate(action, TargetSelectorsModule)
 
   if action.chainChance ~= nil and (type(action.chainChance) ~= "number" or action.chainChance < 0 or action.chainChance > 1) then
     return false, "trigger_random_neighbor chainChance must be between 0 and 1 when present"
+  end
+
+  if action.continuationChance ~= nil and (type(action.continuationChance) ~= "number" or action.continuationChance < 0 or action.continuationChance > 1) then
+    return false, "trigger_random_neighbor continuationChance must be between 0 and 1 when present"
+  end
+
+  if action.direction ~= nil and not VALID_DIRECTIONS[action.direction] then
+    return false, "trigger_random_neighbor direction must be random|left|right when present"
+  end
+
+  if action.directions ~= nil then
+    if type(action.directions) ~= "table" then
+      return false, "trigger_random_neighbor directions must be a list when present"
+    end
+
+    for _, direction in ipairs(action.directions) do
+      if not VALID_DIRECTIONS[direction] then
+        return false, "trigger_random_neighbor directions entries must be random|left|right"
+      end
+    end
   end
 
   if action.maxChainDepth ~= nil and (type(action.maxChainDepth) ~= "number" or math.floor(action.maxChainDepth) ~= action.maxChainDepth or action.maxChainDepth < 1) then

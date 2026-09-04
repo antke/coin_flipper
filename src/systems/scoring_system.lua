@@ -1,57 +1,13 @@
 local CoinTraits = require("src.core.coin_traits")
+local Utils = require("src.core.utils")
 
 local ScoringSystem = {}
 
-local function syncScoreCreditFields(scoreEvent, coinState)
-  local redirectedCredit = coinState.redirectedCredit == true
-  local creditCoinId = redirectedCredit and coinState.scoreCreditCoinId or coinState.coinId
-  local creditInstanceId = redirectedCredit and coinState.scoreCreditInstanceId or coinState.instanceId
-  local creditSlotIndex = redirectedCredit and coinState.scoreCreditSlotIndex or coinState.slotIndex
-  local creditSelectedSlotIndex = redirectedCredit and coinState.scoreCreditSelectedSlotIndex or coinState.selectedSlotIndex
-  local creditDealtIndex = redirectedCredit and coinState.scoreCreditDealtIndex or coinState.dealtIndex
-  local creditBoardSlotIndex = redirectedCredit and coinState.scoreCreditBoardSlotIndex or coinState.boardSlotIndex
-  local creditOverloadSlotIndex = redirectedCredit and coinState.scoreCreditOverloadSlotIndex or coinState.overloadSlotIndex
-  local creditResolutionIndex = redirectedCredit and coinState.scoreCreditResolutionIndex or scoreEvent.resolutionIndex
-
-  scoreEvent.spotlight = coinState.spotlight == true
-  scoreEvent.spotlightBy = coinState.spotlightBy
-  scoreEvent.redirectedCredit = redirectedCredit
-  scoreEvent.redirectedCreditBy = coinState.redirectedCreditBy
-  scoreEvent.redirectedCreditTargetCoinId = coinState.redirectedCreditTargetCoinId
-  scoreEvent.redirectedCreditTargetInstanceId = coinState.redirectedCreditTargetInstanceId
-  scoreEvent.redirectedCreditTargetSlotIndex = coinState.redirectedCreditTargetSlotIndex
-  scoreEvent.redirectedCreditTargetResolutionIndex = coinState.redirectedCreditTargetResolutionIndex
-
-  scoreEvent.scoreCredit.coinId = creditCoinId
-  scoreEvent.scoreCredit.instanceId = creditInstanceId
-  scoreEvent.scoreCredit.slotIndex = creditSlotIndex
-  scoreEvent.scoreCredit.selectedSlotIndex = creditSelectedSlotIndex
-  scoreEvent.scoreCredit.dealtIndex = creditDealtIndex
-  scoreEvent.scoreCredit.boardSlotIndex = creditBoardSlotIndex
-  scoreEvent.scoreCredit.overloadSlotIndex = creditOverloadSlotIndex
-  scoreEvent.scoreCredit.resolutionIndex = creditResolutionIndex
-  scoreEvent.scoreCredit.redirectedCredit = redirectedCredit
-  scoreEvent.scoreCredit.redirectedCreditBy = coinState.redirectedCreditBy
-  scoreEvent.scoreCredit.sourceCoinId = redirectedCredit and coinState.coinId or nil
-  scoreEvent.scoreCredit.sourceInstanceId = redirectedCredit and coinState.instanceId or nil
-  scoreEvent.scoreCredit.sourceSlotIndex = redirectedCredit and coinState.slotIndex or nil
-  scoreEvent.scoreCredit.sourceResolutionIndex = redirectedCredit and scoreEvent.resolutionIndex or nil
-  scoreEvent.scoreCredit.spotlightCoinId = coinState.redirectedCreditTargetCoinId
-  scoreEvent.scoreCredit.spotlightInstanceId = coinState.redirectedCreditTargetInstanceId
-  scoreEvent.scoreCredit.spotlightSlotIndex = coinState.redirectedCreditTargetSlotIndex
-  scoreEvent.scoreCredit.spotlightResolutionIndex = coinState.redirectedCreditTargetResolutionIndex
-
-  scoreEvent.packetSeed.scoreCreditCoinId = creditCoinId
-  scoreEvent.packetSeed.scoreCreditInstanceId = creditInstanceId
-  scoreEvent.packetSeed.scoreCreditSlotIndex = creditSlotIndex
-  scoreEvent.packetSeed.scoreCreditResolutionIndex = creditResolutionIndex
-  scoreEvent.packetSeed.redirectedCredit = redirectedCredit
-end
-
-local function buildScoreEvent(context, coinState, index, didMatch)
+local function buildScoreEvent(context, coinState, index, didMatch, includeRootBonuses)
   local resolutionIndex = coinState.resolutionIndex or index
   local scoringCoinId = coinState.scoringCoinId or coinState.forgedCoinId or coinState.coinId
-  local baseScoreContribution = didMatch and CoinTraits.baseScore(scoringCoinId) or 0
+  local didScore = coinState.palmed ~= true and (didMatch or coinState.forgedPayout == true)
+  local baseScoreContribution = didScore and CoinTraits.baseScore(scoringCoinId) or 0
 
   return {
     eventId = string.format("score_%02d", resolutionIndex),
@@ -62,8 +18,17 @@ local function buildScoreEvent(context, coinState, index, didMatch)
     dealtIndex = coinState.dealtIndex,
     boardSlotIndex = coinState.boardSlotIndex,
     overloadSlotIndex = coinState.overloadSlotIndex,
+    anchorSelectedSlotIndex = coinState.anchorSelectedSlotIndex,
+    anchorInstanceId = coinState.anchorInstanceId,
+    anchorCoinId = coinState.anchorCoinId,
+    anchorOverloadIndex = coinState.anchorOverloadIndex,
+    palmed = coinState.palmed == true,
+    sleightSaved = coinState.sleightSaved == true,
     smuggled = coinState.smuggled == true,
     smuggledBy = coinState.smuggledBy,
+    contrabandCopy = coinState.contrabandCopy == true,
+    copiedFromCoinId = coinState.copiedFromCoinId,
+    copiedFromInstanceId = coinState.copiedFromInstanceId,
     chained = coinState.chained == true,
     chainedBy = coinState.chainedBy,
     chainDepth = coinState.chainDepth,
@@ -78,11 +43,14 @@ local function buildScoreEvent(context, coinState, index, didMatch)
     result = coinState.result,
     call = context.call,
     matched = didMatch,
+    forgedPayout = coinState.forgedPayout == true,
     baseScoreContribution = baseScoreContribution,
-    scoreScaling = 1.0,
-    multiplier = 1.0,
-    scoreBeforeAggregateScaling = didMatch and 1 or 0,
-    scoreBeforeAggregateMultiplier = didMatch and 1 or 0,
+    scoreScaling = (tonumber(coinState.scoreScalingMultiplier) or 1.0)
+      * (includeRootBonuses and (tonumber(coinState.rootScoreScalingMultiplier) or 1.0) or 1.0),
+    multiplier = (tonumber(coinState.scoreScalingMultiplier) or 1.0)
+      * (includeRootBonuses and (tonumber(coinState.rootScoreScalingMultiplier) or 1.0) or 1.0),
+    scoreBeforeAggregateScaling = didScore and 1 or 0,
+    scoreBeforeAggregateMultiplier = didScore and 1 or 0,
     finalScoreContribution = 0,
     baseHeadsWeight = coinState.baseHeadsWeight,
     baseTailsWeight = coinState.baseTailsWeight,
@@ -93,13 +61,23 @@ local function buildScoreEvent(context, coinState, index, didMatch)
     forgedBy = coinState.forgedBy,
     forgedCoinId = coinState.forgedCoinId,
     scoringCoinId = scoringCoinId,
+    effectiveIdentityIds = Utils.clone(coinState.effectiveIdentityIds or nil),
     identitySourceCoinId = coinState.identitySourceCoinId,
     identitySourceInstanceId = coinState.identitySourceInstanceId,
+    sourceCoinIds = Utils.clone(coinState.sourceCoinIds or nil),
+    sourceInstanceIds = Utils.clone(coinState.sourceInstanceIds or nil),
+    sourceResolutionIndices = Utils.clone(coinState.sourceResolutionIndices or nil),
     forgedIdentity = coinState.forgedIdentity,
     resultSlot = {
       slotIndex = coinState.slotIndex,
       boardSlotIndex = coinState.boardSlotIndex,
       overloadSlotIndex = coinState.overloadSlotIndex,
+      anchorSelectedSlotIndex = coinState.anchorSelectedSlotIndex,
+      anchorInstanceId = coinState.anchorInstanceId,
+      anchorCoinId = coinState.anchorCoinId,
+      anchorOverloadIndex = coinState.anchorOverloadIndex,
+      palmed = coinState.palmed == true,
+      sleightSaved = coinState.sleightSaved == true,
       resolutionIndex = resolutionIndex,
       result = coinState.result,
       call = context.call,
@@ -111,8 +89,17 @@ local function buildScoreEvent(context, coinState, index, didMatch)
       dealtIndex = coinState.dealtIndex,
       boardSlotIndex = coinState.boardSlotIndex,
       overloadSlotIndex = coinState.overloadSlotIndex,
+      anchorSelectedSlotIndex = coinState.anchorSelectedSlotIndex,
+      anchorInstanceId = coinState.anchorInstanceId,
+      anchorCoinId = coinState.anchorCoinId,
+      anchorOverloadIndex = coinState.anchorOverloadIndex,
+      palmed = coinState.palmed == true,
+      sleightSaved = coinState.sleightSaved == true,
       smuggled = coinState.smuggled == true,
       smuggledBy = coinState.smuggledBy,
+      contrabandCopy = coinState.contrabandCopy == true,
+      copiedFromCoinId = coinState.copiedFromCoinId,
+      copiedFromInstanceId = coinState.copiedFromInstanceId,
       chained = coinState.chained == true,
       chainedBy = coinState.chainedBy,
       chainDepth = coinState.chainDepth,
@@ -120,7 +107,11 @@ local function buildScoreEvent(context, coinState, index, didMatch)
       chainSourceInstanceId = coinState.chainSourceInstanceId,
       forged = coinState.forged == true,
       forgedCoinId = coinState.forgedCoinId,
+      scoringCoinId = scoringCoinId,
+      effectiveIdentityIds = Utils.clone(coinState.effectiveIdentityIds or nil),
       identitySourceCoinId = coinState.identitySourceCoinId,
+      identitySourceInstanceId = coinState.identitySourceInstanceId,
+      forgedPayout = coinState.forgedPayout == true,
     },
     scoreCredit = {
       coinId = coinState.coinId,
@@ -132,6 +123,9 @@ local function buildScoreEvent(context, coinState, index, didMatch)
       overloadSlotIndex = coinState.overloadSlotIndex,
       smuggled = coinState.smuggled == true,
       smuggledBy = coinState.smuggledBy,
+      contrabandCopy = coinState.contrabandCopy == true,
+      copiedFromCoinId = coinState.copiedFromCoinId,
+      copiedFromInstanceId = coinState.copiedFromInstanceId,
       chained = coinState.chained == true,
       chainedBy = coinState.chainedBy,
       chainDepth = coinState.chainDepth,
@@ -141,8 +135,13 @@ local function buildScoreEvent(context, coinState, index, didMatch)
       forged = coinState.forged == true,
       forgedCoinId = coinState.forgedCoinId,
       scoringCoinId = scoringCoinId,
+      effectiveIdentityIds = Utils.clone(coinState.effectiveIdentityIds or nil),
       identitySourceCoinId = coinState.identitySourceCoinId,
       identitySourceInstanceId = coinState.identitySourceInstanceId,
+      sourceCoinIds = Utils.clone(coinState.sourceCoinIds or nil),
+      sourceInstanceIds = Utils.clone(coinState.sourceInstanceIds or nil),
+      sourceResolutionIndices = Utils.clone(coinState.sourceResolutionIndices or nil),
+      forgedPayout = coinState.forgedPayout == true,
     },
     packetSeed = {
       batchId = context.batchId,
@@ -150,6 +149,7 @@ local function buildScoreEvent(context, coinState, index, didMatch)
       coinId = coinState.coinId,
       scoringCoinId = scoringCoinId,
       forgedCoinId = coinState.forgedCoinId,
+      effectiveIdentityIds = Utils.clone(coinState.effectiveIdentityIds or nil),
       instanceId = coinState.instanceId,
       slotIndex = coinState.slotIndex,
       selectedSlotIndex = coinState.selectedSlotIndex,
@@ -163,6 +163,10 @@ local function buildScoreEvent(context, coinState, index, didMatch)
       chainDepth = coinState.chainDepth,
       chainSourceCoinId = coinState.chainSourceCoinId,
       chainSourceInstanceId = coinState.chainSourceInstanceId,
+      forged = coinState.forged == true,
+      forgedPayout = coinState.forgedPayout == true,
+      identitySourceCoinId = coinState.identitySourceCoinId,
+      identitySourceInstanceId = coinState.identitySourceInstanceId,
     },
   }
 end
@@ -178,13 +182,11 @@ function ScoringSystem.buildScoreActions(context, options)
 
   for index, coinState in ipairs(context.perCoin or {}) do
     local didMatch = coinState.result == context.call
-    local scoreEvent = buildScoreEvent(context, coinState, index, didMatch)
+    local scoreEvent = buildScoreEvent(context, coinState, index, didMatch, true)
 
     if runCoinScorePhase then
       runCoinScorePhase("before_coin_score", scoreEvent, coinState)
     end
-
-    syncScoreCreditFields(scoreEvent, coinState)
 
     scoreEvent.scoreScaling = tonumber(scoreEvent.scoreScaling or scoreEvent.multiplier) or 1.0
     scoreEvent.multiplier = scoreEvent.scoreScaling
@@ -244,11 +246,21 @@ function ScoringSystem.buildScoreActions(context, options)
       result = scoreEvent.result,
       call = scoreEvent.call,
       matched = scoreEvent.matched,
+      forged = scoreEvent.forged == true,
+      forgedBy = scoreEvent.forgedBy,
+      forgedCoinId = scoreEvent.forgedCoinId,
+      scoringCoinId = scoreEvent.scoringCoinId,
+      effectiveIdentityIds = Utils.clone(scoreEvent.effectiveIdentityIds or nil),
+      identitySourceCoinId = scoreEvent.identitySourceCoinId,
+      identitySourceInstanceId = scoreEvent.identitySourceInstanceId,
+      forgedPayout = scoreEvent.forgedPayout == true,
       baseScoreContribution = scoreEvent.baseScoreContribution,
       scoreBeforeAggregateScaling = eventPreScoreScalingScore,
       scoreBeforeAggregateMultiplier = eventPreScoreScalingScore,
       finalScoreContribution = scoreEvent.finalScoreContribution,
       prestigeReplay = false,
+      rootOutcome = true,
+      activationKind = "root",
       chained = scoreEvent.chained == true,
       chainDepth = scoreEvent.chainDepth,
       chainSourceCoinId = scoreEvent.chainSourceCoinId,
@@ -273,6 +285,74 @@ function ScoringSystem.buildScoreActions(context, options)
   end
 
   return actions
+end
+
+function ScoringSystem.buildCoinActivationScoreActions(context, coinState, activation, options)
+  local didMatch = coinState.result == context.call
+  local event = buildScoreEvent(context, coinState, coinState.resolutionIndex or 1, didMatch, false)
+  event.eventId = string.format("score_%s", activation.activationId)
+  event.activationId = activation.activationId
+  event.activationKind = activation.kind
+  event.chainDepth = activation.chainDepth or 0
+  event.packetSeed.eventId = event.eventId
+  event.packetSeed.activationId = activation.activationId
+  event.packetSeed.activationKind = activation.kind
+  event.packetSeed.chainDepth = activation.chainDepth or 0
+
+  if options and options.runCoinScorePhase then
+    options.runCoinScorePhase("before_coin_score", event, coinState, activation)
+  end
+  event.scoreScaling = tonumber(event.scoreScaling or event.multiplier) or 1
+  event.multiplier = event.scoreScaling
+  event.scoreBeforeAggregateScaling = event.baseScoreContribution * event.scoreScaling
+  event.scoreBeforeAggregateMultiplier = event.scoreBeforeAggregateScaling
+  if options and options.runCoinScorePhase then
+    options.runCoinScorePhase("after_coin_score", event, coinState, activation)
+  end
+
+  local finalScore = math.floor(event.scoreBeforeAggregateScaling * (context.pendingScoreScaling or 1) + 0.00001)
+  event.finalScoreContribution = finalScore
+  event.packetSeed.finalScoreContribution = finalScore
+  event.packetSeed.scoreBeforeAggregateScaling = event.scoreBeforeAggregateScaling
+  table.insert(context.scoreBreakdown.scoreEvents, event)
+  table.insert(context.scoreBreakdown.perCoin, event)
+  table.insert(context.scoreBreakdown.resolutionPackets, {
+    packetId = string.format("packet_%s", event.eventId),
+    coinId = event.coinId,
+    instanceId = event.instanceId,
+    slotIndex = event.slotIndex,
+    selectedSlotIndex = event.selectedSlotIndex,
+    resolutionIndex = event.resolutionIndex,
+    result = event.result,
+    call = event.call,
+    matched = event.matched,
+    baseScoreContribution = event.baseScoreContribution,
+    scoreBeforeAggregateScaling = event.scoreBeforeAggregateScaling,
+    finalScoreContribution = finalScore,
+    activationId = activation.activationId,
+    activationKind = activation.kind,
+    rootOutcome = false,
+    prestigeReplay = false,
+    chainDepth = activation.chainDepth or 0,
+    seed = event.packetSeed,
+    scoreCredit = event.scoreCredit,
+  })
+
+  if finalScore <= 0 then return {} end
+  return {
+    {
+      op = "add_stage_score",
+      amount = finalScore,
+      category = "reactivation",
+      label = "Reactivated Outcome",
+      _trace = {
+        phase = "reactivation_score",
+        sourceId = activation.parentTrickId,
+        sourceType = "trick",
+        activationId = activation.activationId,
+      },
+    },
+  }
 end
 
 return ScoringSystem

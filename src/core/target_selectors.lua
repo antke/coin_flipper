@@ -6,8 +6,16 @@ local function coinHasFamily(slot, family)
   return CoinTraits.hasFamily(slot, family)
 end
 
+local function coinHasRealFamily(slot, family)
+  return CoinTraits.hasRealFamily(slot, family)
+end
+
 local function coinHasArchetype(slot, archetype)
   return CoinTraits.hasArchetype(slot, archetype)
+end
+
+local function coinHasRealArchetype(slot, archetype)
+  return CoinTraits.hasRealArchetype(slot, archetype)
 end
 
 local function coinBaseScore(slot)
@@ -16,6 +24,20 @@ end
 
 local function candidateResolutionIndex(candidate)
   return candidate.slot and candidate.slot.resolutionIndex
+end
+
+local function contextHasResolutionIndex(context, resolutionIndex)
+  if resolutionIndex == nil then
+    return false
+  end
+
+  for _, coinState in ipairs(context and context.perCoin or {}) do
+    if coinState.resolutionIndex == resolutionIndex then
+      return true
+    end
+  end
+
+  return false
 end
 
 local function selectedInstanceIds(purse)
@@ -85,12 +107,33 @@ local function matchesFilter(candidate, filter, context)
     return candidate.slotPosition == filter.value
   end
 
+  if filter.op == "family" then
+    return coinHasFamily(candidate.slot, filter.value)
+  end
+
+  if filter.op == "real_family" then
+    return coinHasRealFamily(candidate.slot, filter.value)
+  end
+
+  if filter.op == "archetype" then
+    return coinHasArchetype(candidate.slot, filter.value)
+  end
+
+  if filter.op == "real_archetype" then
+    return coinHasRealArchetype(candidate.slot, filter.value)
+  end
+
   if filter.op == "not_selected" then
     return candidate.selected ~= true
   end
 
   if filter.op == "not_smuggled" then
     return candidate.slot.smuggled ~= true
+  end
+
+  if filter.op == "material_rank_below_current" then
+    local currentRank = CoinTraits.materialRank(context and context.currentCoin or nil, true)
+    return currentRank > 0 and CoinTraits.materialRank(candidate.slot, true) < currentRank
   end
 
   if filter.op == "not_foretold" then
@@ -113,14 +156,37 @@ local function matchesFilter(candidate, filter, context)
     return not context or not context.selectorExcludedInstanceId or candidate.slot.instanceId ~= context.selectorExcludedInstanceId
   end
 
-  if filter.op == "not_redirected_credit" then
-    return candidate.slot.redirectedCredit ~= true
-  end
-
   if filter.op == "neighbor_of_current" then
     local sourceIndex = context and context.currentCoin and context.currentCoin.resolutionIndex or nil
     local resolutionIndex = candidateResolutionIndex(candidate)
     return sourceIndex ~= nil and resolutionIndex ~= nil and math.abs(resolutionIndex - sourceIndex) == 1
+  end
+
+  if filter.op == "has_neighbor" then
+    local resolutionIndex = candidateResolutionIndex(candidate)
+    if resolutionIndex == nil then
+      return false
+    end
+
+    return contextHasResolutionIndex(context, resolutionIndex - 1) or contextHasResolutionIndex(context, resolutionIndex + 1)
+  end
+
+  if filter.op == "has_left_neighbor" then
+    local resolutionIndex = candidateResolutionIndex(candidate)
+    if resolutionIndex == nil then
+      return false
+    end
+
+    return contextHasResolutionIndex(context, resolutionIndex - 1)
+  end
+
+  if filter.op == "has_both_neighbors" then
+    local resolutionIndex = candidateResolutionIndex(candidate)
+    if resolutionIndex == nil then
+      return false
+    end
+
+    return contextHasResolutionIndex(context, resolutionIndex - 1) and contextHasResolutionIndex(context, resolutionIndex + 1)
   end
 
   if filter.op == "not_used_resolution_index" then
@@ -193,6 +259,31 @@ local function applyPreferences(candidates, preferences)
   return candidates
 end
 
+local function applyMaterialBand(candidates, materialBand)
+  if materialBand ~= "highest" and materialBand ~= "lowest" then
+    return candidates
+  end
+
+  local selectedRank = nil
+  for _, candidate in ipairs(candidates or {}) do
+    local rank = CoinTraits.materialRank(candidate.slot, true)
+    if selectedRank == nil
+      or (materialBand == "highest" and rank > selectedRank)
+      or (materialBand == "lowest" and rank < selectedRank) then
+      selectedRank = rank
+    end
+  end
+
+  local band = {}
+  for _, candidate in ipairs(candidates or {}) do
+    if CoinTraits.materialRank(candidate.slot, true) == selectedRank then
+      table.insert(band, candidate)
+    end
+  end
+
+  return band
+end
+
 local function sortCandidates(candidates, selector)
   if selector.orderBy == nil or selector.orderBy == "slot_position" then
     table.sort(candidates, function(left, right)
@@ -219,6 +310,17 @@ local function sortCandidates(candidates, selector)
       end
 
       return leftScore > rightScore
+    end)
+  elseif selector.orderBy == "material_rank_desc" then
+    table.sort(candidates, function(left, right)
+      local leftRank = CoinTraits.materialRank(left.slot, true)
+      local rightRank = CoinTraits.materialRank(right.slot, true)
+
+      if leftRank == rightRank then
+        return left.slotPosition < right.slotPosition
+      end
+
+      return leftRank > rightRank
     end)
   end
 end
@@ -253,7 +355,7 @@ local function pickCandidate(candidates, selector, context)
   return candidates[1]
 end
 
-function TargetSelectors.resolveSlot(runState, stageState, selector, context)
+local function buildCandidates(stageState, selector, context)
   if type(selector) ~= "table" then
     return nil, "target_selector_required"
   end
@@ -272,14 +374,37 @@ function TargetSelectors.resolveSlot(runState, stageState, selector, context)
 
   candidates = applyFilters(candidates, selector.filters, context)
   candidates = applyPreferences(candidates, selector.prefer)
+  candidates = applyMaterialBand(candidates, selector.materialBand)
   sortCandidates(candidates, selector)
+
+  return candidates
+end
+
+function TargetSelectors.resolveSlots(runState, stageState, selector, context)
+  local candidates, candidateError = buildCandidates(stageState, selector, context)
+  if not candidates then
+    return {}, candidateError
+  end
+
+  if selector.pick and selector.pick.op == "all" then
+    local slots = {}
+    for _, candidate in ipairs(candidates) do
+      table.insert(slots, candidate.slot)
+    end
+    return slots, #slots > 0 and nil or "no_target_candidate"
+  end
 
   local candidate, pickError = pickCandidate(candidates, selector, context)
   if candidate then
-    return candidate.slot, nil
+    return { candidate.slot }, nil
   end
 
-  return nil, pickError or "no_target_candidate"
+  return {}, pickError or "no_target_candidate"
+end
+
+function TargetSelectors.resolveSlot(runState, stageState, selector, context)
+  local slots, slotError = TargetSelectors.resolveSlots(runState, stageState, selector, context)
+  return slots[1], slotError
 end
 
 function TargetSelectors.resolvePacket(context, selector)
@@ -301,17 +426,30 @@ function TargetSelectors.validateSlotSelector(selector, allowedZones)
     return false, "target selector zone is not allowed here"
   end
 
+  if selector.materialBand ~= nil
+    and selector.materialBand ~= "highest"
+    and selector.materialBand ~= "lowest" then
+    return false, "target selector materialBand must be highest|lowest when present"
+  end
+
   for _, filter in ipairs(selector.filters or {}) do
     if filter.op ~= "slot_index"
+      and filter.op ~= "family"
+      and filter.op ~= "real_family"
+      and filter.op ~= "archetype"
+      and filter.op ~= "real_archetype"
       and filter.op ~= "not_selected"
       and filter.op ~= "not_smuggled"
+      and filter.op ~= "material_rank_below_current"
       and filter.op ~= "not_foretold"
       and filter.op ~= "failed_call"
       and filter.op ~= "matched_call"
       and filter.op ~= "not_current_coin"
       and filter.op ~= "not_context_instance"
-      and filter.op ~= "not_redirected_credit"
       and filter.op ~= "neighbor_of_current"
+      and filter.op ~= "has_neighbor"
+      and filter.op ~= "has_left_neighbor"
+      and filter.op ~= "has_both_neighbors"
       and filter.op ~= "not_used_resolution_index"
       and filter.op ~= "selected"
       and filter.op ~= "positive_score"
@@ -321,6 +459,22 @@ function TargetSelectors.validateSlotSelector(selector, allowedZones)
 
     if filter.op == "slot_index" and not isPositiveInteger(filter.value) then
       return false, "target selector slot_index filter requires positive integer value"
+    end
+
+    if filter.op == "family" and (type(filter.value) ~= "string" or filter.value == "") then
+      return false, "target selector family filter requires string value"
+    end
+
+    if filter.op == "real_family" and (type(filter.value) ~= "string" or filter.value == "") then
+      return false, "target selector real_family filter requires string value"
+    end
+
+    if filter.op == "archetype" and (type(filter.value) ~= "string" or filter.value == "") then
+      return false, "target selector archetype filter requires string value"
+    end
+
+    if filter.op == "real_archetype" and (type(filter.value) ~= "string" or filter.value == "") then
+      return false, "target selector real_archetype filter requires string value"
     end
   end
 
@@ -334,20 +488,20 @@ function TargetSelectors.validateSlotSelector(selector, allowedZones)
     end
   end
 
-  if selector.orderBy ~= nil and selector.orderBy ~= "slot_position" and selector.orderBy ~= "random" and selector.orderBy ~= "base_score" and selector.orderBy ~= "base_score_desc" then
-    return false, "target selector orderBy must be slot_position|random|base_score|base_score_desc"
+  if selector.orderBy ~= nil and selector.orderBy ~= "slot_position" and selector.orderBy ~= "random" and selector.orderBy ~= "base_score" and selector.orderBy ~= "base_score_desc" and selector.orderBy ~= "material_rank_desc" then
+    return false, "target selector orderBy must be slot_position|random|base_score|base_score_desc|material_rank_desc"
   end
 
   if selector.pick ~= nil then
-    if selector.pick.op ~= "slot_at_position" then
-      return false, "target selector pick must be slot_at_position"
+    if selector.pick.op ~= "slot_at_position" and selector.pick.op ~= "all" then
+      return false, "target selector pick must be slot_at_position|all"
     end
 
-    if not isPositiveInteger(selector.pick.value) then
+    if selector.pick.op == "slot_at_position" and not isPositiveInteger(selector.pick.value) then
       return false, "target selector pick value must be a positive integer"
     end
 
-    if selector.orderBy == "random" and selector.pick.value ~= 1 then
+    if selector.orderBy == "random" and (selector.pick.op ~= "slot_at_position" or selector.pick.value ~= 1) then
       return false, "target selector random order only supports pick position 1"
     end
   end

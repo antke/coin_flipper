@@ -42,7 +42,7 @@ return {
     local coinRolls = trace.coinRolls or {}
 
     A.truthy(#coinRolls >= 3, "expected canonical coin rolls")
-    A.equal(roundToHundredths(coinRolls[1].headsWeight), 0.75, "Weighted Palm should set the leftmost selected coin")
+    A.equal(roundToHundredths(coinRolls[1].headsWeight), 0.75, "Weighted Palm should set the first selected coin")
     A.truthy(coinRolls[2].headsWeight > coinRolls[2].baseHeadsWeight, "Headside Edge should add heads Weight to coin 2")
     A.truthy(coinRolls[3].headsWeight > coinRolls[3].baseHeadsWeight, "Headside Edge should add heads Weight to coin 3")
 

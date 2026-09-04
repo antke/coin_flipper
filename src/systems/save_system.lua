@@ -1,4 +1,8 @@
 local MetaState = require("src.domain.meta_state")
+local TrickBoardSystem = require("src.systems.trick_board_system")
+local PredictionSlotSystem = require("src.systems.prediction_slot_system")
+local EnemySkillSystem = require("src.systems.enemy_skill_system")
+local BossTrickSystem = require("src.systems.boss_trick_system")
 local Utils = require("src.core.utils")
 local Validator = require("src.core.validator")
 
@@ -349,29 +353,65 @@ function SaveSystem.normalizeMetaStateForSave(metaState)
 end
 
 function SaveSystem.normalizeActiveRunForSave(snapshot)
-  local ok, errorMessage = Validator.validateActiveRunArtifactPayload(snapshot)
+  local candidate = Utils.clone(snapshot)
+  if type(candidate.runState) == "table" then
+    candidate.runState.maxActiveTricks = candidate.runState.maxActiveTricks or 5
+    local _, removed = TrickBoardSystem.sanitizeActiveTricks(candidate.runState)
+    if #removed > 0 and type(candidate.stageState) == "table"
+      and type(candidate.stageState.trickBoard) == "table" then
+      candidate.stageState.trickBoard.pressure = {}
+    end
+  end
+  if type(candidate.stageState) == "table" then
+    candidate.stageState.trickBoard = candidate.stageState.trickBoard or {
+      phase = candidate.stageState.stageStatus == "active" and "setup" or "complete",
+      revision = 1,
+      pressure = {},
+      replacementsRemaining = 3,
+      replacementHistory = {},
+    }
+    if type(candidate.stageState.purse) == "table" then
+      candidate.stageState.purse.replacementHistory = candidate.stageState.purse.replacementHistory or {}
+    end
+    PredictionSlotSystem.ensure(candidate.runState, candidate.stageState)
+    EnemySkillSystem.ensureState(candidate.stageState)
+    BossTrickSystem.ensureState(candidate.stageState)
+    if candidate.stageState.stageType == "boss" then
+      EnemySkillSystem.assignSkill(candidate.runState, candidate.stageState)
+      if candidate.stageState.stageStatus == "active"
+        and candidate.stageState.trickBoard.phase == "setup" then
+        BossTrickSystem.ensureIntent(candidate.runState, candidate.stageState)
+      end
+    elseif candidate.stageState.stageStatus == "active"
+      and candidate.stageState.trickBoard.phase == "setup" then
+      EnemySkillSystem.ensureIntent(candidate.runState, candidate.stageState)
+      BossTrickSystem.ensureIntent(candidate.runState, candidate.stageState)
+    end
+  end
+
+  local ok, errorMessage = Validator.validateActiveRunArtifactPayload(candidate)
 
   if not ok then
     return nil, errorMessage
   end
 
   return {
-    currentState = snapshot.currentState,
-    runState = Utils.clone(snapshot.runState),
-    stageState = Utils.clone(snapshot.stageState),
-    runRngSeed = snapshot.runRngSeed,
-    selectedCall = snapshot.selectedCall,
-    lastBatchResult = Utils.clone(snapshot.lastBatchResult),
-    lastStageResult = Utils.clone(snapshot.lastStageResult),
-    postResultNextState = snapshot.postResultNextState,
-    rewardPreviewSession = Utils.clone(snapshot.rewardPreviewSession),
-    encounterSession = Utils.clone(snapshot.encounterSession),
-    shopOffers = Utils.clone(snapshot.shopOffers or {}),
-    shopSession = Utils.clone(snapshot.shopSession),
-    lastShopGenerationTrace = Utils.clone(snapshot.lastShopGenerationTrace),
-    lastShopPurchaseTrace = Utils.clone(snapshot.lastShopPurchaseTrace),
-    currentStageDefinitionId = snapshot.currentStageDefinitionId,
-    screenState = Utils.clone(snapshot.screenState),
+    currentState = candidate.currentState,
+    runState = Utils.clone(candidate.runState),
+    stageState = Utils.clone(candidate.stageState),
+    runRngSeed = candidate.runRngSeed,
+    selectedCall = candidate.selectedCall,
+    lastBatchResult = Utils.clone(candidate.lastBatchResult),
+    lastStageResult = Utils.clone(candidate.lastStageResult),
+    postResultNextState = candidate.postResultNextState,
+    rewardPreviewSession = Utils.clone(candidate.rewardPreviewSession),
+    encounterSession = Utils.clone(candidate.encounterSession),
+    shopOffers = Utils.clone(candidate.shopOffers or {}),
+    shopSession = Utils.clone(candidate.shopSession),
+    lastShopGenerationTrace = Utils.clone(candidate.lastShopGenerationTrace),
+    lastShopPurchaseTrace = Utils.clone(candidate.lastShopPurchaseTrace),
+    currentStageDefinitionId = candidate.currentStageDefinitionId,
+    screenState = Utils.clone(candidate.screenState),
   }
 end
 
@@ -609,11 +649,45 @@ function SaveSystem.decodeActiveRunArtifactString(contents)
     artifact.runState.persistedFlipSlots = artifact.runState.persistedFlipSlots or artifact.runState.persistedLoadoutSlots
     artifact.runState.ownedTrickIds = artifact.runState.ownedTrickIds or artifact.runState.ownedUpgradeIds
     artifact.runState.unlockedTrickIds = artifact.runState.unlockedTrickIds or artifact.runState.unlockedUpgradeIds
+    artifact.runState.maxActiveTricks = artifact.runState.maxActiveTricks or 5
+    local _, removed = TrickBoardSystem.sanitizeActiveTricks(artifact.runState)
+    if #removed > 0 and type(artifact.stageState) == "table"
+      and type(artifact.stageState.trickBoard) == "table" then
+      artifact.stageState.trickBoard.pressure = {}
+    end
   end
 
   if type(artifact.stageState) == "table" then
     artifact.stageState.scoreAppliedToHp = artifact.stageState.scoreAppliedToHp or artifact.stageState.stageScore
     artifact.stageState.opponentHp = artifact.stageState.opponentHp or artifact.stageState.targetScore
+    artifact.stageState.trickBoard = artifact.stageState.trickBoard or {
+      phase = "setup",
+      revision = 1,
+      pressure = {},
+      replacementsRemaining = 3,
+      replacementHistory = {},
+    }
+    artifact.stageState.trickBoard.phase = artifact.stageState.trickBoard.phase or "setup"
+    artifact.stageState.trickBoard.pressure = artifact.stageState.trickBoard.pressure or {}
+    artifact.stageState.trickBoard.replacementsRemaining = artifact.stageState.trickBoard.replacementsRemaining or 3
+    artifact.stageState.trickBoard.replacementHistory = artifact.stageState.trickBoard.replacementHistory or {}
+    if type(artifact.stageState.purse) == "table" then
+      artifact.stageState.purse.replacementHistory = artifact.stageState.purse.replacementHistory or {}
+    end
+    PredictionSlotSystem.ensure(artifact.runState, artifact.stageState)
+    EnemySkillSystem.ensureState(artifact.stageState)
+    BossTrickSystem.ensureState(artifact.stageState)
+    if artifact.stageState.stageType == "boss" then
+      EnemySkillSystem.assignSkill(artifact.runState, artifact.stageState)
+      if artifact.stageState.stageStatus == "active"
+        and artifact.stageState.trickBoard.phase == "setup" then
+        BossTrickSystem.ensureIntent(artifact.runState, artifact.stageState)
+      end
+    elseif artifact.stageState.stageStatus == "active"
+      and artifact.stageState.trickBoard.phase == "setup" then
+      EnemySkillSystem.ensureIntent(artifact.runState, artifact.stageState)
+      BossTrickSystem.ensureIntent(artifact.runState, artifact.stageState)
+    end
   end
 
   local ok, errorMessage = Validator.validateActiveRunArtifactPayload(artifact)

@@ -8,6 +8,8 @@ local StageState = require("src.domain.stage_state")
 local Stages = require("src.content.stages")
 local Utils = require("src.core.utils")
 local Validator = require("src.core.validator")
+local TrickBoardSystem = require("src.systems.trick_board_system")
+local BossTrickSystem = require("src.systems.boss_trick_system")
 
 local RunInitializer = {}
 local STARTER_PURSE_SIZE = 12
@@ -93,6 +95,7 @@ function RunInitializer.createNewRun(metaState, options)
     startingInfluence = resolvedValues.startingInfluence or resolvedValues.startingShopPoints,
     startingShopRerolls = resolvedValues.startingShopRerolls,
   })
+  TrickBoardSystem.sanitizeActiveTricks(runState)
 
   runState.history.bootstrap = {
     seed = runState.seed,
@@ -136,6 +139,8 @@ function RunInitializer.createStageForCurrentRound(runState)
       ["stage.flipsPerStage"] = flipsPerStage,
     },
   })
+  TrickBoardSystem.applyOpponentPressure(runState, stageState)
+  BossTrickSystem.prepareIntent(runState, stageState)
 
   Validator.assertRuntimeInvariants("run_initializer.createStageForCurrentRound", runState, stageState, { history = true })
 

@@ -1,11 +1,22 @@
 local AcquisitionSystem = require("src.systems.acquisition_system")
 local ActionQueue = require("src.core.action_queue")
-local Coins = require("src.content.coins")
+local CrumbleSystem = require("src.systems.crumble_system")
+local EconomyContent = require("src.content.economy")
 local RNG = require("src.core.rng")
 local Upgrades = require("src.content.upgrades")
 local Utils = require("src.core.utils")
 
 local RewardSystem = {}
+
+local function hashText(text)
+  local hash = 2166136261
+
+  for index = 1, #text do
+    hash = (hash * 131 + string.byte(text, index)) % 2147483647
+  end
+
+  return hash
+end
 
 local function isTrickType(contentType)
   return contentType == "trick" or contentType == "upgrade"
@@ -15,6 +26,7 @@ local REWARD_OPTION_COUNT = 3
 local SKIP_INFLUENCE_REWARD = 1
 local WILDCARD_CHANCE = 0.25
 local WILDCARD_CAP = 1
+local TAKE_WHATS_OWED_DISCOUNT = 2
 
 local ENEMY_CLASS_POOLS = {
   forger = {
@@ -31,11 +43,11 @@ local ENEMY_CLASS_POOLS = {
   },
   fortune_teller = {
     label = "Fortune Teller",
-    categories = { "fate" },
+    categories = { "prediction" },
   },
   pit_boss = {
     label = "Pit Boss",
-    categories = { "misdirection" },
+    categories = { "weighted", "forgery" },
   },
   magician = {
     label = "Magician",
@@ -43,19 +55,9 @@ local ENEMY_CLASS_POOLS = {
   },
   showman = {
     label = "Showman",
-    categories = { "prestige", "chain" },
+    categories = { "prestige", "momentum" },
   },
 }
-
-local function hashText(text)
-  local hash = 2166136261
-
-  for index = 1, #text do
-    hash = (hash * 131 + string.byte(text, index)) % 2147483647
-  end
-
-  return hash
-end
 
 local function serializeDefinition(definition, contentType, metadata)
   metadata = metadata or {}
@@ -75,23 +77,45 @@ local function serializeDefinition(definition, contentType, metadata)
     wildcardCap = metadata.wildcardCap,
     trickCategory = definition.trick and definition.trick.category or nil,
     trickTags = definition.trick and Utils.clone(definition.trick.tags) or nil,
+    extortionEffect = metadata.extortionEffect,
+    extortionSourceId = metadata.extortionSourceId,
   }
 end
 
-local function buildCoinCandidates(runState)
-  local candidates = {}
+local function buildOwnedIndex(runState)
+  local index = {}
 
-  for _, definition in ipairs(Coins.getAll()) do
-    if definition.rewardEligible ~= false and Coins.isUnlocked(definition, runState.unlockedCoinIds) then
-      local ok = AcquisitionSystem.canGrantCoin(runState, definition.id)
-
-      if ok then
-        table.insert(candidates, definition)
-      end
-    end
+  for _, trickId in ipairs(runState and (runState.ownedTrickIds or runState.ownedUpgradeIds) or {}) do
+    index[trickId] = true
   end
 
-  return candidates
+  return index
+end
+
+local function getSeizeBaseCost(rarity)
+  return EconomyContent.shop.coinRarityPrices[rarity or "common"] or EconomyContent.shop.fallbackPrice
+end
+
+local function applySeizeCosts(runState, options)
+  local source = CrumbleSystem.findOwnedEffectSource(runState, "spoils_seize_discount")
+  local discount = source and ((source.definition.extortion and source.definition.extortion.value) or TAKE_WHATS_OWED_DISCOUNT) or 0
+
+  for _, option in ipairs(options or {}) do
+    if isTrickType(option.type) then
+      local baseCost = getSeizeBaseCost(option.rarity)
+      option.baseSeizeCost = baseCost
+
+      if source then
+        option.seizeDiscount = math.min(discount, baseCost)
+        option.seizeDiscountSourceId = source.trickId
+      else
+        option.seizeDiscount = 0
+        option.seizeDiscountSourceId = nil
+      end
+
+      option.seizeCost = math.max(0, baseCost - (option.seizeDiscount or 0))
+    end
+  end
 end
 
 local function buildCategoryIndex(categories)
@@ -219,12 +243,8 @@ local function removeDefinition(candidates, definitionId)
   return filtered
 end
 
-local function buildExtraCandidates(coinCandidates, upgradeCandidates)
+local function buildExtraCandidates(upgradeCandidates)
   local candidates = {}
-
-  for _, definition in ipairs(coinCandidates or {}) do
-    table.insert(candidates, serializeDefinition(definition, "coin"))
-  end
 
   for _, definition in ipairs(upgradeCandidates or {}) do
     table.insert(candidates, serializeDefinition(definition, "trick"))
@@ -340,6 +360,112 @@ local function removeSerializedOption(candidates, option)
   return filtered
 end
 
+local function chooseExcludedDefinition(candidates, rng, excludedIds)
+  local filtered = {}
+
+  for _, definition in ipairs(candidates or {}) do
+    if not excludedIds[definition.id] then
+      table.insert(filtered, definition)
+    end
+  end
+
+  return chooseDefinition(filtered, rng)
+end
+
+local function appendSpoilsOption(options, definition, metadata)
+  if not definition then
+    return nil
+  end
+
+  local option = serializeDefinition(definition, "trick", metadata)
+  table.insert(options, option)
+  return option
+end
+
+local function consumeSpoilsSource(runState, source, effects, reason, option)
+  local crumble = source and CrumbleSystem.consumeUse(runState, source.trickId, reason) or nil
+
+  table.insert(effects, {
+    effect = source and source.definition and source.definition.extortion and source.definition.extortion.effect or nil,
+    sourceId = source and source.trickId or nil,
+    contentId = option and option.contentId or nil,
+    crumble = crumble,
+  })
+end
+
+local function applySpoilsPreviewExtortion(runState, rng, stageRecord, options, generation, rerollCount)
+  if math.max(0, math.floor(tonumber(rerollCount) or 0)) ~= 0 then
+    return
+  end
+
+  local effects = {}
+  local excludedIds = buildOwnedIndex(runState)
+
+  for _, option in ipairs(options or {}) do
+    excludedIds[option.contentId] = true
+  end
+
+  local function addFromSource(effectName, categories, metadata, reason, filter)
+    local source = CrumbleSystem.findOwnedEffectSource(runState, effectName)
+    if not source then
+      return
+    end
+
+    local candidates = buildUpgradeCandidates(runState, categories)
+
+    if filter then
+      local filtered = {}
+      for _, candidate in ipairs(candidates) do
+        if filter(candidate) then
+          table.insert(filtered, candidate)
+        end
+      end
+      candidates = filtered
+    end
+
+    local definition = chooseExcludedDefinition(candidates, rng, excludedIds)
+
+    if not definition then
+      table.insert(effects, {
+        effect = effectName,
+        sourceId = source.trickId,
+        skipped = true,
+        skipReason = "no_spoils_option_available",
+      })
+      return
+    end
+
+    metadata = metadata or {}
+    metadata.rewardSource = metadata.rewardSource or "extortion"
+    metadata.extortionEffect = effectName
+    metadata.extortionSourceId = source.trickId
+    local option = appendSpoilsOption(options, definition, metadata)
+    excludedIds[definition.id] = true
+    consumeSpoilsSource(runState, source, effects, reason, option)
+  end
+
+  local enemyClass = getStageEnemyClass(stageRecord)
+  local classPool = getEnemyClassPool(enemyClass)
+
+  addFromSource("extra_spoils_option", nil, {
+    rewardSource = "extortion_extra_spoils",
+  }, "spoils_screen")
+
+  if classPool then
+    addFromSource("extra_enemy_family_spoils", classPool.categories, buildRewardMetadata(enemyClass, classPool, "extortion_enemy_family", false), "spoils_screen")
+  end
+
+  addFromSource("reveal_higher_tier_spoils", nil, {
+    rewardSource = "extortion_higher_tier",
+  }, "spoils_screen", function(definition)
+    return Upgrades.getTier(definition) >= 2
+  end)
+
+  if #effects > 0 then
+    generation.extortionEffects = effects
+  end
+end
+
 function RewardSystem.serializeOption(option)
   return Utils.clone(option)
 end
@@ -366,15 +492,19 @@ end
 
 function RewardSystem.buildPreviewForStage(runState, stageRecord, rerollCount)
   local normalizedRerollCount = math.max(0, math.floor(tonumber(rerollCount) or 0))
-  local preview = RewardSystem.buildPreview(runState, RewardSystem.createPreviewRng(runState, stageRecord, normalizedRerollCount), stageRecord)
+  local preview = RewardSystem.buildPreview(runState, RewardSystem.createPreviewRng(runState, stageRecord, normalizedRerollCount), stageRecord, normalizedRerollCount)
   preview.rerollCount = normalizedRerollCount
   return preview
 end
 
-function RewardSystem.buildPreview(runState, rng, stageRecord)
+function RewardSystem.buildPreview(runState, rng, stageRecord, rerollCount)
   local classOptions, generation = chooseEnemyClassTrickOptions(runState, rng, stageRecord)
 
   if #classOptions > 0 then
+    applySpoilsPreviewExtortion(runState, rng, stageRecord, classOptions, generation, rerollCount)
+    applySeizeCosts(runState, classOptions)
+    generation.optionCount = #classOptions
+
     return {
       options = classOptions,
       selectedIndex = nil,
@@ -385,15 +515,7 @@ function RewardSystem.buildPreview(runState, rng, stageRecord)
   end
 
   local options = {}
-
-  local coinCandidates = buildCoinCandidates(runState)
   local upgradeCandidates = buildUpgradeCandidates(runState)
-
-  local coinDefinition = chooseDefinition(coinCandidates, rng)
-  if coinDefinition then
-    table.insert(options, serializeDefinition(coinDefinition, "coin"))
-    coinCandidates = removeDefinition(coinCandidates, coinDefinition.id)
-  end
 
   local upgradeDefinition = chooseDefinition(upgradeCandidates, rng)
   if upgradeDefinition then
@@ -401,7 +523,7 @@ function RewardSystem.buildPreview(runState, rng, stageRecord)
     upgradeCandidates = removeDefinition(upgradeCandidates, upgradeDefinition.id)
   end
 
-  local extraCandidates = buildExtraCandidates(coinCandidates, upgradeCandidates)
+  local extraCandidates = buildExtraCandidates(upgradeCandidates)
 
   while #options < REWARD_OPTION_COUNT do
     local extraOption = chooseSerializedOption(extraCandidates, rng)
@@ -413,12 +535,14 @@ function RewardSystem.buildPreview(runState, rng, stageRecord)
     table.insert(options, RewardSystem.serializeOption(extraOption))
     extraCandidates = removeSerializedOption(extraCandidates, extraOption)
 
-    if extraOption.type == "coin" then
-      coinCandidates = removeDefinition(coinCandidates, extraOption.contentId)
-    elseif isTrickType(extraOption.type) then
+    if isTrickType(extraOption.type) then
       upgradeCandidates = removeDefinition(upgradeCandidates, extraOption.contentId)
     end
   end
+
+  applySpoilsPreviewExtortion(runState, rng, stageRecord, options, generation, rerollCount)
+  applySeizeCosts(runState, options)
+  generation.optionCount = #options
 
   return {
     options = options,
@@ -448,6 +572,9 @@ function RewardSystem.rerollPreview(runState, session, stageRecord)
   session.generation = preview.generation
   session.rerollCount = rerollCount
   session.skipped = false
+  session.replacementRequired = false
+  session.replacePosition = nil
+  session.replacementMetadata = nil
 
   return true, session
 end
@@ -481,7 +608,18 @@ end
 
 function RewardSystem.canContinue(session)
   return type(session) == "table"
-    and (#(session.options or {}) == 0 or session.claimed == true or session.selectedIndex ~= nil)
+    and (#(session.options or {}) == 0 or session.claimed == true
+      or (session.selectedIndex ~= nil and (session.replacementRequired ~= true or session.replacePosition ~= nil)))
+end
+
+function RewardSystem.selectReplacementPosition(session, position, activeCount)
+  if type(session) ~= "table" then return false, "reward_preview_not_initialized" end
+  position = tonumber(position)
+  if not position or position < 1 or position > (activeCount or 0) or math.floor(position) ~= position then
+    return false, "invalid_trick_replacement_position"
+  end
+  session.replacePosition = position
+  return true, position
 end
 
 function RewardSystem.claimSkip(runState, session)
@@ -547,20 +685,38 @@ function RewardSystem.claimSelection(runState, session)
     return false, "reward_option_not_selected"
   end
 
-  local ok, result
-  if option.type == "coin" then
-    ok, result = AcquisitionSystem.grantCoin(runState, option.contentId)
-  elseif isTrickType(option.type) then
-    ok, result = AcquisitionSystem.grantTrick(runState, option.contentId)
-  else
+  if not isTrickType(option.type) then
     return false, "invalid_reward_option_type"
   end
+
+  local seizeCost = math.max(0, math.floor(tonumber(option.seizeCost) or getSeizeBaseCost(option.rarity)))
+
+  if (runState.influence or 0) < seizeCost then
+    return false, "not_enough_influence"
+  end
+
+  local grantOk, grantResult = AcquisitionSystem.canGrantByType(runState, option.type, option.contentId)
+
+  if not grantOk then
+    return false, grantResult
+  end
+
+  runState.influence = (runState.influence or 0) - seizeCost
+
+  if option.seizeDiscountSourceId then
+    option.seizeDiscountCrumble = CrumbleSystem.consumeUse(runState, option.seizeDiscountSourceId, "seized_charm")
+  end
+
+  local ok, result = AcquisitionSystem.grantTrick(runState, option.contentId, nil, {
+    replacePosition = session.replacePosition,
+  })
 
   if not ok then
     return false, result
   end
 
   session.choice = RewardSystem.serializeOption(option)
+  session.choice.replacedTrickPosition = session.replacePosition
   session.claimed = true
   return true, session.choice
 end
@@ -584,15 +740,25 @@ function RewardSystem.buildProjectedOutcome(runState, session)
   end
 
   if option and session.claimed ~= true then
-    local ok, errorMessage
-
-    if option.type == "coin" then
-      ok, errorMessage = AcquisitionSystem.grantCoin(projectedRunState, option.contentId)
-    elseif isTrickType(option.type) then
-      ok, errorMessage = AcquisitionSystem.grantTrick(projectedRunState, option.contentId)
-    else
+    if not isTrickType(option.type) then
       return nil, "invalid_reward_option_type"
     end
+
+    local seizeCost = math.max(0, math.floor(tonumber(option.seizeCost) or getSeizeBaseCost(option.rarity)))
+
+    if (projectedRunState.influence or 0) < seizeCost then
+      return nil, "not_enough_influence"
+    end
+
+    projectedRunState.influence = (projectedRunState.influence or 0) - seizeCost
+
+    if option.seizeDiscountSourceId then
+      CrumbleSystem.consumeUse(projectedRunState, option.seizeDiscountSourceId, "seized_charm")
+    end
+
+    local ok, errorMessage = AcquisitionSystem.grantTrick(projectedRunState, option.contentId, nil, {
+      replacePosition = session.replacePosition,
+    })
 
     if not ok then
       return nil, errorMessage

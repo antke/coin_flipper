@@ -12,18 +12,18 @@ local RARITY_PALETTES = {
     glow = { 1.00, 0.50, 0.16, 1.0 },
   },
   uncommon = {
-    rim = { 0.56, 0.88, 0.68, 1.0 },
-    face = { 0.22, 0.62, 0.42, 1.0 },
-    dark = { 0.08, 0.26, 0.18, 1.0 },
-    shine = { 0.78, 1.00, 0.82, 1.0 },
-    glow = { 0.16, 1.00, 0.62, 1.0 },
+    rim = { 0.88, 0.92, 0.96, 1.0 },
+    face = { 0.58, 0.66, 0.74, 1.0 },
+    dark = { 0.20, 0.25, 0.31, 1.0 },
+    shine = { 1.00, 1.00, 1.00, 1.0 },
+    glow = { 0.66, 0.84, 1.00, 1.0 },
   },
   rare = {
-    rim = { 0.78, 0.62, 1.00, 1.0 },
-    face = { 0.42, 0.24, 0.78, 1.0 },
-    dark = { 0.18, 0.10, 0.34, 1.0 },
-    shine = { 0.94, 0.84, 1.00, 1.0 },
-    glow = { 0.82, 0.28, 1.00, 1.0 },
+    rim = { 1.00, 0.88, 0.34, 1.0 },
+    face = { 0.92, 0.64, 0.12, 1.0 },
+    dark = { 0.40, 0.24, 0.04, 1.0 },
+    shine = { 1.00, 0.98, 0.68, 1.0 },
+    glow = { 1.00, 0.72, 0.12, 1.0 },
   },
 }
 
@@ -133,21 +133,6 @@ local FACE_PATTERNS = {
     "0011111111100",
     "0000000000000",
   },
-  mirror_mark = {
-    "0011100011100",
-    "0100010100010",
-    "1000010100001",
-    "1001111111001",
-    "1010010100101",
-    "1010010100101",
-    "1001111111001",
-    "1000010100001",
-    "0100010100010",
-    "0011100011100",
-    "0000010100000",
-    "0000010100000",
-    "0000000000000",
-  },
   parachute_pin = {
     "0000011100000",
     "0001111111000",
@@ -238,6 +223,36 @@ local FACE_PATTERNS = {
     "0001000001000",
     "0000000000000",
   },
+  flywheel = {
+    "0000011100000",
+    "0001100011000",
+    "0010011100100",
+    "0100101010010",
+    "0101011101010",
+    "1011100011101",
+    "1010101010101",
+    "1011100011101",
+    "0101011101010",
+    "0100101010010",
+    "0010011100100",
+    "0001100011000",
+    "0000011100000",
+  },
+  vanishing = {
+    "0000011100000",
+    "0001111000000",
+    "0011111100000",
+    "0111111110000",
+    "0111111011000",
+    "1111110001000",
+    "1111100000100",
+    "1111110001000",
+    "0111111011000",
+    "0111111110000",
+    "0011111100000",
+    "0001111000000",
+    "0000011100000",
+  },
   heads = {
     "0000011100000",
     "0000100010000",
@@ -309,12 +324,20 @@ local function getFaceKey(definition)
     return "hollow"
   end
 
+  if hasTag(definition, "vanishing") or hasTag(definition, "palm") then
+    return "vanishing"
+  end
+
   if hasTag(definition, "marked") then
     return "marked"
   end
 
   if hasTag(definition, "fate") or hasTag(definition, "luck_meter") then
     return "lucky"
+  end
+
+  if hasTag(definition, "flywheel") or hasTag(definition, "momentum") then
+    return "flywheel"
   end
 
   if hasTag(definition, "weighted") or hasTag(definition, "reliable") then
@@ -365,7 +388,7 @@ local function getRimType(definition)
     return "boss"
   end
 
-  if hasTag(definition, "hollow") or hasTag(definition, "neighbor") or hasTag(definition, "sleight") or hasTag(definition, "draw") or hasTag(definition, "reorder") or hasTag(definition, "flip") then
+  if hasTag(definition, "hollow") or hasTag(definition, "neighbor") or hasTag(definition, "momentum") or hasTag(definition, "flywheel") or hasTag(definition, "sleight") or hasTag(definition, "vanishing") or hasTag(definition, "draw") or hasTag(definition, "reorder") or hasTag(definition, "flip") then
     return "motion"
   end
 
@@ -647,6 +670,15 @@ local FACE_DRAWERS = {
     block(ctx, 9, 8, 3, 5)
     block(ctx, 8, 9, 5, 3)
   end,
+  vanishing = function(ctx)
+    moon(ctx, 4, 5)
+    line(ctx, 12, 5, 17, 3, 1)
+    line(ctx, 12, 10, 18, 10, 1)
+    line(ctx, 12, 15, 17, 17, 1)
+    cell(ctx, 18, 4)
+    cell(ctx, 19, 10)
+    cell(ctx, 18, 16)
+  end,
   marked = function(ctx)
     line(ctx, 5, 5, 15, 15, 2)
     line(ctx, 15, 5, 5, 15, 2)
@@ -692,11 +724,6 @@ local FACE_DRAWERS = {
   heads_banker = function(ctx) head(ctx, 3, 3); bag(ctx, 12, 11) end,
   tails_banker = function(ctx) tail(ctx, 4, 3); bag(ctx, 12, 11) end,
   safety_net = function(ctx) net(ctx, 6, 5); block(ctx, 5, 15, 11, 2) end,
-  mirror_mark = function(ctx)
-    line(ctx, 10, 3, 10, 18, 1)
-    head(ctx, 3, 7)
-    head(ctx, 13, 7)
-  end,
   parachute_pin = function(ctx)
     line(ctx, 5, 9, 10, 15, 1)
     line(ctx, 15, 9, 10, 15, 1)

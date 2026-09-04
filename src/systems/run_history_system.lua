@@ -19,6 +19,7 @@ local function serializeRewardOption(option)
     description = option.description,
     amount = option.amount,
     currency = option.currency,
+    replacedTrickPosition = option.replacedTrickPosition,
     rewardSource = option.rewardSource,
     enemyClass = option.enemyClass,
     enemyClassLabel = option.enemyClassLabel,
@@ -28,6 +29,13 @@ local function serializeRewardOption(option)
     wildcardCap = option.wildcardCap,
     trickCategory = option.trickCategory,
     trickTags = Utils.clone(option.trickTags),
+    baseSeizeCost = option.baseSeizeCost,
+    seizeCost = option.seizeCost,
+    seizeDiscount = option.seizeDiscount,
+    seizeDiscountSourceId = option.seizeDiscountSourceId,
+    seizeDiscountCrumble = Utils.clone(option.seizeDiscountCrumble),
+    extortionEffect = option.extortionEffect,
+    extortionSourceId = option.extortionSourceId,
   }
 end
 
@@ -43,6 +51,7 @@ local function serializeEncounterChoice(choice)
     contentId = choice.contentId,
     label = choice.label,
     description = choice.description,
+    replacedTrickPosition = choice.replacedTrickPosition,
   }
 end
 
@@ -73,6 +82,15 @@ function RunHistorySystem.serializeShopOffer(offer)
     rarity = offer.rarity,
     price = offer.price,
     purchased = offer.purchased == true,
+    extorted = offer.extorted == true or nil,
+    stolen = offer.stolen == true or nil,
+    priceBeforeExtortion = offer.priceBeforeExtortion,
+    extortionSourceId = offer.extortionSourceId,
+    extortionEffect = offer.extortionEffect,
+    guaranteedByExtortion = offer.guaranteedByExtortion == true or nil,
+    priceBeforePressureSale = offer.priceBeforePressureSale,
+    pressureSaleDiscount = offer.pressureSaleDiscount,
+    pressureSaleSourceId = offer.pressureSaleSourceId,
   }
 end
 
@@ -186,6 +204,7 @@ function RunHistorySystem.recordPurchaseSuccess(shopSession, offer, result)
     offerType = offer.type,
     contentId = offer.contentId,
     finalPrice = result.finalPrice,
+    replacePosition = offer.replacePosition,
   })
 
   if result.trace then

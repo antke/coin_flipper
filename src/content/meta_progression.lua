@@ -1,7 +1,7 @@
 local MetaProgressionContent = {
   runCompletionReward = {
     base = 1,
-    runDamageDivisor = 12,
+    runDamageDivisor = 120,
     bossClearBonus = 1,
     runWinBonus = 1,
     minimum = 1,

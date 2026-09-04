@@ -1,7 +1,7 @@
 local Coins = require("src.content.coins")
 local ActionQueue = require("src.core.action_queue")
 local Upgrades = require("src.content.upgrades")
-local Utils = require("src.core.utils")
+local TrickBoardSystem = require("src.systems.trick_board_system")
 
 local AcquisitionSystem = {}
 
@@ -20,20 +20,18 @@ function AcquisitionSystem.canGrantCoin(runState, coinId)
 end
 
 function AcquisitionSystem.canGrantUpgrade(runState, upgradeId)
-  local definition = Upgrades.getById(upgradeId)
-
-  if not definition then
-    return false, "unknown_upgrade"
-  end
-
   runState.ownedTrickIds = runState.ownedTrickIds or runState.ownedUpgradeIds or {}
   runState.ownedUpgradeIds = runState.ownedTrickIds
 
-  if Utils.contains(runState.ownedTrickIds, upgradeId) then
-    return false, "upgrade_already_owned"
-  end
+  local definition = Upgrades.getById(upgradeId)
+  if not definition then return false, "unknown_upgrade" end
 
-  return true, definition
+  local ok, result = TrickBoardSystem.canAcquire(runState, upgradeId)
+  if ok then return true, definition, result end
+  if type(result) == "table" and result.code == "trick_board_full" then
+    return true, definition, result
+  end
+  return false, result
 end
 
 function AcquisitionSystem.canGrantByType(runState, contentType, contentId)
@@ -65,7 +63,7 @@ function AcquisitionSystem.grantCoin(runState, coinId, context)
   return true, definition, context
 end
 
-function AcquisitionSystem.grantUpgrade(runState, upgradeId, context)
+function AcquisitionSystem.grantUpgrade(runState, upgradeId, context, options)
   local ok, definition = AcquisitionSystem.canGrantUpgrade(runState, upgradeId)
 
   if not ok then
@@ -75,15 +73,17 @@ function AcquisitionSystem.grantUpgrade(runState, upgradeId, context)
   context = context or ActionQueue.createContext("grant_trick", {
     runState = runState,
   })
-  ActionQueue.applyAll(runState, nil, context, {
-    { op = "grant_trick", trickId = upgradeId },
-  })
+  local action = { op = "grant_trick", trickId = upgradeId, replacePosition = options and options.replacePosition }
+  ActionQueue.applyAll(runState, nil, context, { action })
+  if action.skipped then
+    return false, action.replacementRequired or action.skipReason, context
+  end
 
   return true, definition, context
 end
 
-function AcquisitionSystem.grantTrick(runState, trickId, context)
-  return AcquisitionSystem.grantUpgrade(runState, trickId, context)
+function AcquisitionSystem.grantTrick(runState, trickId, context, options)
+  return AcquisitionSystem.grantUpgrade(runState, trickId, context, options)
 end
 
 return AcquisitionSystem

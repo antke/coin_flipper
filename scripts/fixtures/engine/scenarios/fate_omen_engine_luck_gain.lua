@@ -58,20 +58,20 @@ return {
     local deltas = luckTrace.deltas or {}
 
     local luckyDelta = A.truthy(findLuckDelta(deltas, {
-      amount = 1,
-      appliedAmount = 1,
+      amount = 2,
+      appliedAmount = 2,
       source = "action",
       reason = "lucky_coin_match",
       positive = true,
     }), "Lucky Coin should create the first positive Luck gain event")
 
     local omenDelta = A.truthy(findLuckDelta(deltas, {
-      amount = 1,
-      appliedAmount = 1,
+      amount = 2,
+      appliedAmount = 2,
       source = "action",
       reason = "omen_engine",
       positive = true,
-    }), "Omen Engine should add exactly one extra Luck")
+    }), "Omen Engine should add exactly two extra Luck")
 
     A.equal(luckyDelta.eventId, "luck_01", "seeded first Luck event id")
     A.equal(omenDelta.eventId, "luck_02", "Omen Engine Luck event id")
@@ -82,7 +82,7 @@ return {
     }, "Omen Engine should trigger from luck_gain")
     A.traceHasAction(trace, {
       op = "add_luck",
-      amount = 1,
+      amount = 2,
       reason = "omen_engine",
     }, "Omen Engine should trace its add_luck action")
     local expectedLuckTotal = (luckTrace.before and luckTrace.before.value or 0)
@@ -108,7 +108,7 @@ return {
     end
 
     omenActionIndex = A.truthy(omenActionIndex, "expected Omen action signature")
-    actionTamper.expected.batchSignatures[1].actions[omenActionIndex].amount = 2
+    actionTamper.expected.batchSignatures[1].actions[omenActionIndex].amount = 1
     local actionReplay = ReplaySystem.replayTranscript(actionTamper)
     A.falsy(actionReplay.ok, "tampered Omen action should fail replay")
   end,

@@ -134,7 +134,15 @@ function ShopActions.apply(runState, context, action)
         end
       end
 
-      if not Utils.contains(ownedList, action.contentId) and not alreadyOffered then
+      local grantable = true
+
+      if canonicalOfferType == "trick" then
+        grantable = Upgrades.canGrantUpgrade(ownedList, action.contentId)
+      else
+        grantable = not Utils.contains(ownedList, action.contentId)
+      end
+
+      if grantable and not alreadyOffered then
         table.insert(context.shopOffers, {
           type = canonicalOfferType,
           contentId = action.contentId,

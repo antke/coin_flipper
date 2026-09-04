@@ -17,7 +17,7 @@ return {
       },
       runOptions = {
         seed = 10,
-        ownedTrickIds = { "cashback_badge", "showcase_rack" },
+        ownedTrickIds = { "encore", "weighted_palm" },
       },
     }
   end,
@@ -42,13 +42,13 @@ return {
     for _, offer in ipairs(offers) do
       if offer.type == "trick" then
         local definition = Upgrades.getById(offer.contentId)
-        local expectedPrice = ShopContent.resolvePrice("trick", definition) - 1
-        A.equal(offer.price, expectedPrice, string.format("discounted price for %s", tostring(offer.contentId)))
+        local expectedPrice = ShopContent.resolvePrice("trick", definition)
+        A.equal(offer.price, expectedPrice, string.format("price for %s", tostring(offer.contentId)))
       end
     end
 
-    A.notContains(offers, { contentId = "cashback_badge" }, "owned Kickback Mark should not be re-offered")
-    A.notContains(offers, { contentId = "showcase_rack" }, "owned Backroom Display should not be re-offered")
+    A.notContains(offers, { contentId = "encore" }, "owned Encore should not be re-offered")
+    A.notContains(offers, { contentId = "weighted_palm" }, "owned Weighted Palm should not be re-offered")
     A.equal(#(env.shopSession.offerSets or {}), 1, "shop offer set history count")
     A.equal(#(env.shopSession.generationTraces or {}), 1, "shop generation trace count")
   end,

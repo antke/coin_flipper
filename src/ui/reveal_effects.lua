@@ -67,10 +67,6 @@ local function drawOutlinedText(label, font, x, y, width, alpha)
   love.graphics.printf(text, x, y, width, "center")
 end
 
-function RevealEffects.drawActiveCoinSpotlight(position, options)
-  return
-end
-
 function RevealEffects.drawLinks(timeline, elapsed, positions, fonts)
   local activeLinks = RevealTimeline.getActiveLinks(timeline, elapsed)
 

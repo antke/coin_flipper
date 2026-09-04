@@ -17,7 +17,7 @@ local EconomyContent = {
   victoryRewards = {
     baseShopPoints = 6,
     remainingFlipShopPoints = 3,
-    overkillShopPointsPerDamage = 1.0,
+    overkillShopPointsPerDamage = 0.1,
     overkillShopPointsCap = 8,
   },
 }

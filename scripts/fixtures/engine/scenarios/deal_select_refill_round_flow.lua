@@ -65,19 +65,19 @@ return {
       A.equal(resolution.dealtIndex, selected.dealtIndex, "resolution dealt index")
     end
 
-    A.equal(refillEvent.refillRule, "selected_exhaust_unselected_return", "refill rule")
+    A.equal(refillEvent.refillRule, "selected_spend_unselected_hold", "refill rule")
 
     local exhausted = indexById(refillEvent.exhaustedInstanceIds)
-    local returned = indexById(refillEvent.returnedInstanceIds)
+    local held = indexById(refillEvent.heldInstanceIds)
 
     for _, selected in ipairs(selectedSlots) do
       A.truthy(exhausted[selected.instanceId], "selected coins should exhaust")
-      A.falsy(returned[selected.instanceId], "selected coins should not return immediately")
+      A.falsy(held[selected.instanceId], "selected coins should not remain held")
     end
 
     for index = #selectedSlots + 1, #dealtHand do
       local dealt = dealtHand[index]
-      A.truthy(returned[dealt.instanceId], "unselected dealt coins should return to Pouch")
+      A.truthy(held[dealt.instanceId], "unselected dealt coins should remain held")
       A.falsy(exhausted[dealt.instanceId], "unselected dealt coins should not exhaust")
     end
 
@@ -96,7 +96,7 @@ return {
     A.equal(selectedReplay.error, "batch_selected_slots_mismatch", "selected tamper error")
 
     local refillTamper = Utils.clone(env.transcript)
-    table.remove(refillTamper.stages[1].batches[1].refillEvent.returnedInstanceIds, 1)
+    refillTamper.stages[1].batches[1].refillEvent.heldInstanceIds[1] = "tampered_held_coin"
     local refillReplay = ReplaySystem.replayTranscript(refillTamper)
     A.falsy(refillReplay.ok, "tampered refill event should fail replay")
     A.equal(refillReplay.error, "batch_refill_event_mismatch", "refill tamper error")

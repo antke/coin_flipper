@@ -127,6 +127,30 @@ function BossRewardState:buildButtons(app)
   return self.buttons
 end
 
+function BossRewardState:buildReplacementButtons(app, area)
+  local cards = app:getRewardReplacementCards()
+  local buttons = {}
+  if #cards == 0 then return buttons end
+  local gap = Theme.spacing.itemGap
+  local width = math.floor((area.width - gap * (#cards - 1)) / #cards)
+  for index, card in ipairs(cards) do
+    table.insert(buttons, {
+      x = area.x + (index - 1) * (width + gap),
+      y = area.y,
+      width = width,
+      height = 38,
+      label = string.format("Replace %d: %s", card.position, card.name),
+      variant = card.selected and "success" or "warning",
+      onClick = function()
+        local ok, result = app:selectRewardReplacementPosition(card.position)
+        if ok then self.statusMessage = string.format("Will replace %s.", card.name) end
+        return ok, result
+      end,
+    })
+  end
+  return buttons
+end
+
 function BossRewardState:enter(app)
   local session = app:ensureBossRewardEvent()
 
@@ -142,7 +166,12 @@ function BossRewardState:keypressed(app, key)
   local numericIndex = tonumber(key)
 
   if numericIndex and numericIndex >= 1 then
-    self:selectRewardOption(app, numericIndex)
+    if session and session.replacementRequired == true then
+      app:selectRewardReplacementPosition(numericIndex)
+      self.statusMessage = string.format("Selected Trick position %d for replacement.", numericIndex)
+    else
+      self:selectRewardOption(app, numericIndex)
+    end
     return
   end
 
@@ -206,6 +235,12 @@ function BossRewardState:draw(app)
     Button.drawButtons(self:buildRewardButtons(app, rewardButtonArea), mouseX, mouseY)
   end
 
+  Button.drawButtons(self:buildReplacementButtons(app, {
+    x = rewardArea.x,
+    y = rewardArea.y + Theme.scale(92),
+    width = rewardArea.width,
+  }), love.mouse.getPosition())
+
   local mouseX, mouseY = love.mouse.getPosition()
   Button.drawButtons(self:buildButtons(app), mouseX, mouseY)
 end
@@ -218,6 +253,12 @@ function BossRewardState:mousepressed(app, x, y, button)
   local layout = self:getLayout(app)
   local rewardArea = Panel.getContentArea(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Choose Final Reward")
   local rewardSession = app:ensureBossRewardEvent()
+  local replacementHandled = select(1, Button.handleMousePressed(self:buildReplacementButtons(app, {
+    x = rewardArea.x,
+    y = rewardArea.y + Theme.scale(92),
+    width = rewardArea.width,
+  }), x, y))
+  if replacementHandled then return end
 
   if #(rewardSession and rewardSession.options or {}) > 0 then
     local rewardButtonsHeight = (#rewardSession.options * 44) + math.max(0, (#rewardSession.options - 1) * Theme.spacing.itemGap) + Theme.spacing.itemGap

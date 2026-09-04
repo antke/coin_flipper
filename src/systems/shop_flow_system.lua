@@ -45,7 +45,12 @@ function ShopFlowSystem.refreshOffers(visit, reason)
     visit.runState,
     visit.stageState,
     visit.metaProjection,
-    visit.rng
+    visit.rng,
+    {
+      reason = reason,
+      shopSession = visit.shopSession,
+      rerollCount = visit.shopSession and visit.shopSession.rerollsUsed or 0,
+    }
   )
 
   RunHistorySystem.recordShopOfferRefresh(visit.shopSession, visit.offers, visit.lastGenerationTrace, reason)

@@ -47,15 +47,19 @@ local function resolveWeightSide(context, action)
     return context.call
   end
 
+  if action.side == "foretold" then
+    return context.currentCoin and context.currentCoin.foretoldResult or nil
+  end
+
   return action.side
 end
 
 local function getCoinWeightTargets(context, action, recordWarning)
   if type(action.target) == "table" then
-    local targetCoin, targetError = TargetSelectors.resolveSlot(nil, nil, action.target, context)
+    local targetCoins, targetError = TargetSelectors.resolveSlots(nil, nil, action.target, context)
 
-    if targetCoin then
-      return { targetCoin }
+    if #targetCoins > 0 then
+      return targetCoins
     end
 
     recordWarning(context, targetError or "coin weight target selector had no eligible coin.")
@@ -189,8 +193,9 @@ function CoinChanceActions.validate(action, TargetSelectorsModule)
   end
 
   if action.op == "add_weight" then
-    if action.side ~= nil and action.side ~= "heads" and action.side ~= "tails" and action.side ~= "call" then
-      return false, "add_weight side must be heads|tails|call when present"
+    if action.side ~= nil and action.side ~= "heads" and action.side ~= "tails"
+      and action.side ~= "call" and action.side ~= "foretold" then
+      return false, "add_weight side must be heads|tails|call|foretold when present"
     end
 
     if type(action.amount) ~= "number" then
@@ -203,6 +208,10 @@ function CoinChanceActions.validate(action, TargetSelectorsModule)
 
     if action.chance < 0 or action.chance > 1 then
       return false, "set_call_match_chance chance must be between 0 and 1"
+    end
+
+    if action.minimum ~= nil and type(action.minimum) ~= "boolean" then
+      return false, "set_call_match_chance minimum must be boolean when present"
     end
   end
 
@@ -225,6 +234,7 @@ function CoinChanceActions.apply(runState, context, action, options)
 
   if action.op == "add_weight" then
     local side = resolveWeightSide(context, action)
+    action.appliedSide = side
 
     if side ~= "heads" and side ~= "tails" then
       recordWarning(context, "add_weight ignored without an active call.")
@@ -232,7 +242,7 @@ function CoinChanceActions.apply(runState, context, action, options)
       local targets = getCoinWeightTargets(context, action, recordWarning)
 
       for _, coinState in ipairs(targets) do
-        local amount = action.amount * CoinTraits.familyMultiplier(coinState.coinId, action.specializedFamily)
+        local amount = action.amount * CoinTraits.familyMultiplier(coinState, action.specializedFamily)
 
         applyCoinChanceDelta(coinState, side, amount)
         coinState.weightChanges = coinState.weightChanges or {}
@@ -248,7 +258,12 @@ function CoinChanceActions.apply(runState, context, action, options)
       local targets = getCoinWeightTargets(context, action, recordWarning)
 
       for _, coinState in ipairs(targets) do
-        setCoinCallMatchChance(coinState, context.call, action.chance)
+        local chance = action.chance
+        if action.minimum == true then
+          chance = math.max(chance, coinState[context.call .. "Weight"] or 0)
+        end
+
+        setCoinCallMatchChance(coinState, context.call, chance)
         coinState.weightChanges = coinState.weightChanges or {}
         table.insert(coinState.weightChanges, cloneActionForTrace(action))
       end

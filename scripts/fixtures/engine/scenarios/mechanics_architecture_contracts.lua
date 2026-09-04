@@ -13,6 +13,8 @@ local actionModules = {
   { path = "src.core.actions.purse_actions", opCheck = "isPurseOp" },
   { path = "src.core.actions.replay_actions", opCheck = "isReplayOp" },
   { path = "src.core.actions.chain_actions", opCheck = "isChainOp" },
+  { path = "src.core.actions.activation_actions", opCheck = "isActivationOp" },
+  { path = "src.core.actions.trick_board_actions", opCheck = "isTrickBoardOp" },
   { path = "src.core.actions.economy_actions", opCheck = "isEconomyOp" },
   { path = "src.core.actions.shop_actions", opCheck = "isShopOp" },
 }
@@ -117,6 +119,23 @@ return {
     A.equal(selectedError, nil, "selected selector should resolve selected coin")
     A.truthy(selectedSlot, "selected selector should return selected coin")
     A.equal(selectedSlot.instanceId, "selected_coin", "selected selector should exclude smuggled board coins")
+
+    local familyFilteredSlot, familyFilteredError = TargetSelectors.resolveSlot(nil, nil, {
+      zone = "selected_coins",
+      filters = {
+        { op = "family", value = "weighted" },
+      },
+      orderBy = "slot_position",
+      pick = { op = "slot_at_position", value = 1 },
+    }, {
+      perCoin = {
+        { coinId = "copper_blank_coin", instanceId = "blank_coin", selectedSlotIndex = 1, resolutionIndex = 1 },
+        { coinId = "copper_weighted_coin", instanceId = "weighted_coin", selectedSlotIndex = 2, resolutionIndex = 2 },
+      },
+    })
+    A.equal(familyFilteredError, nil, "family filter should resolve matching coin")
+    A.truthy(familyFilteredSlot, "family filter should return a coin")
+    A.equal(familyFilteredSlot.instanceId, "weighted_coin", "family filter should require matching family")
 
     local randomSelectorOk, randomSelectorError = TargetSelectors.validateSlotSelector({
       zone = "selected_coins",

@@ -1,20 +1,30 @@
 local ReplaySystem = require("src.systems.replay_system")
 local Utils = require("src.core.utils")
 
+local function findSwapAction(actions)
+  for index, action in ipairs(actions or {}) do
+    if action.op == "swap_coins" then
+      return action, index
+    end
+  end
+
+  return nil, nil
+end
+
 return {
   id = "sleight_switcheroo_swap",
   tags = { "sleight", "replay" },
-  description = "Verifies Switcheroo swaps coin bodies through resolved result slots and is replay-checked.",
+  description = "Verifies Switcheroo moves a missed Vanishing Coin into a matching result slot and is replay-checked.",
 
   setup = function()
     return {
       runOptions = {
         seed = 2,
-        starterCollection = { "copper_weighted_coin", "copper_marked_coin", "copper_lucky_coin" },
+        starterCollection = { "copper_vanishing_coin", "copper_marked_coin", "copper_lucky_coin" },
         ownedTrickIds = { "switcheroo" },
       },
       initialLoadout = {
-        [1] = "copper_weighted_coin",
+        [1] = "copper_vanishing_coin",
         [2] = "copper_marked_coin",
         [3] = "copper_lucky_coin",
       },
@@ -36,31 +46,16 @@ return {
     local firstBatch = A.truthy(A.getResult("first_batch"), "missing first batch")
     local batch = A.truthy(firstBatch.batch, "missing first batch snapshot")
     local trace = A.truthy(firstBatch.trace, "missing first batch trace")
-    local selectedSlots = batch.selectedSlots or {}
-    local resolutionEntries = batch.resolutionEntries or {}
-    local coinRolls = trace.coinRolls or {}
-    local scoreEvents = firstBatch.scoreBreakdown and firstBatch.scoreBreakdown.scoreEvents or {}
+    local move = A.truthy((trace.sleightMoves or {})[1], "Switcheroo should move one missed Vanishing Coin")
+    A.equal(move.failedCoinId, "copper_vanishing_coin", "Switcheroo source should be a Vanishing Coin")
+    A.equal(move.failedResult, "tails", "Switcheroo should take a missed result body")
+    A.equal(move.successResult, "heads", "Switcheroo should move it into a matching result slot")
 
-    local move = A.truthy((trace.sleightMoves or {})[1], "Switcheroo should record one sleight move")
-    A.equal(move.op, "swap_coins", "Switcheroo move op")
-    A.truthy(move.failedSlotIndex ~= move.successSlotIndex, "Switcheroo should swap different slots")
-    A.truthy(move.failedSlotIndex >= 1 and move.failedSlotIndex <= #selectedSlots, "failed slot should be selected")
-    A.truthy(move.successSlotIndex >= 1 and move.successSlotIndex <= #selectedSlots, "success slot should be selected")
-
-    A.equal(selectedSlots[move.successSlotIndex].instanceId, move.successInstanceId, "selected success slot starts with success body")
-    A.equal(selectedSlots[move.failedSlotIndex].instanceId, move.failedInstanceId, "selected failed slot starts with failed body")
-    A.equal(resolutionEntries[move.successResolutionIndex].instanceId, move.failedInstanceId, "failed body should move into success result slot")
-    A.equal(resolutionEntries[move.failedResolutionIndex].instanceId, move.successInstanceId, "success body should move into failed result slot")
-
-    A.equal(coinRolls[move.successResolutionIndex].instanceId, move.failedInstanceId, "coin roll success slot body after swap")
-    A.equal(coinRolls[move.successResolutionIndex].result, "heads", "success result slot should preserve result")
-    A.equal(coinRolls[move.failedResolutionIndex].instanceId, move.successInstanceId, "coin roll failed slot body after swap")
-    A.equal(coinRolls[move.failedResolutionIndex].result, "tails", "failed result slot should preserve result")
-
-    A.equal(scoreEvents[move.successResolutionIndex].instanceId, move.failedInstanceId, "score event should credit swapped-in failed body")
-    A.equal(scoreEvents[move.successResolutionIndex].matched, true, "swapped-in failed body should score in success slot")
-    A.equal(scoreEvents[move.failedResolutionIndex].instanceId, move.successInstanceId, "score event should move success body out")
-    A.equal(scoreEvents[move.failedResolutionIndex].matched, false, "moved-out success body should inherit failed slot result")
+    local swapAction, actionIndex = findSwapAction(trace.actions)
+    swapAction = A.truthy(swapAction, "Switcheroo should trace swap action")
+    A.equal(swapAction.appliedScoreMultiplier, 3.5, "Copper Vanishing Coin material payoff")
+    A.equal(swapAction.appliedMaterialRank, 1, "Copper Vanishing Coin material rank")
+    A.truthy(swapAction.failedInstanceId ~= swapAction.successInstanceId, "Switcheroo should compare different slots")
 
     A.traceHasAction(trace, {
       op = "swap_coins",
@@ -69,8 +64,9 @@ return {
           zone = "selected_coins",
           filters = {
             { op = "failed_call" },
+            { op = "real_family", value = "sleight" },
           },
-          orderBy = "base_score_desc",
+          orderBy = "material_rank_desc",
           pick = { op = "slot_at_position", value = 1 },
         },
         target = {
@@ -83,19 +79,15 @@ return {
           pick = { op = "slot_at_position", value = 1 },
         },
       },
-      failedInstanceId = move.failedInstanceId,
-      successInstanceId = move.successInstanceId,
-    }, "Switcheroo action should be traced with swap metadata")
-    A.replayOk(env.replay, "Sleight replay should succeed")
+      failedInstanceId = swapAction.failedInstanceId,
+      successInstanceId = swapAction.successInstanceId,
+      appliedScoreMultiplier = 3.5,
+    }, "Switcheroo action should be traced with movement and material metadata")
+    A.replayOk(env.replay, "Sleight of Hand replay should succeed")
 
-    local resolutionTamper = Utils.clone(env.transcript)
-    resolutionTamper.stages[1].batches[1].resolutionEntries[move.successResolutionIndex].instanceId = move.successInstanceId
-    local resolutionReplay = ReplaySystem.replayTranscript(resolutionTamper)
-    A.falsy(resolutionReplay.ok, "tampered Switcheroo resolution metadata should fail replay")
-
-    local moveTamper = Utils.clone(env.transcript)
-    moveTamper.expected.batchSignatures[1].sleightMoves[1].failedInstanceId = move.successInstanceId
-    local moveReplay = ReplaySystem.replayTranscript(moveTamper)
-    A.falsy(moveReplay.ok, "tampered Switcheroo move metadata should fail replay")
+    local scoreTamper = Utils.clone(env.transcript)
+    scoreTamper.expected.batchSignatures[1].actions[actionIndex].appliedScoreMultiplier = 1
+    local scoreReplay = ReplaySystem.replayTranscript(scoreTamper)
+    A.falsy(scoreReplay.ok, "tampered Switcheroo material payoff should fail replay")
   end,
 }

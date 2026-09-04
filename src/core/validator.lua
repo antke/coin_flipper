@@ -1,5 +1,6 @@
 local ActionQueue = require("src.core.action_queue")
 local EffectiveValueSystem = require("src.systems.effective_value_system")
+local EnemySkills = require("src.content.enemy_skills")
 local GameConfig = require("src.app.config")
 local HookRegistry = require("src.core.hook_registry")
 local Loadout = require("src.domain.loadout")
@@ -213,6 +214,9 @@ local VALID_REPLAY_REWARD_OPTION_KEYS = {
   name = true,
   rarity = true,
   description = true,
+  amount = true,
+  currency = true,
+  replacedTrickPosition = true,
   rewardSource = true,
   enemyClass = true,
   enemyClassLabel = true,
@@ -222,6 +226,13 @@ local VALID_REPLAY_REWARD_OPTION_KEYS = {
   wildcardCap = true,
   trickCategory = true,
   trickTags = true,
+  baseSeizeCost = true,
+  seizeCost = true,
+  seizeDiscount = true,
+  seizeDiscountSourceId = true,
+  seizeDiscountCrumble = true,
+  extortionEffect = true,
+  extortionSourceId = true,
 }
 
 local VALID_REPLAY_ENCOUNTER_KEYS = {
@@ -239,6 +250,7 @@ local VALID_REPLAY_ENCOUNTER_CHOICE_KEYS = {
   contentId = true,
   label = true,
   description = true,
+  replacedTrickPosition = true,
 }
 
 local VALID_REPLAY_LOADOUT_KEYS = {
@@ -257,6 +269,7 @@ local VALID_REPLAY_BATCH_KEYS = {
   boardSlots = true,
   forcedResults = true,
   refillEvent = true,
+  replacements = true,
 }
 
 local VALID_REPLAY_RESOLUTION_ENTRY_KEYS = {
@@ -268,14 +281,23 @@ local VALID_REPLAY_RESOLUTION_ENTRY_KEYS = {
   selectedSlotIndex = true,
   boardSlotIndex = true,
   overloadSlotIndex = true,
+  anchorSelectedSlotIndex = true,
+  anchorInstanceId = true,
+  anchorCoinId = true,
+  anchorOverloadIndex = true,
   resolutionIndex = true,
   smuggled = true,
   smuggledBy = true,
+  contrabandCopy = true,
+  copiedFromCoinId = true,
+  copiedFromInstanceId = true,
   foretold = true,
   foretoldResult = true,
   foretoldBy = true,
   foretoldRngRoll = true,
   sleightUsed = true,
+  sleightSaved = true,
+  palmed = true,
 }
 
 local VALID_REPLAY_FORCED_RESULT_KEYS = {
@@ -304,6 +326,7 @@ local VALID_REPLAY_SHOP_ACTION_KEYS = {
   offerType = true,
   contentId = true,
   finalPrice = true,
+  replacePosition = true,
   reason = true,
 }
 
@@ -572,6 +595,8 @@ local function validateBatchSnapshot(batch)
     end
   end
 
+  local hasSleightMoves = batch.trace and #(batch.trace.sleightMoves or {}) > 0 or false
+
   for index, forcedEntry in ipairs(batch.forcedResults or (batch.trace and batch.trace.forcedResults) or {}) do
     if type(forcedEntry) ~= "table" then
       return false, string.format("batch forcedResults[%d] must be a table", index)
@@ -582,6 +607,10 @@ local function validateBatchSnapshot(batch)
     end
 
     local resolvedCoin = getResolvedCoin(forcedEntry)
+
+    if not resolvedCoin and hasSleightMoves and isPositiveInteger(forcedEntry.resolutionIndex) then
+      resolvedCoin = batch.resolvedCoinResults[forcedEntry.resolutionIndex]
+    end
 
     if not resolvedCoin then
       return false, string.format("batch forcedResults[%d] references unknown coin %s", index, tostring(forcedEntry.coinId))
@@ -597,7 +626,6 @@ local function validateBatchSnapshot(batch)
   end
 
   if batch.trace then
-    local hasSleightMoves = #(batch.trace.sleightMoves or {}) > 0
     local sleightPhaseOrder = HookRegistry.getPhaseOrder("after_flip_before_score")
     local function allowHistoricalSlotMismatch(entry)
       if not hasSleightMoves then
@@ -647,7 +675,7 @@ local function validateBatchSnapshot(batch)
       if source.coinId ~= nil then
         local resolvedCoin = getResolvedCoin(source)
 
-        if not resolvedCoin then
+        if not resolvedCoin and not allowHistoricalSlotMismatch(source) then
           return false, string.format("batch trace triggeredSources[%d] references unknown resolved coin %s", index, tostring(source.coinId))
         end
 
@@ -659,12 +687,30 @@ local function validateBatchSnapshot(batch)
           return false, string.format("batch trace triggeredSources[%d].resolutionIndex must be positive integer", index)
         end
 
-        if source.slotIndex ~= resolvedCoin.slotIndex and not allowHistoricalSlotMismatch(source) then
-          return false, string.format("batch trace triggeredSources[%d].slotIndex mismatch", index)
+        if resolvedCoin and source.slotIndex ~= resolvedCoin.slotIndex and not allowHistoricalSlotMismatch(source) then
+          return false, string.format(
+            "batch trace triggeredSources[%d].slotIndex mismatch for %s/%s coin %s instance %s: trace %s, resolved %s",
+            index,
+            tostring(source.sourceType),
+            tostring(source.sourceId),
+            tostring(source.coinId),
+            tostring(source.instanceId),
+            tostring(source.slotIndex),
+            tostring(resolvedCoin.slotIndex)
+          )
         end
 
-        if source.resolutionIndex ~= resolvedCoin.resolutionIndex and not allowHistoricalSlotMismatch(source) then
-          return false, string.format("batch trace triggeredSources[%d].resolutionIndex mismatch", index)
+        if resolvedCoin and source.resolutionIndex ~= resolvedCoin.resolutionIndex and not allowHistoricalSlotMismatch(source) then
+          return false, string.format(
+            "batch trace triggeredSources[%d].resolutionIndex mismatch for %s/%s coin %s instance %s: trace %s, resolved %s",
+            index,
+            tostring(source.sourceType),
+            tostring(source.sourceId),
+            tostring(source.coinId),
+            tostring(source.instanceId),
+            tostring(source.resolutionIndex),
+            tostring(resolvedCoin.resolutionIndex)
+          )
         end
       end
     end
@@ -673,7 +719,7 @@ local function validateBatchSnapshot(batch)
       if action.coinId ~= nil and (action.slotIndex ~= nil or action.resolutionIndex ~= nil) then
         local resolvedCoin = getResolvedCoin(action)
 
-        if not resolvedCoin then
+        if not resolvedCoin and not allowHistoricalSlotMismatch(action) then
           return false, string.format("batch trace actions[%d] references unknown coin %s", index, tostring(action.coinId))
         end
 
@@ -685,11 +731,11 @@ local function validateBatchSnapshot(batch)
           return false, string.format("batch trace actions[%d].resolutionIndex must be positive integer", index)
         end
 
-        if action.slotIndex ~= resolvedCoin.slotIndex and not allowHistoricalSlotMismatch(action) then
+        if resolvedCoin and action.slotIndex ~= resolvedCoin.slotIndex and not allowHistoricalSlotMismatch(action) then
           return false, string.format("batch trace actions[%d].slotIndex mismatch", index)
         end
 
-        if action.resolutionIndex ~= resolvedCoin.resolutionIndex and not allowHistoricalSlotMismatch(action) then
+        if resolvedCoin and action.resolutionIndex ~= resolvedCoin.resolutionIndex and not allowHistoricalSlotMismatch(action) then
           return false, string.format("batch trace actions[%d].resolutionIndex mismatch", index)
         end
       end
@@ -697,7 +743,7 @@ local function validateBatchSnapshot(batch)
       if type(action._trace) == "table" and action._trace.coinId ~= nil then
         local resolvedCoin = getResolvedCoin(action._trace)
 
-        if not resolvedCoin then
+        if not resolvedCoin and not allowHistoricalSlotMismatch(action._trace) then
           return false, string.format("batch trace actions[%d]._trace references unknown coin %s", index, tostring(action._trace.coinId))
         end
 
@@ -709,11 +755,11 @@ local function validateBatchSnapshot(batch)
           return false, string.format("batch trace actions[%d]._trace.resolutionIndex must be positive integer", index)
         end
 
-        if action._trace.slotIndex ~= resolvedCoin.slotIndex and not allowHistoricalSlotMismatch(action._trace) then
+        if resolvedCoin and action._trace.slotIndex ~= resolvedCoin.slotIndex and not allowHistoricalSlotMismatch(action._trace) then
           return false, string.format("batch trace actions[%d]._trace.slotIndex mismatch", index)
         end
 
-        if action._trace.resolutionIndex ~= resolvedCoin.resolutionIndex and not allowHistoricalSlotMismatch(action._trace) then
+        if resolvedCoin and action._trace.resolutionIndex ~= resolvedCoin.resolutionIndex and not allowHistoricalSlotMismatch(action._trace) then
           return false, string.format("batch trace actions[%d]._trace.resolutionIndex mismatch", index)
         end
       end
@@ -777,6 +823,10 @@ local function validateRewardOption(option, label)
     return false, string.format("%s references unknown %s %s", label, optionType, option.contentId)
   end
 
+  if option.replacedTrickPosition ~= nil and not isPositiveInteger(option.replacedTrickPosition) then
+    return false, string.format("%s replacedTrickPosition must be a positive integer", label)
+  end
+
   return true
 end
 
@@ -825,6 +875,10 @@ local function validateEncounterChoice(choice, label)
 
   if type(choice.description) ~= "string" or choice.description == "" then
     return false, string.format("%s description must be a non-empty string", label)
+  end
+
+  if choice.replacedTrickPosition ~= nil and not isPositiveInteger(choice.replacedTrickPosition) then
+    return false, string.format("%s replacedTrickPosition must be a positive integer", label)
   end
 
   return true
@@ -896,6 +950,17 @@ local function validateEncounterSession(session, label)
 
   if type(session.claimed) ~= "boolean" then
     return false, string.format("%s claimed must be boolean", label)
+  end
+
+  if session.replacementRequired ~= nil and type(session.replacementRequired) ~= "boolean" then
+    return false, string.format("%s replacementRequired must be boolean", label)
+  end
+  if session.replacePosition ~= nil and not isPositiveInteger(session.replacePosition) then
+    return false, string.format("%s replacePosition must be a positive integer", label)
+  end
+  if session.replacementRequired == true and session.selectedIndex ~= nil
+    and session.claimed ~= true and session.replacePosition == nil then
+    -- A partially selected save is valid; it simply cannot continue yet.
   end
 
   if session.claimed and #(session.choices or {}) > 0 and session.choice == nil then
@@ -2117,7 +2182,7 @@ function Validator.validateReplayTranscriptPayload(transcript)
         end
 
         local choiceKey = string.format("%s:%s", tostring(canonicalContentType(stageEntry.reward.choice.type)), tostring(stageEntry.reward.choice.contentId))
-        if not seenRewardOptionKeys[choiceKey] then
+        if not seenRewardOptionKeys[choiceKey] and not isSkipCurrencyRewardOption(stageEntry.reward.choice) then
           return false, string.format("replay transcript stage %d reward choice %s is not present in options", index, choiceKey)
         end
       end
@@ -2291,6 +2356,9 @@ function Validator.validateReplayTranscriptPayload(transcript)
       if batchEntry.refillEvent ~= nil and type(batchEntry.refillEvent) ~= "table" then
         return false, string.format("replay transcript stage %d batch %d refillEvent must be a table", index, batchIndex)
       end
+      if batchEntry.replacements ~= nil and type(batchEntry.replacements) ~= "table" then
+        return false, string.format("replay transcript stage %d batch %d replacements must be a table", index, batchIndex)
+      end
 
       if batchEntry.resolutionEntries ~= nil then
         if type(batchEntry.resolutionEntries) ~= "table" then
@@ -2388,8 +2456,36 @@ function Validator.validateReplayTranscriptPayload(transcript)
             return false, string.format("replay transcript stage %d batch %d resolution entry %d overloadSlotIndex must be positive integer", index, batchIndex, resolutionIndex)
           end
 
+          if entry.anchorSelectedSlotIndex ~= nil and not isPositiveInteger(entry.anchorSelectedSlotIndex) then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d anchorSelectedSlotIndex must be positive integer", index, batchIndex, resolutionIndex)
+          end
+
+          if entry.anchorOverloadIndex ~= nil and not isPositiveInteger(entry.anchorOverloadIndex) then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d anchorOverloadIndex must be positive integer", index, batchIndex, resolutionIndex)
+          end
+
+          if entry.anchorInstanceId ~= nil and type(entry.anchorInstanceId) ~= "string" then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d anchorInstanceId must be a string", index, batchIndex, resolutionIndex)
+          end
+
+          if entry.anchorCoinId ~= nil and type(entry.anchorCoinId) ~= "string" then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d anchorCoinId must be a string", index, batchIndex, resolutionIndex)
+          end
+
           if entry.smuggled ~= nil and type(entry.smuggled) ~= "boolean" then
             return false, string.format("replay transcript stage %d batch %d resolution entry %d smuggled must be boolean", index, batchIndex, resolutionIndex)
+          end
+
+          if entry.sleightUsed ~= nil and type(entry.sleightUsed) ~= "boolean" then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d sleightUsed must be boolean", index, batchIndex, resolutionIndex)
+          end
+
+          if entry.sleightSaved ~= nil and type(entry.sleightSaved) ~= "boolean" then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d sleightSaved must be boolean", index, batchIndex, resolutionIndex)
+          end
+
+          if entry.palmed ~= nil and type(entry.palmed) ~= "boolean" then
+            return false, string.format("replay transcript stage %d batch %d resolution entry %d palmed must be boolean", index, batchIndex, resolutionIndex)
           end
 
           if entry.smuggledBy ~= nil and type(entry.smuggledBy) ~= "string" then
@@ -2528,6 +2624,9 @@ function Validator.validateReplayTranscriptPayload(transcript)
           if type(action.contentId) ~= "string" or action.contentId == "" then
             return false, string.format("replay transcript stage %d purchase action %d requires contentId", index, actionIndex)
           end
+          if action.replacePosition ~= nil and not isPositiveInteger(action.replacePosition) then
+            return false, string.format("replay transcript stage %d purchase action %d replacePosition must be a positive integer", index, actionIndex)
+          end
         else
           return false, string.format("replay transcript stage %d shop action %d has invalid type %s", index, actionIndex, tostring(action.type))
         end
@@ -2571,6 +2670,9 @@ function Validator.validateRunState(runState)
 
   if not isPositiveInteger(runState.baseFlipsPerStage) then
     return false, "runState.baseFlipsPerStage must be a positive integer"
+  end
+  if not isPositiveInteger(runState.maxActiveTricks) then
+    return false, "runState.maxActiveTricks must be a positive integer"
   end
 
   if type(runState.resolvedValues) ~= "table" then
@@ -2679,6 +2781,27 @@ function Validator.validateRunState(runState)
     return false, upgradeError
   end
 
+  local ownedTrickLineIds = {}
+  if #(ownedTrickIds or {}) > runState.maxActiveTricks then
+    return false, "runState.ownedTrickIds exceeds maxActiveTricks"
+  end
+
+  for _, upgradeId in ipairs(ownedTrickIds or {}) do
+    local definition = Upgrades.getById(upgradeId)
+    local lineId = Upgrades.getLineId(definition)
+
+    if ownedTrickLineIds[lineId] then
+      return false, string.format(
+        "runState.ownedTrickIds contains multiple tricks in line %s (%s, %s)",
+        tostring(lineId),
+        tostring(ownedTrickLineIds[lineId]),
+        tostring(upgradeId)
+      )
+    end
+
+    ownedTrickLineIds[lineId] = upgradeId
+  end
+
   local unlockedCoinsOk, unlockedCoinsError = validateIdList(runState.unlockedCoinIds or {}, "runState.unlockedCoinIds", Coins.getById)
 
   if not unlockedCoinsOk then
@@ -2785,6 +2908,145 @@ function Validator.validateStageState(runState, stageState)
 
   if type(stageState.flags) ~= "table" then
     return false, "stageState.flags must be a table"
+  end
+  if type(stageState.trickBoard) ~= "table" then
+    return false, "stageState.trickBoard must be a table"
+  end
+  local validTrickBoardPhases = { setup = true, locked = true, resolving = true, reveal = true, complete = true }
+  if not validTrickBoardPhases[stageState.trickBoard.phase] then
+    return false, "stageState.trickBoard has invalid phase"
+  end
+  if not isNonNegativeInteger(stageState.trickBoard.replacementsRemaining) then
+    return false, "stageState.trickBoard.replacementsRemaining must be a non-negative integer"
+  end
+  if type(stageState.trickBoard.pressure) ~= "table"
+    or type(stageState.trickBoard.replacementHistory) ~= "table" then
+    return false, "stageState.trickBoard pressure/history must be tables"
+  end
+  if type(stageState.enemySkill) ~= "table" then
+    return false, "stageState.enemySkill must be a table"
+  end
+  if stageState.enemySkill.revision ~= 1 then
+    return false, "stageState.enemySkill has unsupported revision"
+  end
+  if type(stageState.enemySkill.slotPressure) ~= "table" then
+    return false, "stageState.enemySkill.slotPressure must be a table"
+  end
+  if stageState.enemySkill.skillId ~= nil then
+    if stageState.stageType == "boss" then
+      return false, "boss stages cannot carry regular Enemy Tricks"
+    end
+    local enemySkill = EnemySkills.getById(stageState.enemySkill.skillId)
+    if not enemySkill then
+      return false, "stageState.enemySkill has unknown skillId"
+    end
+    local targetIndex = stageState.enemySkill.targetIndex
+    local targetLimit = enemySkill.surface == "trick"
+      and #((runState and (runState.ownedTrickIds or runState.ownedUpgradeIds)) or {})
+      or math.max(1, runState and (runState.maxFlipSlots or runState.maxActiveCoinSlots) or 1)
+    if not isPositiveInteger(targetIndex) or targetIndex > targetLimit then
+      return false, "stageState.enemySkill targetIndex is out of range"
+    end
+  end
+  if type(stageState.bossTrick) ~= "table" then
+    return false, "stageState.bossTrick must be a table"
+  end
+  if stageState.bossTrick.revision ~= 1 then
+    return false, "stageState.bossTrick has unsupported revision"
+  end
+  if stageState.bossTrick.bossId ~= nil then
+    if stageState.stageType ~= "boss" then
+      return false, "normal stages cannot carry Boss Tricks"
+    end
+    local bossDefinition = require("src.content.bosses").getById(stageState.bossTrick.bossId)
+    if not bossDefinition or not bossDefinition.bossTrick then
+      return false, "stageState.bossTrick has unknown bossId"
+    end
+    if stageState.bossTrick.trickId ~= bossDefinition.bossTrick.id then
+      return false, "stageState.bossTrick trickId does not match boss definition"
+    end
+    if stageState.bossTrick.trickId == "the_favourite"
+      and stageState.bossTrick.favouriteSide ~= "heads"
+      and stageState.bossTrick.favouriteSide ~= "tails" then
+      return false, "stageState.bossTrick favouriteSide must be heads or tails for The Favourite"
+    end
+    if stageState.bossTrick.trickId == "centre_stage" then
+      local spotlightSlotIndex = stageState.bossTrick.spotlightSlotIndex
+      local maxSlots = math.max(1, runState and (runState.maxFlipSlots or runState.maxActiveCoinSlots) or 1)
+      if not isPositiveInteger(spotlightSlotIndex) or spotlightSlotIndex > maxSlots then
+        return false, "stageState.bossTrick spotlightSlotIndex is out of range for Centre Stage"
+      end
+    end
+    if stageState.bossTrick.trickId == "full_throttle" then
+      local leadSlotIndex = stageState.bossTrick.leadSlotIndex
+      local maxSlots = math.max(1, runState and (runState.maxFlipSlots or runState.maxActiveCoinSlots) or 1)
+      if leadSlotIndex ~= 1 and leadSlotIndex ~= maxSlots then
+        return false, "stageState.bossTrick leadSlotIndex must be an outer slot for Full Throttle"
+      end
+    end
+    if stageState.bossTrick.trickId == "stolen_identity" then
+      local victimSlotIndex = stageState.bossTrick.victimSlotIndex
+      local impostorSlotIndex = stageState.bossTrick.impostorSlotIndex
+      local maxSlots = math.max(1, runState and (runState.maxFlipSlots or runState.maxActiveCoinSlots) or 1)
+      if not isPositiveInteger(victimSlotIndex) or victimSlotIndex > maxSlots
+        or not isPositiveInteger(impostorSlotIndex) or impostorSlotIndex > maxSlots
+        or math.abs(victimSlotIndex - impostorSlotIndex) ~= 1 then
+        return false, "stageState.bossTrick Victim and Impostor slots must be adjacent and in range"
+      end
+    end
+    if stageState.bossTrick.trickId == "three_cups"
+      and not isPositiveInteger(stageState.bossTrick.shuffleSeed) then
+      return false, "stageState.bossTrick shuffleSeed must be a positive integer for Three Cups"
+    end
+    if stageState.bossTrick.trickId == "nothing_to_declare" then
+      local offTheBooksSlotIndex = stageState.bossTrick.offTheBooksSlotIndex
+      local maxSlots = math.max(1, runState and (runState.maxFlipSlots or runState.maxActiveCoinSlots) or 1)
+      if not isPositiveInteger(offTheBooksSlotIndex) or offTheBooksSlotIndex > maxSlots then
+        return false, "stageState.bossTrick offTheBooksSlotIndex is out of range for Nothing to Declare"
+      end
+    end
+    if stageState.bossTrick.trickId == "written_in_stone" then
+      local writtenSlotResults = stageState.bossTrick.writtenSlotResults
+      local maxSlots = math.max(1, runState and (runState.maxFlipSlots or runState.maxActiveCoinSlots) or 1)
+      if type(writtenSlotResults) ~= "table" or #writtenSlotResults ~= maxSlots then
+        return false, "stageState.bossTrick writtenSlotResults must cover every slot for Written in Stone"
+      end
+      local hasHeads = false
+      local hasTails = false
+      for slotIndex, result in ipairs(writtenSlotResults) do
+        if result ~= "heads" and result ~= "tails" then
+          return false, string.format(
+            "stageState.bossTrick writtenSlotResults[%d] must be heads or tails",
+            slotIndex
+          )
+        end
+        hasHeads = hasHeads or result == "heads"
+        hasTails = hasTails or result == "tails"
+      end
+      if maxSlots > 1 and not (hasHeads and hasTails) then
+        return false, "stageState.bossTrick Written in Stone pattern must contain both sides"
+      end
+    end
+    if not isPositiveInteger(stageState.bossTrick.intentIndex) then
+      return false, "stageState.bossTrick intentIndex must be positive"
+    end
+    if type(stageState.bossTrick.rngRoll) ~= "number"
+      or stageState.bossTrick.rngRoll < 0 or stageState.bossTrick.rngRoll >= 1 then
+      return false, "stageState.bossTrick rngRoll must be in [0, 1)"
+    end
+  end
+  if type(stageState.predictionSlot) ~= "table" then
+    return false, "stageState.predictionSlot must be a table"
+  end
+  if stageState.predictionSlot.revision ~= 1 then
+    return false, "stageState.predictionSlot has unsupported revision"
+  end
+  if not isPositiveInteger(stageState.predictionSlot.slotIndex)
+    or stageState.predictionSlot.slotIndex > math.max(1, runState and (runState.maxFlipSlots or runState.maxActiveCoinSlots) or 1) then
+    return false, "stageState.predictionSlot.slotIndex is out of range"
+  end
+  if stageState.predictionSlot.result ~= "heads" and stageState.predictionSlot.result ~= "tails" then
+    return false, "stageState.predictionSlot.result must be heads or tails"
   end
 
   if type(stageState.resolvedValues) ~= "table" then
@@ -3586,6 +3848,12 @@ function Validator.validateContentDefinition(definition)
     return false, string.format("definition %s unlockedByDefault must be boolean", definition.id)
   end
 
+  if definition.trick and definition.rewardEligible ~= false then
+    if type(definition.trick.activationFamily) ~= "string" or definition.trick.activationFamily == "" then
+      return false, string.format("Trick definition %s requires activationFamily", definition.id)
+    end
+  end
+
   local ok, errorMessage = validateCustomResolver(definition)
 
   if not ok then
@@ -3831,6 +4099,49 @@ function Validator.validateContentRegistry(registryName, definitions)
     for roundIndex = 1, expectedRounds do
       if not seenRounds[roundIndex] then
         return false, string.format("stages registry error: missing roundIndex %s", roundIndex)
+      end
+    end
+  elseif registryName == "bosses" then
+    for _, definition in ipairs(definitions or {}) do
+      local trick = definition.bossTrick
+      if trick then
+        if type(trick.id) ~= "string" or trick.id == "" then
+          return false, string.format("bosses registry error: %s Boss Trick requires id", definition.id)
+        end
+        if type(trick.name) ~= "string" or trick.name == "" then
+          return false, string.format("bosses registry error: %s Boss Trick requires name", definition.id)
+        end
+        if type(trick.family) ~= "string" or trick.family == "" then
+          return false, string.format("bosses registry error: %s Boss Trick requires family", definition.id)
+        end
+        if trick.id == "the_favourite" then
+          for _, field in ipairs({ "chanceShift", "favouriteScoreScaling", "underdogScoreScaling" }) do
+            if type(trick[field]) ~= "number" then
+              return false, string.format("bosses registry error: %s Boss Trick requires numeric %s", definition.id, field)
+            end
+          end
+        elseif trick.id == "centre_stage" then
+          for _, field in ipairs({ "encoreScaling", "upstagedLossScaling" }) do
+            if type(trick[field]) ~= "number" then
+              return false, string.format("bosses registry error: %s Boss Trick requires numeric %s", definition.id, field)
+            end
+          end
+          if trick.spotlightWinsTies ~= true then
+            return false, string.format("bosses registry error: %s Centre Stage must let the Spotlight win ties", definition.id)
+          end
+        elseif trick.id == "full_throttle" then
+          for _, field in ipairs({ "leadScaling", "middleScaling", "finishingScaling" }) do
+            if type(trick[field]) ~= "number" or trick[field] < 0 then
+              return false, string.format("bosses registry error: %s Boss Trick requires non-negative numeric %s", definition.id, field)
+            end
+          end
+        elseif trick.id == "nothing_to_declare" then
+          if type(trick.taxRate) ~= "number" or trick.taxRate < 0 or trick.taxRate > 1 then
+            return false, string.format("bosses registry error: %s Nothing to Declare requires taxRate in [0, 1]", definition.id)
+          end
+        elseif trick.id == "written_in_stone" and trick.requiresMixedSides ~= true then
+          return false, string.format("bosses registry error: %s Written in Stone must require mixed sides", definition.id)
+        end
       end
     end
   elseif registryName == "meta_upgrades" then

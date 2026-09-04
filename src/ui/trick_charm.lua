@@ -114,6 +114,10 @@ function TrickCharm.draw(app, charm, x, y, size, options)
   options = options or {}
 
   local hovered = options.hovered == true
+  local activationCount = tonumber(charm and charm.activationCount) or 0
+  local forgedActivationCount = tonumber(charm and charm.forgedActivationCount) or 0
+  local pressure = charm and charm.pressure or nil
+  local active = activationCount > 0 and not (pressure and pressure.kind == "blocked")
   local edge = math.max(1, Theme.scale(2))
   local shadowOffset = math.max(1, Theme.scale(3))
   local innerX = x + edge
@@ -123,7 +127,7 @@ function TrickCharm.draw(app, charm, x, y, size, options)
   setColorWithAlpha(Theme.colors.shadow, 0.30)
   love.graphics.rectangle("fill", x + shadowOffset, y + shadowOffset, size, size)
 
-  Theme.applyColor(hovered and Theme.colors.warning or Theme.colors.accent)
+  Theme.applyColor(active and Theme.colors.success or (hovered and Theme.colors.warning or Theme.colors.accent))
   love.graphics.rectangle("fill", x, y, size, size)
 
   setColorWithAlpha(Theme.colors.highlight, hovered and 0.30 or 0.18)
@@ -145,6 +149,33 @@ function TrickCharm.draw(app, charm, x, y, size, options)
   love.graphics.setFont(font)
   Theme.applyColor(Theme.colors.text)
   love.graphics.printf("T", x, y + math.floor((size - font:getHeight()) / 2), size, "center")
+
+  if activationCount > 0 then
+    local badge = string.format("×%d", activationCount)
+    love.graphics.setFont(app.fonts.small)
+    Theme.applyColor(Theme.colors.background)
+    love.graphics.rectangle("fill", x + size - Theme.scale(22), y - Theme.scale(2), Theme.scale(24), Theme.scale(16), 4, 4)
+    Theme.applyColor(active and Theme.colors.success or Theme.colors.danger)
+    love.graphics.printf(badge, x + size - Theme.scale(24), y - Theme.scale(1), Theme.scale(26), "center")
+  end
+
+  if forgedActivationCount > 0 then
+    local badge = string.format("F+%d", forgedActivationCount)
+    love.graphics.setFont(app.fonts.small)
+    Theme.applyColor(Theme.colors.background)
+    love.graphics.rectangle("fill", x - Theme.scale(2), y - Theme.scale(2), Theme.scale(28), Theme.scale(16), 4, 4)
+    Theme.applyColor(Theme.colors.warning)
+    love.graphics.printf(badge, x - Theme.scale(2), y - Theme.scale(1), Theme.scale(28), "center")
+  end
+
+  if pressure then
+    local pressureLabel = pressure.kind == "blocked" and "X"
+      or (pressure.kind == "weakened" and "%"
+        or (pressure.kind == "poisoned" and "P" or "!"))
+    love.graphics.setFont(app.fonts.small)
+    Theme.applyColor(Theme.colors.danger)
+    love.graphics.printf(pressureLabel, x, y + size - app.fonts.small:getHeight(), size, "center")
+  end
 
   return containsPoint({ x = x, y = y, width = size, height = size }, love.mouse.getPosition())
 end

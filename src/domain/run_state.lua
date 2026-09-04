@@ -65,6 +65,7 @@ function RunState.new(options)
 
     metaProjection = Utils.clone(options.metaProjection),
     maxFlipSlots = maxFlipSlots,
+    maxActiveTricks = math.max(1, tonumber(options.maxActiveTricks) or GameConfig.get("tricks.activeCapacity", 5)),
     baseFlipsPerStage = math.max(1, tonumber(options.baseFlipsPerStage) or 1),
     resolvedValues = Utils.clone(options.resolvedValues or {}),
 

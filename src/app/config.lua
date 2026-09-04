@@ -28,6 +28,8 @@ local GameConfig = {
     coinRevealEffectHoldDuration = 0.128,
     coinRevealScoreHoldDuration = 0.056,
     coinRevealLinkDuration = 0.208,
+    coinRevealSleightMoveDuration = 0.160,
+    threeCupsRevealDuration = 1.48,
     opponentHpHitDuration = 0.68,
     trickCalloutStyle = "combo",
   },
@@ -49,7 +51,13 @@ local GameConfig = {
   },
 
   purse = {
-    handSize = 6,
+    handSize = 5,
+    replacementsPerEncounter = 3,
+  },
+
+  tricks = {
+    activeCapacity = 5,
+    maxActivationEventsPerFlip = 24,
   },
 
   shop = {
@@ -58,9 +66,9 @@ local GameConfig = {
     guaranteedUpgradeOffers = 0,
     rerollCost = 1,
     rarityWeights = {
-      common = 1.0,
-      uncommon = 1.0,
-      rare = 1.0,
+      common = 0.50,
+      uncommon = 0.35,
+      rare = 0.15,
     },
   },
 
@@ -73,8 +81,9 @@ local GameConfig = {
   },
 
   luck = {
-    fatedFlipThreshold = 12,
+    fatedFlipThreshold = 7,
     baseMatchGain = 1,
+    generationMultiplier = 1.0,
     fatedFlipGeneratesLuck = false,
     fountainFavorByRarity = {
       common = 0.25,
@@ -95,6 +104,7 @@ local GameConfig = {
   },
 
   simulation = {
+    policy = "strategic",
     runCount = 25,
     baseSeed = 1001,
     seedStep = 1,

@@ -4,7 +4,7 @@ local Loadout = require("src.domain.loadout")
 
 local PurseSystem = {}
 
-local DEFAULT_HAND_SIZE = 6
+local DEFAULT_HAND_SIZE = 5
 
 local function removeValue(values, value)
   for index, current in ipairs(values or {}) do
@@ -57,6 +57,7 @@ local function ensurePurseShape(purse)
   purse.hookHistory = purse.hookHistory or {}
   purse.selectionHistory = purse.selectionHistory or {}
   purse.refillHistory = purse.refillHistory or {}
+  purse.replacementHistory = purse.replacementHistory or {}
   purse.smugglingHistory = purse.smugglingHistory or {}
   purse.boardSlots = purse.boardSlots or {}
 
@@ -128,14 +129,22 @@ local function buildSlotEntry(runState, slot, slotIndex)
     originalDrawIndex = slot.originalDrawIndex or dealtIndex,
     selectedSlotIndex = slot.selectedSlotIndex,
     sleightUsed = slot.sleightUsed == true,
+    sleightSaved = slot.sleightSaved == true,
     foretold = slot.foretold == true,
     foretoldResult = slot.foretoldResult,
     foretoldBy = slot.foretoldBy,
     foretoldRngRoll = slot.foretoldRngRoll,
     boardSlotIndex = slot.boardSlotIndex,
     overloadSlotIndex = slot.overloadSlotIndex,
+    anchorSelectedSlotIndex = slot.anchorSelectedSlotIndex,
+    anchorInstanceId = slot.anchorInstanceId,
+    anchorCoinId = slot.anchorCoinId,
+    anchorOverloadIndex = slot.anchorOverloadIndex,
     smuggled = slot.smuggled == true,
     smuggledBy = slot.smuggledBy,
+    contrabandCopy = slot.contrabandCopy == true,
+    copiedFromCoinId = slot.copiedFromCoinId,
+    copiedFromInstanceId = slot.copiedFromInstanceId,
   }
 end
 
@@ -287,6 +296,7 @@ function PurseSystem.initializeStagePurse(runState, stageState)
     hookHistory = {},
     selectionHistory = {},
     refillHistory = {},
+    replacementHistory = {},
     smugglingHistory = {},
   }
 
@@ -307,16 +317,18 @@ function PurseSystem.getStagePurse(runState, stageState)
   return ensurePurseShape(stageState.purse)
 end
 
-function PurseSystem.dealHand(runState, stageState, rng)
+function PurseSystem.fillHand(runState, stageState, rng)
   local purse = PurseSystem.getStagePurse(runState, stageState)
 
-  if not purse or #(purse.dealtHandSlots or {}) > 0 then
-    return purse and purse.dealtHandSlots or {}, nil
+  if not purse then
+    return {}, "purse_unavailable"
   end
 
-  local handSize = PurseSystem.getHandSize(runState)
+  local bonusDraws = math.max(0, tonumber(purse.nextHandBonusDraws) or 0)
+  local handSize = PurseSystem.getHandSize(runState) + bonusDraws
+  purse.nextHandBonusDraws = 0
 
-  if #(purse.availableInstanceIds or {}) == 0 then
+  if #(purse.availableInstanceIds or {}) == 0 and #(purse.dealtHandSlots or {}) == 0 then
     local status = stageState.scoreAppliedToHp >= stageState.opponentHp and "cleared" or "failed"
     stageState.stageStatus = status
     table.insert(purse.exhaustionEvents, {
@@ -328,8 +340,9 @@ function PurseSystem.dealHand(runState, stageState, rng)
   end
 
   local drawn = {}
+  local startingCount = #(purse.dealtHandSlots or {})
 
-  for drawIndex = 1, handSize do
+  for drawIndex = startingCount + 1, handSize do
     if #purse.availableInstanceIds == 0 then
       break
     end
@@ -352,9 +365,28 @@ function PurseSystem.dealHand(runState, stageState, rng)
     batchIndex = stageState.batchIndex + 1,
     dealtInstanceIds = Utils.copyArray(drawn),
     drawnInstanceIds = drawn,
+    bonusDrawCount = bonusDraws,
+    heldInstanceIds = PurseSystem.getDealtInstanceIds(stageState),
   })
 
-  return purse.dealtHandSlots, #drawn < handSize and "purse_running_low" or nil
+  return purse.dealtHandSlots, #purse.dealtHandSlots < handSize and "purse_running_low" or nil
+end
+
+function PurseSystem.dealHand(runState, stageState, rng)
+  return PurseSystem.fillHand(runState, stageState, rng)
+end
+
+function PurseSystem.addNextHandDraws(stageState, amount)
+  local purse = stageState and stageState.purse and ensurePurseShape(stageState.purse) or nil
+
+  if not purse then
+    return nil, "purse_unavailable"
+  end
+
+  local delta = math.max(0, tonumber(amount) or 0)
+  purse.nextHandBonusDraws = math.max(0, tonumber(purse.nextHandBonusDraws) or 0) + delta
+
+  return purse.nextHandBonusDraws
 end
 
 local function findDealtSlot(purse, selector)
@@ -413,6 +445,8 @@ local function recordSelection(purse, stageState, rule, maxSlots)
 end
 
 function PurseSystem.selectDealtSlot(runState, stageState, selector)
+  local setupOk, setupError = require("src.systems.trick_board_system").requireSetup(stageState)
+  if not setupOk then return false, setupError end
   local purse = PurseSystem.getStagePurse(runState, stageState)
 
   if not purse then
@@ -446,6 +480,8 @@ function PurseSystem.selectDealtSlot(runState, stageState, selector)
 end
 
 function PurseSystem.deselectSelectedSlot(runState, stageState, selector)
+  local setupOk, setupError = require("src.systems.trick_board_system").requireSetup(stageState)
+  if not setupOk then return false, setupError end
   local purse = PurseSystem.getStagePurse(runState, stageState)
 
   if not purse then
@@ -491,7 +527,71 @@ function PurseSystem.toggleDealtSelection(runState, stageState, selector)
   return ok, result, "select"
 end
 
+function PurseSystem.replaceHeldCoin(runState, stageState, selector, rng)
+  local TrickBoardSystem = require("src.systems.trick_board_system")
+  local setupOk, setupError = TrickBoardSystem.requireSetup(stageState)
+  if not setupOk then
+    return false, setupError
+  end
+
+  local purse = PurseSystem.getStagePurse(runState, stageState)
+  if not purse then
+    return false, "purse_unavailable"
+  end
+
+  local charges = stageState.trickBoard and tonumber(stageState.trickBoard.replacementsRemaining) or 0
+  if charges <= 0 then
+    return false, "no_replacements_remaining"
+  end
+  if #(purse.availableInstanceIds or {}) == 0 then
+    return false, "draw_pile_empty"
+  end
+
+  refreshSelectedSlotIndices(purse)
+  local slot, dealtIndex = findDealtSlot(purse, selector)
+  if not slot or not slot.instanceId then
+    return false, "dealt_slot_empty"
+  end
+  if slot.selectedSlotIndex ~= nil then
+    return false, "committed_coin_cannot_be_replaced"
+  end
+
+  local spentInstanceId = slot.instanceId
+  local spentDefinitionId = slot.definitionId or PurseSystem.getDefinitionId(runState, spentInstanceId)
+  if not Utils.contains(purse.exhaustedInstanceIds, spentInstanceId) then
+    table.insert(purse.exhaustedInstanceIds, spentInstanceId)
+  end
+
+  local availableIndex = rng:nextInt(1, #purse.availableInstanceIds)
+  local drawnInstanceId = table.remove(purse.availableInstanceIds, availableIndex)
+  local drawnDefinitionId = PurseSystem.getDefinitionId(runState, drawnInstanceId)
+  purse.dealtHandSlots[dealtIndex] = {
+    instanceId = drawnInstanceId,
+    definitionId = drawnDefinitionId,
+    dealtIndex = slot.dealtIndex or dealtIndex,
+    originalDrawIndex = slot.originalDrawIndex or dealtIndex,
+    sleightUsed = false,
+  }
+
+  stageState.trickBoard.replacementsRemaining = charges - 1
+  local event = {
+    batchIndex = stageState.batchIndex + 1,
+    handPosition = dealtIndex,
+    spentInstanceId = spentInstanceId,
+    spentDefinitionId = spentDefinitionId,
+    drawnInstanceId = drawnInstanceId,
+    drawnDefinitionId = drawnDefinitionId,
+    availableIndex = availableIndex,
+    replacementsRemaining = stageState.trickBoard.replacementsRemaining,
+  }
+  table.insert(purse.replacementHistory, Utils.clone(event))
+  table.insert(stageState.trickBoard.replacementHistory, Utils.clone(event))
+  return true, event
+end
+
 function PurseSystem.setSelectedSlotsFromEntries(runState, stageState, entries, options)
+  local setupOk, setupError = require("src.systems.trick_board_system").requireSetup(stageState)
+  if not setupOk then return false, setupError end
   local purse = PurseSystem.getStagePurse(runState, stageState)
 
   if not purse then
@@ -577,6 +677,8 @@ function PurseSystem.drawHand(runState, stageState, rng)
 end
 
 function PurseSystem.moveHandSlot(stageState, slotIndex, direction)
+  local setupOk, setupError = require("src.systems.trick_board_system").requireSetup(stageState)
+  if not setupOk then return false, setupError end
   local purse = stageState and stageState.purse or nil
   local handSlots = purse and purse.handSlots or nil
   local targetIndex = slotIndex + direction
@@ -725,11 +827,25 @@ function PurseSystem.smuggleCoinFromHand(runState, stageState, options)
   local overloadSlotIndex = #(purse.boardSlots or {}) + 1
   local boardSlotIndex = #(purse.selectedSlots or {}) + overloadSlotIndex
   local sourceId = options and options.sourceId or nil
+  local anchorSelectedSlotIndex = options and options.anchorSelectedSlotIndex or nil
+  local anchorInstanceId = options and options.anchorInstanceId or nil
+  local anchorCoinId = options and options.anchorCoinId or nil
+  local anchorOverloadIndex = 1
+
+  for _, slot in ipairs(purse.boardSlots or {}) do
+    if anchorInstanceId ~= nil and slot.anchorInstanceId == anchorInstanceId then
+      anchorOverloadIndex = anchorOverloadIndex + 1
+    end
+  end
 
   chosen.smuggled = true
   chosen.smuggledBy = sourceId
   chosen.overloadSlotIndex = overloadSlotIndex
   chosen.boardSlotIndex = boardSlotIndex
+  chosen.anchorSelectedSlotIndex = anchorSelectedSlotIndex
+  chosen.anchorInstanceId = anchorInstanceId
+  chosen.anchorCoinId = anchorCoinId
+  chosen.anchorOverloadIndex = anchorOverloadIndex
 
   table.insert(purse.boardSlots, chosen)
 
@@ -737,6 +853,10 @@ function PurseSystem.smuggleCoinFromHand(runState, stageState, options)
   entry.selectedSlotIndex = nil
   entry.boardSlotIndex = boardSlotIndex
   entry.overloadSlotIndex = overloadSlotIndex
+  entry.anchorSelectedSlotIndex = anchorSelectedSlotIndex
+  entry.anchorInstanceId = anchorInstanceId
+  entry.anchorCoinId = anchorCoinId
+  entry.anchorOverloadIndex = anchorOverloadIndex
 
   local historyEntry = Utils.clone(entry)
   historyEntry.batchIndex = stageState and (stageState.batchIndex + 1) or nil
@@ -744,6 +864,83 @@ function PurseSystem.smuggleCoinFromHand(runState, stageState, options)
   table.insert(purse.smugglingHistory, historyEntry)
 
   return entry
+end
+
+function PurseSystem.copySmuggledBoardCoin(runState, stageState, options)
+  local purse = PurseSystem.getStagePurse(runState, stageState)
+
+  if not purse then
+    return nil, "purse_unavailable"
+  end
+
+  ensurePurseShape(purse)
+
+  local maxOverloadSlots = math.max(1, tonumber(options and options.maxOverloadSlots) or 1)
+  if #(purse.boardSlots or {}) >= maxOverloadSlots then
+    return nil, "overload_slot_full"
+  end
+
+  local candidates = {}
+  for _, slot in ipairs(purse.boardSlots or {}) do
+    if slot and slot.instanceId and slot.smuggled == true then
+      table.insert(candidates, slot)
+    end
+  end
+
+  if #candidates == 0 then
+    return nil, "no_smuggled_coin"
+  end
+
+  local rng = options and options.rng or nil
+  local source = rng and rng.choose and rng:choose(candidates) or candidates[1]
+  local sourceId = options and options.sourceId or nil
+  local overloadSlotIndex = #(purse.boardSlots or {}) + 1
+  local boardSlotIndex = #(purse.selectedSlots or {}) + overloadSlotIndex
+
+  runState.counters.contrabandCopiesCreated = (runState.counters.contrabandCopiesCreated or 0) + 1
+  local copy = {
+    instanceId = string.format("contraband_%03d", runState.counters.contrabandCopiesCreated),
+    definitionId = source.definitionId or PurseSystem.getDefinitionId(runState, source.instanceId),
+    dealtIndex = source.dealtIndex,
+    originalDrawIndex = source.originalDrawIndex or source.dealtIndex,
+    smuggled = true,
+    smuggledBy = sourceId,
+    contrabandCopy = true,
+    copiedFromCoinId = source.definitionId or PurseSystem.getDefinitionId(runState, source.instanceId),
+    copiedFromInstanceId = source.instanceId,
+    overloadSlotIndex = overloadSlotIndex,
+    boardSlotIndex = boardSlotIndex,
+    anchorSelectedSlotIndex = source.anchorSelectedSlotIndex,
+    anchorInstanceId = source.anchorInstanceId,
+    anchorCoinId = source.anchorCoinId,
+    anchorOverloadIndex = (source.anchorOverloadIndex or 1) + 1,
+  }
+
+  for _, slot in ipairs(purse.boardSlots or {}) do
+    if copy.anchorInstanceId ~= nil
+      and slot.anchorInstanceId == copy.anchorInstanceId
+      and (slot.anchorOverloadIndex or 0) >= copy.anchorOverloadIndex then
+      copy.anchorOverloadIndex = (slot.anchorOverloadIndex or 0) + 1
+    end
+  end
+
+  table.insert(purse.boardSlots, copy)
+
+  local entry = buildSlotEntry(runState, copy, boardSlotIndex)
+  entry.selectedSlotIndex = nil
+  entry.boardSlotIndex = boardSlotIndex
+  entry.overloadSlotIndex = overloadSlotIndex
+  entry.anchorSelectedSlotIndex = copy.anchorSelectedSlotIndex
+  entry.anchorInstanceId = copy.anchorInstanceId
+  entry.anchorCoinId = copy.anchorCoinId
+  entry.anchorOverloadIndex = copy.anchorOverloadIndex
+
+  local historyEntry = Utils.clone(entry)
+  historyEntry.batchIndex = stageState and (stageState.batchIndex + 1) or nil
+  historyEntry.sourceId = sourceId
+  table.insert(purse.smugglingHistory, historyEntry)
+
+  return entry, nil, source
 end
 
 function PurseSystem.getResolutionOrder(runState, stageState)
@@ -776,12 +973,12 @@ function PurseSystem.getResolutionOrder(runState, stageState)
   return entries
 end
 
-function PurseSystem.refillHand(stageState)
+function PurseSystem.refillHand(stageState, runState, rng)
   local purse = stageState and stageState.purse or nil
 
   if not purse then
     return {
-      refillRule = "selected_exhaust_unselected_return",
+      refillRule = "selected_spend_unselected_hold",
       exhaustedInstanceIds = {},
       returnedInstanceIds = {},
       availableInstanceIdsAfter = {},
@@ -792,18 +989,23 @@ function PurseSystem.refillHand(stageState)
   ensurePurseShape(purse)
 
   local exhausted = {}
-  local returned = {}
+  local held = {}
   local selectedSet = {}
   local boardSet = {}
   local smuggled = {}
+  local palmed = {}
 
   for _, slot in ipairs(purse.selectedSlots or {}) do
     if slot.instanceId then
-      selectedSet[slot.instanceId] = true
-      if not Utils.contains(purse.exhaustedInstanceIds, slot.instanceId) then
-        table.insert(purse.exhaustedInstanceIds, slot.instanceId)
+      if slot.sleightSaved == true then
+        table.insert(palmed, slot.instanceId)
+      else
+        selectedSet[slot.instanceId] = true
+        if not Utils.contains(purse.exhaustedInstanceIds, slot.instanceId) then
+          table.insert(purse.exhaustedInstanceIds, slot.instanceId)
+        end
+        table.insert(exhausted, slot.instanceId)
       end
-      table.insert(exhausted, slot.instanceId)
     end
   end
 
@@ -811,12 +1013,14 @@ function PurseSystem.refillHand(stageState)
     if slot.instanceId then
       boardSet[slot.instanceId] = true
 
-      if not Utils.contains(purse.exhaustedInstanceIds, slot.instanceId) then
-        table.insert(purse.exhaustedInstanceIds, slot.instanceId)
-      end
+      if slot.contrabandCopy ~= true then
+        if not Utils.contains(purse.exhaustedInstanceIds, slot.instanceId) then
+          table.insert(purse.exhaustedInstanceIds, slot.instanceId)
+        end
 
-      if not Utils.contains(exhausted, slot.instanceId) then
-        table.insert(exhausted, slot.instanceId)
+        if not Utils.contains(exhausted, slot.instanceId) then
+          table.insert(exhausted, slot.instanceId)
+        end
       end
 
       if slot.smuggled == true then
@@ -825,30 +1029,58 @@ function PurseSystem.refillHand(stageState)
     end
   end
 
+  local retainedSlots = {}
   for _, slot in ipairs(purse.dealtHandSlots or {}) do
     if slot.instanceId and not selectedSet[slot.instanceId] and not boardSet[slot.instanceId] then
-      if not Utils.contains(purse.availableInstanceIds, slot.instanceId) then
-        table.insert(purse.availableInstanceIds, slot.instanceId)
-      end
-      table.insert(returned, slot.instanceId)
+      slot.selectedSlotIndex = nil
+      slot.boardSlotIndex = nil
+      slot.overloadSlotIndex = nil
+      slot.smuggled = nil
+      slot.smuggledBy = nil
+      slot.sleightSaved = nil
+      slot.bossPalmed = nil
+      slot.sleightUsed = false
+      table.insert(retainedSlots, slot)
+      table.insert(held, slot.instanceId)
     end
   end
 
   local event = {
     batchIndex = stageState and stageState.batchIndex or nil,
-    refillRule = "selected_exhaust_unselected_return",
+    refillRule = "selected_spend_unselected_hold",
     exhaustedInstanceIds = Utils.copyArray(exhausted),
-    returnedInstanceIds = Utils.copyArray(returned),
+    heldInstanceIds = Utils.copyArray(held),
+    returnedInstanceIds = {},
     smuggledInstanceIds = Utils.copyArray(smuggled),
+    palmedInstanceIds = Utils.copyArray(palmed),
     boardSlotCount = #(purse.boardSlots or {}),
     availableInstanceIdsAfter = Utils.copyArray(purse.availableInstanceIds or {}),
     exhaustedInstanceIdsAfter = Utils.copyArray(purse.exhaustedInstanceIds or {}),
   }
 
-  table.insert(purse.refillHistory, Utils.clone(event))
-  purse.dealtHandSlots = {}
+  purse.dealtHandSlots = retainedSlots
   purse.boardSlots = {}
   resetSelectedSlots(purse, {})
+
+  local beforeFill = {}
+  for _, slot in ipairs(retainedSlots) do
+    table.insert(beforeFill, slot.instanceId)
+  end
+  if runState and rng and stageState.stageStatus == "active" then
+    PurseSystem.fillHand(runState, stageState, rng)
+  end
+  local heldSet = {}
+  for _, instanceId in ipairs(beforeFill) do heldSet[instanceId] = true end
+  event.drawnInstanceIds = {}
+  for _, slot in ipairs(purse.dealtHandSlots or {}) do
+    if not heldSet[slot.instanceId] then
+      table.insert(event.drawnInstanceIds, slot.instanceId)
+    end
+  end
+  event.dealtInstanceIdsAfter = PurseSystem.getDealtInstanceIds(stageState)
+  event.availableInstanceIdsAfter = Utils.copyArray(purse.availableInstanceIds or {})
+  event.exhaustedInstanceIdsAfter = Utils.copyArray(purse.exhaustedInstanceIds or {})
+  table.insert(purse.refillHistory, Utils.clone(event))
 
   return event
 end
@@ -1003,7 +1235,7 @@ function PurseSystem.validateZones(runState, stageState)
         return false, string.format("board[%d] references selected instance %s", index, tostring(slot.instanceId))
       end
 
-      if not dealtInstances[slot.instanceId] then
+      if slot.contrabandCopy ~= true and not dealtInstances[slot.instanceId] then
         return false, string.format("board[%d] references instance %s outside dealt hand", index, tostring(slot.instanceId))
       end
 

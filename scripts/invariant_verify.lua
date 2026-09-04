@@ -93,15 +93,14 @@ local function runTargetedQueueScenario(baseSeed)
     local runState, metaProjection = RunInitializer.createNewRun(metaState, {
       seed = seed,
       starterCollection = { "copper_weighted_coin" },
-      ownedTrickIds = { "heads_varnish", "echo_cache" },
+      ownedTrickIds = { "heads_varnish", "weighted_palm", "weighted_tail_coating" },
     })
     local stageState = RunInitializer.createStageForCurrentRound(runState)
     local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "copper_weighted_coin" })
     assert(selection, errorMessage)
 
     local rng = RNG.new(seed)
-    local sawGrant = false
-    local sawConsume = false
+    local sawActivation = false
 
     while stageState.stageStatus == "active" do
       selectDefaultFlipSlots(runState, stageState, metaProjection, "heads", rng)
@@ -109,8 +108,7 @@ local function runTargetedQueueScenario(baseSeed)
       assert(batchResult, batchError)
       table.insert(runState.history.flipBatches, Utils.clone(batchResult.batch))
 
-      sawGrant = sawGrant or #(batchResult.trace.temporaryEffectsGranted or {}) > 0
-      sawConsume = sawConsume or #(batchResult.trace.temporaryEffectsConsumed or {}) > 0
+      sawActivation = sawActivation or #(batchResult.trace.activationLedger or {}) > 0
 
       Validator.assertRuntimeInvariants("scripts.invariant_verify.targeted.queue_batch", runState, stageState, {
         batchResult = batchResult,
@@ -121,7 +119,7 @@ local function runTargetedQueueScenario(baseSeed)
     RunHistorySystem.finalizeStage(runState, stageState, metaState)
     Validator.assertRuntimeInvariants("scripts.invariant_verify.targeted.queue_final", runState, nil, { history = true })
 
-    if sawGrant and sawConsume then
+    if sawActivation then
       return true
     end
   end

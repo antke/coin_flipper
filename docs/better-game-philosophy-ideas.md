@@ -44,7 +44,6 @@ Interesting mechanics are:
 - Replace a coin after the flip.
 - Forge a coin's identity or payout record.
 - Stamp fake credentials onto a coin.
-- Redirect a target or score credit to the wrong coin.
 - Overload the board with smuggled hand coins.
 - Trigger a coin twice.
 - Treat Tails as Heads.
@@ -179,11 +178,10 @@ They replace advanced coin functionality such as:
 - Moving coin bodies through resolved slots
 - Replacing coins
 - Forging coin identity
-- Redirecting targets and score credit
 - Overloading the board with smuggled hand coins
 - Luck Meter and Fated Flip payoffs
-- Prestige packet replays
-- Chain propagation
+- Prestige Outcome replays
+- Momentum propagation
 - Re-triggering effects
 - Manipulating final results
 
@@ -258,10 +256,12 @@ Use these coin archetypes instead:
 
 | Coin | Core identity | Preferred builds |
 | --- | --- | --- |
-| Bent Coin | Unstable packets, encores, chain links | Prestige, Encore, Domino Line |
+| Bent Coin | Unstable Outcomes and encores | Prestige, Encore, Curtain Call |
+| Flywheel Coin | Motion, carried force, In Motion links | Momentum, Keep It Rolling, Ripple |
 | Blank Coin | Blank papers, forgery medium | Forgery, Borrowed Name, Fake Credentials |
-| Hollow Coin | Hand overflow, contraband capacity | Smuggling, Sleeve Pocket, Planted Double |
-| Marked Coin | Readable coin, foretold results | Prediction?, Foretold coins, Ancient Patterns |
+| Hollow Coin | Hand overflow, contraband capacity | Smuggling, Hidden in Plain Sight, Planted Double |
+| Vanishing Coin | Half-seen magician's coin, palms and rearrangements | Sleight of Hand, Switcheroo, Vanishing Act, Three-Card Monte |
+| Marked Coin | Readable coin, foretold results | Prediction, Foretold coins, Ancient Patterns |
 | Lucky Coin | Luck Meter fuel, Fated Flip payoff | Fate, Omen Engine, Fountain Pact, Twist of Fate |
 | Weighted Coin | Weight, commitment, reliability | Weighted, probability builds |
 
@@ -289,8 +289,8 @@ Quality means "more of the archetype".
 
 Example:
 
-- Copper Bent Coin supports packet replays and Chain links.
-- Silver Bent Coin expresses the same unstable encore/Chain identity more strongly.
+- Copper Bent Coin supports Outcome replays and encores.
+- Silver Bent Coin expresses the same unstable encore identity more strongly.
 - Gold Bent Coin expresses the Bent identity even more strongly.
 
 The player should think:
@@ -316,64 +316,58 @@ Avoid naming tricks in a way that conflicts with coin archetypes.
 For example:
 
 - Prefer See Behind the Veil, Fulfilled Fate or Ancient Pattern over Marked Coin.
-- Prefer Borrowed Name, Fake Credentials or Copycat Jackpot over Counterfeit Coin.
-- Prefer Look Over There, Crooked Spotlight or Stolen Applause over Misdirection.
-- Prefer Sleeve Pocket, Backroom Refill or Planted Double over generic Smuggling names.
+- Prefer Fake Credentials, Borrowed Name or Forged Signature over Counterfeit Coin.
+- Prefer Hidden Pocket, Hidden in Plain Sight, Off the Books or Planted Double over generic Smuggling names.
 - Prefer Omen Engine, Fountain Pact, Twist of Fate or Fate Uncapped over generic Fate names.
 - Prefer Encore, Curtain Call or Impossible Finale over generic Prestige names.
-- Prefer Domino Line, Chained Payout or Deep Link over generic Chain names.
+- Prefer Keep It Rolling, Follow Through or Ripple over generic Momentum names.
 
 Canonical trick categories:
 
 | Code tag | Player-facing category | Role |
 | --- | --- | --- |
 | `weighted` | Weighted Tricks | Pre-flip probability Weight and weighted payoffs |
-| `marked` | Prediction Tricks (?) | Foretold coins, pre-selection reads and Ancient Patterns |
-| `sleight` | Sleight Tricks | Physical coin movement, slot swaps, substitutions and movement-based rescores |
-| `counterfeit` | Forgery Tricks | Position-based identity fraud, forged credentials and copied payout/trigger behavior |
-| `misdirection` | Misdirection Tricks | Decoy defense, target rerouting and score-credit funneling |
+| `prediction` | Prediction Tricks | Foretold coins, pre-selection reads and Ancient Patterns |
+| `sleight` | Sleight of Hand Tricks | Physical coin movement, slot swaps and substitutions |
+| `counterfeit` | Forgery Tricks | Left-neighbour credentials, copied Outcomes and bounded family/Trick activations |
 | `smuggle` | Smuggling Tricks | Board overload, extra hand coins, refill engines and temporary contraband copies |
 | `fate` | Fate Tricks | Luck Meter acceleration, Fountain Favor boosts and Fated Flip payoffs/chains |
-| `prestige` | Prestige Tricks | Discounted replays of completed resolution packets |
-| `chain` | Chain Tricks | Live coin-to-coin trigger propagation |
+| `prestige` | Prestige Tricks | Discounted replays of completed Outcomes |
+| `momentum` | Momentum Tricks | Live coin-to-coin trigger propagation |
 
 Weighted Tricks act before results exist by adding or increasing Weight toward a side, usually the player's call. They do not convert, reroll or repair outcomes after the flip.
 
-Prediction Tricks are still a question-mark category. Current direction: reveal future results on dealt coins as Foretold coins before selection, then reward selected Foretold coins that fulfill the call or match visible Ancient Patterns. They should not add individual coin-call UI, convert failures, reroll coins or fix outcomes after the flip.
+Prediction Tricks reveal future results on dealt coins as Foretold coins before selection, then reward selected Foretold coins with Matching Call or visible Ancient Patterns. They should not add individual coin-call UI, convert failures, reroll coins or fix outcomes after the flip.
 
 Prediction risk to remember: if too many results are revealed, the optimal move may become obvious; if too many Ancient Patterns exist, the family can become passive bonus variance instead of a meaningful selection puzzle.
 
-Sleight Tricks are physical manipulation: fast hands, street-hustler swaps, three-cup moves and substitutions. They move coin bodies through resolved result slots, but do not change the Heads/Tails results, reroll coins, weight odds, reveal prophecy or create copies.
+Sleight of Hand Tricks are physical manipulation: fast hands, street-hustler swaps, three-cup moves and substitutions. Vanishing Coin is their coin archetype because it is a half-seen magician's coin built to palm, swap or substitute. Sleight Tricks move coin bodies through resolved result slots, but do not change the Heads/Tails results, reroll coins, weight odds, reveal prophecy or create copies.
 
-Sleight can occasionally rescore or retrigger, but only as a consequence of coins changing places. Prestige replays completed resolution packets at a discount; Chain creates live coin-to-coin propagation; Sleight retriggers because the cups moved and different coin bodies now occupy the same result slots.
+Sleight of Hand keeps result slots fixed while the coin bodies secretly change places. Prestige replays completed Outcomes at a discount; Momentum creates live coin-to-coin propagation.
 
-Forgery Tricks are identity fraud: fake papers, forged signatures, stamped credentials and counterfeit payout records. They change what payout, trigger or requirement checks believe a coin is. They do not add extra real coins or slots, move coin bodies, change Heads/Tails results, or redirect score away from another source.
+Forgery is hybrid support: before Flip, a real Blank Coin reads the genuine non-Forgery coin immediately to its left and locks that coin's family as its acting family, then copies its completed Outcome or counterfeits a bounded Trick package. Fake Credentials copies 50% / 75% / 100% of a successful left source Outcome on a Forgery miss. Borrowed Name imitates up to one / two / three eligible Tricks within its tier ceiling. Forged Signature repeats one highest-tier eligible Trick within its tier ceiling.
 
-Forgery should be creative rather than automatic highest-score copying. Prefer source constraints such as slot 1, last slot, nearest success, first success or matching tags. Tier I can replace identity for one check, Tier II can add forged identity while keeping the real identity, and Tier III can copy two identities or let multiple coins share one signed template. Copied payout and trigger effects need explicit caps and no recursive copying.
-
-Misdirection Tricks are defensive control first and score funneling second. They make the wrong coin get targeted, credited or paid while keeping coin bodies, identities, results and slots fixed. Decoys protect important coins from enemy Tricks or hostile automatic targeting; Spotlights receive redirected score credit from successful cheap coins.
-
-Misdirection is allowed to be a support family rather than a full primary combo engine. Its risks are narrowness if it only funnels score, passive immunity if Decoys cancel too much, and bland play if score funnels always choose the highest-value coin. Use explicit Decoy/Spotlight constraints, one or two redirected events, clear logs and no recursive redirected retriggers.
+Forgery requires a developed primary family, Trick capacity, Blank Coins, and correct positioning. Copied activations use the Blank as source, run in every normal phase including pre-roll setup, respect their own conditions and opponent pressure, never change locked real family, and cannot activate Forgery or be forged again.
 
 Smuggling Tricks are illegal capacity and board overload. They physically force real unselected hand coins onto the board after the player has selected, arranged and called, so a normal 3-coin flip can become 4, 5 or far more coin bodies resolving on the table.
 
 Smuggling's main enablers are coin purchases, bigger hand/refill support and Tricks that move extra hand coins into overload slots. Its multiplication branch can make one real smuggled XYZ coin appear as multiple XYZ board bodies for the current flip, but the extra bodies are temporary contraband copies and only the original owned coin remains in the pouch afterward.
 
-Smuggling adds physical board bodies. It does not merely move selected coins like Sleight, forge identity/payout/trigger checks like Forgery, reroute credit like Misdirection, or change probability/results. Risks: too many coins can slow logs/UI, pure quantity scaling can get bland, and multiplication may need `max_board_coins` or `no_recursive_multiplication` caps if natural hand/refill limits are not enough.
+Smuggling adds physical board bodies. It does not merely move selected coins like Sleight of Hand, forge identity/payout/trigger checks like Forgery, or change probability/results. Risks: too many coins can slow logs/UI, pure quantity scaling can get bland, and multiplication may need `max_board_coins` or `no_recursive_multiplication` caps if natural hand/refill limits are not enough.
 
 Fate Tricks are Luck Meter engines and Fated Flip payoffs. They fill the Luck Meter faster, improve Luck gain, amplify Fountain Favor, reward Fated Flips and eventually allow capped Fated Flip chains.
 
-Fate only affects the global Luck Meter and Fated Flip layer. It does not create or copy coins, move coin bodies, forge identities, reroute score credit, reroll coins, Weight odds or change individual coin results. Weighted owns individual odds/results; Fate owns meter acceleration and whole-flip Fated payoff.
+Fate only affects the global Luck Meter and Fated Flip layer. It does not create or copy coins, move coin bodies, forge identities, reroll coins, Weight odds or change individual coin results. Weighted owns individual odds/results; Fate owns meter acceleration and whole-flip Fated payoff.
 
-Fate risks: flat `+1 Luck` can feel like plain math, Fated Flip chaining can dominate if uncapped, and Fated retriggers can become Chain/Prestige confusion if they replay arbitrary triggers. Keep Fate effects meter-only, clearly logged and scoped with `once_per_fated_flip`, `no_individual_coin_targeting` and chain caps.
+Fate risks: flat `+1 Luck` can feel like plain math, Fated Flip chaining can dominate if uncapped, and Fated retriggers can become Momentum/Prestige confusion if they replay arbitrary triggers. Keep Fate effects meter-only, clearly logged and scoped with `once_per_fated_flip`, `no_individual_coin_targeting` and propagation caps.
 
-Prestige Tricks replay completed resolution packets. A coin already resolved, produced score, emitted effects, affected other coins and caused neighbour bonuses; Prestige makes that recorded impact happen again as an encore at reduced value, usually 20%.
+Prestige Tricks replay completed Outcomes. A coin already resolved and produced a recorded Score contribution; Prestige makes that recorded impact happen again as an encore at reduced value, usually 20%.
 
-Prestige replays the record, not the world. It does not add coin bodies, copy identities, move coins, reroll, Weight odds, choose new targets or start fresh Chain propagation by default. If the original packet included Chain value, Prestige may replay that recorded value at the discount. Live Chain logic only runs from a Prestige replay if a Chain Trick explicitly allows it. Use `prestige_replay`, `packet_replay_only`, `replay_at_20_percent` and `no_recursive_prestige`.
+Prestige replays the record, not the world. It does not add coin bodies, copy identities, move coins, reroll, Weight odds, choose new targets or start fresh Momentum propagation by default. If the original Outcome included Momentum value, Prestige may replay that recorded value at the discount. Live Momentum logic only runs from a Prestige replay if a Momentum Trick explicitly allows it. Use `prestige_replay`, `outcome_replay_only`, `replay_at_20_percent` and `no_recursive_prestige`.
 
-Chain Tricks create live propagation: one coin has a chance to trigger another coin, then triggered coins have a chance to trigger another random coin. A coin is Chained if it was triggered by another coin instead of by original flip resolution. Track `chain_source`, `chain_link` and `chain_depth`; the third coin in the chain is a Chained coin at depth 2 or deeper.
+Momentum Tricks create live propagation: one coin has a chance to trigger another coin, then triggered coins can continue the motion. A coin is **In Motion** if it was triggered by another coin instead of by original flip resolution. Flywheel Coin is the clean Momentum archetype.
 
-Chain changes live cause-and-effect; Prestige replays completed cause-and-effect. Chain should use simple wording, visible links, chance gates such as 50%, `max_chain_depth` and payoffs like Chained coins scoring 1.25x.
+Momentum changes live cause-and-effect; Prestige replays completed cause-and-effect. Momentum should use simple wording, visible links, chance gates such as 50%, capped propagation and payoffs like Follow Through.
 
 ---
 
@@ -472,7 +466,7 @@ Example:
 The Forger
 
 Trick:
-Fake Credentials II
+Fake Credentials I
 
 HP:
 100
@@ -536,13 +530,11 @@ Automatic effects begin.
 Examples:
 
 - Forged identities
-- Sleight swaps and substitutions
-- Decoy target reroutes
-- Spotlight score-credit funnels
+- Sleight of Hand swaps and substitutions
 - Smuggling board overload
 - Fated Flip payoffs
-- Prestige packet replays
-- Chain propagation
+- Prestige Outcome replays
+- Momentum propagation
 - Bounded copied payouts or triggers
 - Discounted encores
 
@@ -550,7 +542,7 @@ This is the "Goldberg machine" moment.
 
 No additional player input required.
 
-Any movement, replacement, swap, copy, redirect, smuggle, replay or Chain effect must use an automatic target rule.
+Any movement, replacement, swap, copy, redirect, smuggle, replay or Momentum effect must use an automatic target rule.
 
 ---
 
@@ -626,7 +618,7 @@ Reading coins and manipulating odds.
 
 Reward Pool:
 
-Prediction? and Weighted Tricks.
+Prediction and Weighted Tricks.
 
 ---
 
@@ -650,7 +642,7 @@ Control, pressure and house rules.
 
 Reward Pool:
 
-Misdirection and control-oriented Tricks.
+Weighted and Forgery Tricks.
 
 ---
 
@@ -662,7 +654,7 @@ Fast hands, cup work and substitutions.
 
 Reward Pool:
 
-Sleight Tricks.
+Sleight of Hand Tricks.
 
 ---
 
@@ -670,11 +662,11 @@ Sleight Tricks.
 
 Theme:
 
-Encores, finales and chain reactions.
+Encores, finales and kept motion.
 
 Reward Pool:
 
-Prestige and Chain Tricks.
+Prestige and Momentum Tricks.
 
 ---
 
@@ -688,15 +680,13 @@ Examples:
 
 - Borrowed Name
 - Switcheroo
-- Sleeve Pocket
+- Hidden in Plain Sight
 - Planted Double
 - Omen Engine
 - Twist of Fate
-- Look Over There
-- Crooked Spotlight
 - Encore
-- Domino Line
-- Copycat Jackpot
+- Keep It Rolling
+- Forged Signature
 
 ---
 
@@ -731,14 +721,6 @@ Stamp bad credentials or make weak pressure copy your strongest success.
 
 ---
 
-Misdirection
-
-Player:
-Use Decoys to protect important coins and funnel cheap successful score credit into a Spotlight.
-
-Enemy:
-Make your useful automatic targeting hit the wrong coin or book credit onto a weak Decoy.
-
 ---
 
 Fate
@@ -754,20 +736,20 @@ Pressure the player with meter-driven Fated events or punish careless Luck feedi
 Prestige
 
 Player:
-Replay one completed coin packet at a discounted encore value after resolution should be over.
+Replay one completed coin Outcome at a discounted encore value after resolution should be over.
 
 Enemy:
-Replay one completed pressure packet after the player thinks the act has ended.
+Replay one completed pressure Outcome after the player thinks the act has ended.
 
 ---
 
-Chain
+Momentum
 
 Player:
-Make triggered coins continue into random neighbours, then cash out Chained coins or deep Chain links.
+Make triggered coins continue into neighbours, then cash out coins In Motion.
 
 Enemy:
-Pressure jumps through neighbouring coins as a visible Chain.
+Pressure jumps through neighbouring coins as visible Momentum.
 
 ---
 
@@ -791,7 +773,7 @@ Choose:
 
 - Borrowed Name
 - Fake Credentials
-- Copycat Jackpot
+- Forged Signature
 - Generic Trick
 
 Tricks offered should primarily come from the defeated enemy's class.
@@ -808,63 +790,51 @@ Tricks can exist in multiple strengths.
 
 Example:
 
-Borrowed Name I
+Fake Credentials I
 
-One coin replaces its identity with slot 1 for one payout.
-
----
-
-Fake Credentials II
-
-One coin keeps its real identity and adds a forged identity for one check.
+A missing Blank Coin copies 50% / 75% / 100% of its successful genuine left neighbour's completed Outcome.
 
 ---
 
-Copycat Jackpot III
+Borrowed Name II
 
-Multiple forged coins copy a bounded payout or trigger from the slot 1 template.
-
----
-
-Look Over There I
-
-One hostile target is redirected to a Decoy.
+Before Flip, a Blank Coin locks and imitates up to one / two / three eligible Tricks from its genuine left neighbour's family.
 
 ---
 
-Crooked Spotlight I
+Borrowed Name III
 
-One cheap successful coin books its score credit onto a Spotlight.
-
----
-
-Stolen Applause II
-
-Up to two successful coins funnel capped score credit into the Spotlight.
+Before Flip, a Blank Coin locks one highest-tier eligible Trick from its genuine left neighbour's family.
 
 ---
 
-Sleeve Pocket I
+Hidden Pocket I
+
+Gain +1 max Flip Slot for the run.
+
+---
+
+Hidden in Plain Sight I
 
 One real unselected hand coin enters an overload slot after the call.
 
 ---
 
-Backroom Refill I
+Off the Books I
 
-Refill one extra coin after the flip to keep Smuggling hands stocked.
-
----
-
-Planted Double II
-
-The first smuggled coin creates a temporary contraband copy for this flip.
+After a flip with smuggling, draw +1 extra coin into the next hand if available.
 
 ---
 
-Overloaded Table III
+Planted Double I
 
-Board overload pays a capped bonus for extra coin bodies.
+50% chance to copy a random smuggled coin into a temporary contraband overload slot for this flip.
+
+---
+
+Embarrassment of Riches I
+
+Matching coins that were not selected in the original flip but still got flipped score 2x.
 
 ---
 
@@ -894,37 +864,37 @@ Luck can keep filling during a Fated Flip and prepare another Fated Flip.
 
 Encore I
 
-Replay one resolved coin's completed packet at 20% value.
+Replay one completed coin Outcome at 20% value, preferring Bent Coins.
 
 ---
 
 Curtain Call II
 
-Replay the last effect-triggering coin packet at 20% value.
+Replay two random completed coin Outcomes at 20% value, preferring Bent Coins.
 
 ---
 
 Impossible Finale III
 
-Replay the highest-impact eligible packet at reduced value.
+Replay every completed coin Outcome at 75% value.
 
 ---
 
-Domino Line I
+Keep It Rolling I
 
-Scoring or Chained coins have a 50% chance to trigger a random neighbour.
-
----
-
-Chained Payout I
-
-Chained coins score 1.25x.
+Scoring coins have a 50% chance to trigger a neighbouring Flywheel Coin if possible, otherwise a random neighbouring coin.
 
 ---
 
-Deep Link II
+Follow Through I
 
-The third coin or deeper in a Chain gains a payoff.
+Coins In Motion score more for each Momentum link that carried them.
+
+---
+
+Ripple III
+
+Trigger neighbours in both directions, then continue Momentum in each direction with capped chances.
 
 This allows stronger enemies and deeper progression.
 
@@ -982,7 +952,6 @@ Known cheat.
 
 Forged identities.
 
-Decoy defenses.
 
 Board overload smuggling.
 
@@ -994,7 +963,7 @@ Late Game:
 
 Legendary con artist.
 
-Massive chain reactions.
+Massive Momentum reactions.
 
 Reality-bending tricks.
 

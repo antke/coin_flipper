@@ -9,19 +9,23 @@ RewardPreviewState.__index = RewardPreviewState
 
 local function formatRewardError(errorCode)
   if errorCode == "invalid_reward_option" then
-    return "That reward option is no longer available."
+    return "That Spoils option is no longer available."
   end
 
   if errorCode == "reward_preview_not_initialized" or errorCode == "reward_preview_unavailable" then
-    return "No reward preview is currently active."
+    return "No Spoils screen is currently active."
   end
 
   if errorCode == "reward_option_not_selected" or errorCode == "reward_choice_required" then
-    return "Choose a reward before continuing."
+    return "Choose a Charm to Seize before continuing."
   end
 
   if errorCode == "reward_already_claimed" then
-    return "That reward has already been claimed."
+    return "Those Spoils have already been claimed."
+  end
+
+  if errorCode == "not_enough_influence" then
+    return "Not enough Influence to Seize that Charm."
   end
 
   return tostring(errorCode)
@@ -29,7 +33,7 @@ end
 
 function RewardPreviewState.new()
   return setmetatable({
-    statusMessage = "Choose a reward, then continue to the Black Market.",
+    statusMessage = "Seize one Charm, then continue to the Black Market.",
     rewardButtons = {},
     buttons = {},
   }, RewardPreviewState)
@@ -57,7 +61,7 @@ function RewardPreviewState:selectRewardOption(app, index)
   local ok, result = app:selectRewardOption(index)
 
   if ok and result then
-    self.statusMessage = string.format("Selected reward: %s.", result.name or result.contentId or tostring(index))
+    self.statusMessage = string.format("Selected Charm: %s.", result.name or result.contentId or tostring(index))
   elseif not ok then
     self.statusMessage = formatRewardError(result)
   end
@@ -67,7 +71,7 @@ end
 
 function RewardPreviewState:tryContinue(app)
   if not app:canContinueRewardPreview() then
-    self.statusMessage = "Choose a reward before continuing."
+    self.statusMessage = "Choose a Charm to Seize before continuing."
     return false, "reward_choice_required"
   end
 
@@ -78,7 +82,7 @@ function RewardPreviewState:tryReroll(app)
   local ok, result = app:rerollRewardOptions()
 
   if ok then
-    self.statusMessage = "Rerolled reward choices."
+    self.statusMessage = "Rerolled Spoils choices."
   else
     self.statusMessage = formatRewardError(result)
   end
@@ -90,7 +94,7 @@ function RewardPreviewState:trySkip(app)
   local ok, result = app:skipRewardForCurrency()
 
   if ok then
-    self.statusMessage = string.format("Skipped reward for +%d Influence. Continue to the Black Market.", result.amount or 0)
+    self.statusMessage = string.format("Skipped Spoils for +%d Influence. Continue to the Black Market.", result.amount or 0)
   else
     self.statusMessage = formatRewardError(result)
   end
@@ -166,7 +170,7 @@ function RewardPreviewState:buildRewardButtons(app, cardLayout)
       y = contentArea.y + contentArea.height - buttonHeight,
       width = contentArea.width,
       height = buttonHeight,
-      label = option.selected and "Selected" or "Choose",
+      label = option.selected and "Selected" or "Seize",
       variant = option.selected and "success" or "primary",
       focused = option.selected == true,
       disabled = session and session.claimed == true,
@@ -194,7 +198,7 @@ function RewardPreviewState:buildButtons(app)
       y = metrics.buttonY,
       width = buttonWidth,
       height = buttonHeight,
-      label = "Reroll Rewards",
+      label = "Reroll Spoils",
       variant = "warning",
       disabled = rewardActionDisabled,
       onClick = function()
@@ -230,6 +234,32 @@ function RewardPreviewState:buildButtons(app)
   return self.buttons
 end
 
+function RewardPreviewState:buildReplacementButtons(app, area)
+  local cards = app:getRewardReplacementCards()
+  local buttons = {}
+  if #cards == 0 or not area then return buttons end
+  local gap = Theme.spacing.itemGap
+  local width = math.floor((area.width - (gap * (#cards - 1))) / #cards)
+  local height = Theme.scale(34)
+  for index, card in ipairs(cards) do
+    table.insert(buttons, {
+      x = area.x + ((index - 1) * (width + gap)),
+      y = area.y + area.height - height,
+      width = width,
+      height = height,
+      label = string.format("%d. %s", card.position, card.name),
+      variant = card.selected and "success" or "warning",
+      focused = card.selected,
+      onClick = function()
+        local ok, result = app:selectRewardReplacementPosition(card.position)
+        if ok then self.statusMessage = string.format("Replace %s.", card.name) end
+        return ok, result
+      end,
+    })
+  end
+  return buttons
+end
+
 function RewardPreviewState:drawRewardCard(app, entry)
   local option = entry.option or {}
   local title = string.format("Choice %d", entry.index)
@@ -260,17 +290,33 @@ function RewardPreviewState:drawRewardCard(app, entry)
   love.graphics.printf(badge, contentArea.x, contentArea.y + math.floor((artSize - Theme.spacing.lineHeight) / 2), artSize, "center")
   love.graphics.setFont(app.fonts.body)
 
-  local typeLine = option.displayType or option.type or "Reward"
+  local typeLine = option.displayType or option.type or "Charm"
   if option.wildcard then
     typeLine = typeLine .. " (Wildcard)"
   end
 
+  local seizeCost = option.seizeCost
+  local baseSeizeCost = option.baseSeizeCost
+  local seizeLine = nil
+  if seizeCost ~= nil then
+    if (option.seizeDiscount or 0) > 0 and baseSeizeCost ~= nil then
+      seizeLine = string.format("Seize: %d Influence (was %d)", seizeCost, baseSeizeCost)
+    else
+      seizeLine = string.format("Seize: %d Influence", seizeCost)
+    end
+  end
+
   local lines = {
-    option.name or option.contentId or "Unknown Reward",
+    option.name or option.contentId or "Unknown Charm",
     typeLine,
-    "",
-    Terminology.getMechanicRichText(option.description or ""),
   }
+
+  if seizeLine then
+    table.insert(lines, seizeLine)
+  end
+
+  table.insert(lines, "")
+  table.insert(lines, Terminology.getMechanicRichText(option.description or ""))
 
   Layout.drawWrappedLines(lines, textX, textY, textWidth, Theme.colors.text, Theme.spacing.lineHeight, contentArea.height - buttonHeight - Theme.spacing.itemGap)
 end
@@ -279,9 +325,9 @@ function RewardPreviewState:enter(app)
   local session = app:ensureRewardPreview()
 
   if session and #(session.options or {}) > 0 then
-    self.statusMessage = "Choose one reward, reroll, or skip for Influence."
+    self.statusMessage = "Seize one Charm, reroll the Spoils, or skip for Influence."
   else
-    self.statusMessage = "No reward options remain. Continue to the Black Market."
+    self.statusMessage = "No Spoils options remain. Continue to the Black Market."
   end
 end
 
@@ -337,24 +383,25 @@ function RewardPreviewState:draw(app)
   local hasOptions = #(rewardSession and rewardSession.options or {}) > 0
 
   love.graphics.setFont(app.fonts.title)
-  Layout.centeredText("Reward Preview", 64, app.fonts.title, Theme.colors.accent)
+  Layout.centeredText("Spoils", 64, app.fonts.title, Theme.colors.accent)
 
-  Panel.draw(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Choose Reward")
+  Panel.draw(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Seize Charm")
 
-  local rewardArea = Panel.getContentArea(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Choose Reward")
+  local rewardArea = Panel.getContentArea(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Seize Charm")
 
   local rewardLines = app:getRewardPreviewLines()
   table.insert(rewardLines, "")
   table.insert(rewardLines, self.statusMessage)
   if not hasOptions then
     table.insert(rewardLines, "")
-    table.insert(rewardLines, "No valid reward options remain for this stage.")
+    table.insert(rewardLines, "No valid Spoils options remain for this stage.")
   end
 
   local summaryArea, cardArea = self:getRewardContentAreas(rewardArea, hasOptions)
 
   love.graphics.setFont(app.fonts.body)
   Layout.drawWrappedLines(rewardLines, summaryArea.x, summaryArea.y, summaryArea.width, Theme.colors.text, Theme.spacing.lineHeight, summaryArea.height)
+  Button.drawButtons(self:buildReplacementButtons(app, summaryArea), love.mouse.getPosition())
 
   if hasOptions then
     local mouseX, mouseY = love.mouse.getPosition()
@@ -377,8 +424,12 @@ function RewardPreviewState:mousepressed(app, x, y, button)
   end
 
   local layout = self:getLayout(app)
-  local rewardArea = Panel.getContentArea(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Choose Reward")
+  local rewardArea = Panel.getContentArea(layout.padding, layout.topY, layout.width - (layout.padding * 2), layout.topHeight, "Seize Charm")
   local rewardSession = app:ensureRewardPreview()
+
+  local summaryArea = self:getRewardContentAreas(rewardArea, #(rewardSession and rewardSession.options or {}) > 0)
+  local replacementHandled = select(1, Button.handleMousePressed(self:buildReplacementButtons(app, summaryArea), x, y))
+  if replacementHandled then return end
 
   if #(rewardSession and rewardSession.options or {}) > 0 then
     local _, cardArea = self:getRewardContentAreas(rewardArea, true)

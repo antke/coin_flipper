@@ -14,9 +14,13 @@ local ScoreFeed = require("src.ui.score_feed")
 local ScoreFloaty = require("src.ui.score_floaty")
 local Terminology = require("src.content.terminology")
 local Theme = require("src.ui.theme")
+local ThreeCupsEffect = require("src.ui.three_cups_effect")
 local TrickCallout = require("src.ui.trick_callout")
 local TrickCharm = require("src.ui.trick_charm")
 local TrickCharmDrawer = require("src.ui.trick_charm_drawer")
+local TrickBoardSystem = require("src.systems.trick_board_system")
+local EnemySkillSystem = require("src.systems.enemy_skill_system")
+local BossTrickSystem = require("src.systems.boss_trick_system")
 local Box = require("src.ui.box")
 
 local StageState = {}
@@ -105,6 +109,18 @@ local function lerp(startValue, endValue, progress)
   return startValue + ((endValue - startValue) * progress)
 end
 
+-- Stable visual scatter avoids per-frame random jitter in draw().
+local function getStableSignedValue(key, salt)
+  local source = string.format("%s:%s:%s", salt, tostring(key or "coin"), salt)
+  local hash = 17
+
+  for index = 1, #source do
+    hash = ((hash * 131) + string.byte(source, index) + (index * 17)) % 1000003
+  end
+
+  return ((hash / 1000003) * 2) - 1
+end
+
 local function formatSignedScore(value)
   local amount = tonumber(value) or 0
 
@@ -120,35 +136,62 @@ local function didCoinScore(coin)
   return (tonumber(coin and coin.scoreContribution) or 0) > 0
 end
 
+local function getScoreBounceIntensity(scoreContribution, chainDepth, triggerCount)
+  local score = math.max(0, tonumber(scoreContribution) or 0)
+  local chain = math.max(0, tonumber(chainDepth) or 0)
+  local triggers = math.max(0, tonumber(triggerCount) or 0)
+
+  return clamp(1 + (math.min(score, 8) * 0.11) + (math.min(chain, 5) * 0.13) + (math.min(triggers, 4) * 0.10), 1, 2.45)
+end
+
 local function getScoreBounceTiming(coinMotionDuration)
   local motionDuration = math.max(0.001, coinMotionDuration or 0.22)
 
   return motionDuration * 0.78, 0.13, 0.31
 end
 
-local function getScoreBounceOffsetFromAge(age, coinMotionDuration, coinSize)
+local function getScoreBounceOffsetFromAge(age, coinMotionDuration, coinSize, cardWidth, visualKey, intensity, salt)
   local _, riseDuration, fallDuration = getScoreBounceTiming(coinMotionDuration)
+  local clampedIntensity = clamp(tonumber(intensity) or 1, 1, 2.45)
+  local reboundDuration = clampedIntensity > 1.28 and 0.16 or 0
+  local totalDuration = riseDuration + fallDuration + reboundDuration
 
-  if not age or age < 0 or age > (riseDuration + fallDuration) then
-    return 0
+  if not age or age < 0 or age > totalDuration then
+    return 0, 0
   end
 
-  local height = math.floor((coinSize or Theme.scale(72)) * 0.34)
+  local size = coinSize or Theme.scale(72)
+  local height = math.floor(size * clamp(0.28 + ((clampedIntensity - 1) * 0.10), 0.28, 0.45))
 
   if age <= riseDuration then
-    return -math.floor(easeOutCubic(age / riseDuration) * height)
+    return 0, -math.floor(easeOutCubic(age / riseDuration) * height)
   end
 
-  return -math.floor((1 - easeInCubic((age - riseDuration) / fallDuration)) * height)
+  if age <= (riseDuration + fallDuration) then
+    return 0, -math.floor((1 - easeInCubic((age - riseDuration) / fallDuration)) * height)
+  end
+
+  local reboundProgress = (age - riseDuration - fallDuration) / math.max(0.001, reboundDuration)
+  local reboundHeight = height * 0.16 * clamp(clampedIntensity - 1, 0, 1.2)
+
+  return 0, -math.floor(math.sin(reboundProgress * math.pi) * reboundHeight)
 end
 
-local function getScoreBounceOffset(revealAge, coinMotionDuration, coinSize, shouldBounce)
+local function getScoreBounceOffset(revealAge, coinMotionDuration, coinSize, cardWidth, visualKey, shouldBounce, scoreContribution, chainDepth)
   if not shouldBounce or not revealAge then
-    return 0
+    return 0, 0
   end
 
   local startTime = getScoreBounceTiming(coinMotionDuration)
-  return getScoreBounceOffsetFromAge(revealAge - startTime, coinMotionDuration, coinSize)
+  return getScoreBounceOffsetFromAge(
+    revealAge - startTime,
+    coinMotionDuration,
+    coinSize,
+    cardWidth,
+    visualKey,
+    getScoreBounceIntensity(scoreContribution, chainDepth, 0),
+    "score-bounce-x"
+  )
 end
 
 local function getScoreBounceApexDelay(coinMotionDuration)
@@ -156,17 +199,30 @@ local function getScoreBounceApexDelay(coinMotionDuration)
   return startTime + riseDuration
 end
 
-local function getTriggeredScoreBounceOffset(timeline, resolutionIndex, elapsed, coinMotionDuration, coinSize)
-  local offset = 0
+local function getTriggeredScoreBounceOffset(timeline, resolutionIndex, elapsed, coinMotionDuration, coinSize, cardWidth, visualKey, scoreContribution, chainDepth)
+  local offsetX = 0
+  local offsetY = 0
   local targetResolutionIndex = tonumber(resolutionIndex)
+  local triggerCount = 0
 
   for _, bounce in ipairs(timeline and timeline.scoreBounces or {}) do
     if tonumber(bounce.resolutionIndex) == targetResolutionIndex then
-      offset = math.min(offset, getScoreBounceOffsetFromAge((elapsed or 0) - (bounce.startTime or 0), coinMotionDuration, coinSize))
+      triggerCount = triggerCount + 1
+      local bounceX, bounceY = getScoreBounceOffsetFromAge(
+        (elapsed or 0) - (bounce.startTime or 0),
+        coinMotionDuration,
+        coinSize,
+        cardWidth,
+        visualKey,
+        getScoreBounceIntensity(scoreContribution, chainDepth, triggerCount) * 0.86,
+        string.format("score-trigger-%d", triggerCount)
+      )
+      offsetX = offsetX + bounceX
+      offsetY = math.min(offsetY, bounceY)
     end
   end
 
-  return offset
+  return offsetX, offsetY
 end
 
 local function getPerCoinScoreEntry(batchResult, coinState)
@@ -202,18 +258,6 @@ local DEALT_REFILL_AFTER_SCORE_DELAY = 0.32
 local SELECT_COIN_TRAVEL_DURATION = 0.28
 local LUCK_METER_FILL_DURATION = 0.16
 local LUCK_METER_STEP_GAP = 0.09
-
--- Stable visual scatter avoids per-frame random jitter in draw().
-local function getStableSignedValue(key, salt)
-  local source = string.format("%s:%s:%s", salt, tostring(key or "coin"), salt)
-  local hash = 17
-
-  for index = 1, #source do
-    hash = ((hash * 131) + string.byte(source, index) + (index * 17)) % 1000003
-  end
-
-  return ((hash / 1000003) * 2) - 1
-end
 
 local function getShortCoinName(coinId)
   local definition = Coins.getById(coinId)
@@ -408,6 +452,8 @@ function StageState.new()
     handCardRects = {},
     dealtCardRects = {},
     coinSlotTargets = {},
+    revealCoinPositions = nil,
+    threeCupsRenderContext = nil,
     coinRowVisuals = {},
     coinRowJitters = {},
     luckMeterAnimation = nil,
@@ -436,6 +482,9 @@ function StageState:isRevealActive()
 end
 
 function StageState:startReveal(app, batchResult)
+  if app.stageState and app.stageState.stageStatus == "active" then
+    TrickBoardSystem.setPhase(app.stageState, "reveal")
+  end
   local revealDuration = app.config.get("ui.batchRevealDuration", 0.75)
   local revealEndDuration = app.config.get("ui.batchRevealEndDuration", 1.05)
   local coins = {}
@@ -454,13 +503,15 @@ function StageState:startReveal(app, batchResult)
         smuggledBy = coinState.smuggledBy,
         boardSlotIndex = coinState.boardSlotIndex,
         overloadSlotIndex = coinState.overloadSlotIndex,
+        anchorSelectedSlotIndex = coinState.anchorSelectedSlotIndex,
+        anchorInstanceId = coinState.anchorInstanceId,
+        anchorCoinId = coinState.anchorCoinId,
+        anchorOverloadIndex = coinState.anchorOverloadIndex,
+        palmed = coinState.palmed == true,
+        sleightSaved = coinState.sleightSaved == true,
         forged = coinState.forged == true,
         forgedBy = coinState.forgedBy,
         forgedCoinId = coinState.forgedCoinId,
-        spotlight = coinState.spotlight == true,
-        spotlightBy = coinState.spotlightBy,
-        redirectedCredit = coinState.redirectedCredit == true,
-        redirectedCreditBy = coinState.redirectedCreditBy,
         chained = coinState.chained == true,
         chainedBy = coinState.chainedBy,
         chainDepth = coinState.chainDepth,
@@ -499,6 +550,8 @@ function StageState:startCoinRowReveal(app, batchResult)
     effectHoldDuration = app.config.get("ui.coinRevealEffectHoldDuration", 0.28),
     scoreHoldDuration = app.config.get("ui.coinRevealScoreHoldDuration", 0.12),
     linkDuration = app.config.get("ui.coinRevealLinkDuration", 0.42),
+    sleightMoveDuration = app.config.get("ui.coinRevealSleightMoveDuration", 0.16),
+    threeCupsDuration = app.config.get("ui.threeCupsRevealDuration", ThreeCupsEffect.DURATION),
   })
   local revealDuration = revealTimeline.revealDuration or app.config.get("ui.batchRevealDuration", 0.75)
   local coinMotionDuration = revealTimeline.coinMotionDuration or app.config.get("ui.coinRevealMotionDuration", 0.32)
@@ -633,6 +686,10 @@ function StageState:completeReveal(app)
   playCoinRowFeedback(app, self.coinRowReveal)
   self.reveal = nil
   self.luckMeterAnimation = nil
+
+  if app.stageState and app.stageState.stageStatus == "active" then
+    TrickBoardSystem.setPhase(app.stageState, "setup")
+  end
 
   if stageShouldAdvance then
     app:clearFeedback()
@@ -1438,6 +1495,41 @@ function StageState:drawStageSummary(app, area)
     { label = "Flips", value = tostring(stage.flipsRemaining), color = Theme.colors.text },
     { label = "Luck", kind = "progress", progress = luckProgress, color = fatedActive and Theme.colors.warning or Theme.colors.text },
   }
+  local enemySkill = EnemySkillSystem.getDefinition(stage)
+  if enemySkill then
+    table.insert(stats, {
+      label = "Enemy Trick",
+      value = enemySkill.name,
+      color = Theme.colors.danger,
+    })
+  end
+  local bossTrick = self:getVisibleBossTrickSnapshot(app)
+  if bossTrick and bossTrick.trickId then
+    local intentValue = bossTrick.trickId == "centre_stage"
+      and string.format("SLOT %s", tostring(bossTrick.spotlightSlotIndex or "?"))
+      or bossTrick.trickId == "full_throttle"
+        and (bossTrick.leadSlotIndex == 1 and "LEFT →" or "← RIGHT")
+      or bossTrick.trickId == "stolen_identity"
+        and string.format("S%s → S%s", tostring(bossTrick.victimSlotIndex or "?"), tostring(bossTrick.impostorSlotIndex or "?"))
+      or bossTrick.trickId == "three_cups"
+        and "HIDDEN ON FLIP"
+      or bossTrick.trickId == "nothing_to_declare"
+        and string.format("SLOT %s SAFE", tostring(bossTrick.offTheBooksSlotIndex or "?"))
+      or bossTrick.trickId == "written_in_stone"
+        and table.concat((function()
+          local labels = {}
+          for _, result in ipairs(bossTrick.writtenSlotResults or {}) do
+            table.insert(labels, result == "heads" and "H" or "T")
+          end
+          return labels
+        end)(), " / ")
+      or string.upper(bossTrick.favouriteSide or "?")
+    table.insert(stats, {
+      label = bossTrick.trickName or "Boss Trick",
+      value = intentValue,
+      color = Theme.colors.danger,
+    })
+  end
 
   local statGap = Theme.spacing.itemGap
   local statWidth = math.max(1, math.floor((area.width - (statGap * (#stats - 1))) / #stats))
@@ -1517,13 +1609,15 @@ function StageState:getVisibleCoinStates(app)
         smuggledBy = coinState.smuggledBy,
         boardSlotIndex = coinState.boardSlotIndex,
         overloadSlotIndex = coinState.overloadSlotIndex,
+        anchorSelectedSlotIndex = coinState.anchorSelectedSlotIndex,
+        anchorInstanceId = coinState.anchorInstanceId,
+        anchorCoinId = coinState.anchorCoinId,
+        anchorOverloadIndex = coinState.anchorOverloadIndex,
+        palmed = coinState.palmed == true,
+        sleightSaved = coinState.sleightSaved == true,
         forged = coinState.forged == true,
         forgedBy = coinState.forgedBy,
         forgedCoinId = coinState.forgedCoinId,
-        spotlight = coinState.spotlight == true,
-        spotlightBy = coinState.spotlightBy,
-        redirectedCredit = coinState.redirectedCredit == true,
-        redirectedCreditBy = coinState.redirectedCreditBy,
         chained = coinState.chained == true,
         chainedBy = coinState.chainedBy,
         chainDepth = coinState.chainDepth,
@@ -1551,13 +1645,13 @@ function StageState:getVisibleCoinStates(app)
         smuggledBy = slot.smuggledBy,
         boardSlotIndex = slot.boardSlotIndex,
         overloadSlotIndex = slot.overloadSlotIndex,
+        anchorSelectedSlotIndex = slot.anchorSelectedSlotIndex,
+        anchorInstanceId = slot.anchorInstanceId,
+        anchorCoinId = slot.anchorCoinId,
+        anchorOverloadIndex = slot.anchorOverloadIndex,
         forged = slot.forged == true,
         forgedBy = slot.forgedBy,
         forgedCoinId = slot.forgedCoinId,
-        spotlight = slot.spotlight == true,
-        spotlightBy = slot.spotlightBy,
-        redirectedCredit = slot.redirectedCredit == true,
-        redirectedCreditBy = slot.redirectedCreditBy,
         chained = slot.chained == true,
         chainedBy = slot.chainedBy,
         chainDepth = slot.chainDepth,
@@ -1836,23 +1930,238 @@ function StageState:getCoinRowLayout(app, x, y, width, height, coinCount, titleH
   }
 end
 
-function StageState:drawFlipSlotPlaceholders(layout, slotCount, occupiedCount)
+function StageState:getVisibleEnemySkillSnapshot(app)
+  if self:isRevealActive() and app.lastBatchResult and app.lastBatchResult.trace
+    and app.lastBatchResult.trace.enemySkillSnapshot then
+    return app.lastBatchResult.trace.enemySkillSnapshot
+  end
+  return EnemySkillSystem.snapshot(app and app.stageState or nil)
+end
+
+function StageState:getVisibleBossTrickSnapshot(app)
+  if self:isRevealActive() and app.lastBatchResult and app.lastBatchResult.trace
+    and app.lastBatchResult.trace.bossTrickSnapshot then
+    return app.lastBatchResult.trace.bossTrickSnapshot
+  end
+  return BossTrickSystem.snapshot(app and app.stageState or nil)
+end
+
+function StageState:drawFlipSlotPlaceholders(app, layout, slotCount, occupiedCount)
   local count = math.max(0, slotCount or 0)
   local occupied = math.max(0, occupiedCount or 0)
+  local forecast = app and app.stageState and app.stageState.predictionSlot or nil
+  local enemySkillSnapshot = self:getVisibleEnemySkillSnapshot(app)
+  local bossTrickSnapshot = self:getVisibleBossTrickSnapshot(app)
 
   for slotIndex = 1, count do
     local cardX = layout.startX + ((slotIndex - 1) * (layout.cardWidth + layout.cardGap))
     local slotHeight = layout.cardHeight
     local slotY = layout.centerLineY - math.floor(slotHeight / 2)
     local filled = slotIndex <= occupied
+    local predicted = forecast and forecast.slotIndex == slotIndex
+    local slotPressure = EnemySkillSystem.getSnapshotSlotPressure(enemySkillSnapshot, slotIndex)
+    local spotlighted = bossTrickSnapshot and bossTrickSnapshot.trickId == "centre_stage"
+      and bossTrickSnapshot.spotlightSlotIndex == slotIndex
+    local fullThrottle = bossTrickSnapshot and bossTrickSnapshot.trickId == "full_throttle"
+    local throttleScaling = fullThrottle
+      and BossTrickSystem.getSlotScaling(bossTrickSnapshot, slotIndex, count) or nil
+    local throttleLead = fullThrottle and bossTrickSnapshot.leadSlotIndex == slotIndex
+    local throttleFinish = fullThrottle and throttleScaling == bossTrickSnapshot.finishingScaling
+    local stolenIdentity = bossTrickSnapshot and bossTrickSnapshot.trickId == "stolen_identity"
+    local identityVictim = stolenIdentity and bossTrickSnapshot.victimSlotIndex == slotIndex
+    local identityImpostor = stolenIdentity and bossTrickSnapshot.impostorSlotIndex == slotIndex
+    local taxman = bossTrickSnapshot and bossTrickSnapshot.trickId == "nothing_to_declare"
+    local offTheBooks = taxman and bossTrickSnapshot.offTheBooksSlotIndex == slotIndex
+    local taxed = taxman and not offTheBooks
+    local writtenInStone = bossTrickSnapshot and bossTrickSnapshot.trickId == "written_in_stone"
+    local writtenResult = writtenInStone and bossTrickSnapshot.writtenSlotResults
+      and bossTrickSnapshot.writtenSlotResults[slotIndex] or nil
+    local offTheBooksFill = offTheBooks and {
+      lerp(Theme.colors.panel[1], Theme.colors.success[1], 0.18),
+      lerp(Theme.colors.panel[2], Theme.colors.success[2], 0.18),
+      lerp(Theme.colors.panel[3], Theme.colors.success[3], 0.18),
+      1,
+    } or nil
+    local taxedFill = taxed and {
+      lerp(Theme.colors.panel[1], Theme.colors.danger[1], 0.12),
+      lerp(Theme.colors.panel[2], Theme.colors.danger[2], 0.12),
+      lerp(Theme.colors.panel[3], Theme.colors.danger[3], 0.12),
+      1,
+    } or nil
+    local predictionColor = forecast and Theme.colors.tag[forecast.result] or Theme.colors.accent
+    local spotlightColor = Theme.colors.warning
+    local writtenColor = Theme.colors.tag[writtenResult] or Theme.colors.warning
+    local writtenFill = writtenInStone and {
+      lerp(Theme.colors.panel[1], writtenColor[1], filled and 0.16 or 0.22),
+      lerp(Theme.colors.panel[2], writtenColor[2], filled and 0.16 or 0.22),
+      lerp(Theme.colors.panel[3], writtenColor[3], filled and 0.16 or 0.22),
+      1,
+    } or nil
 
     Box.drawFrame(cardX, slotY, layout.cardWidth, slotHeight, {
-      fill = { Theme.colors.accent[1], Theme.colors.accent[2], Theme.colors.accent[3], filled and 0.045 or 0.075 },
-      border = { Theme.colors.panelBorder[1], Theme.colors.panelBorder[2], Theme.colors.panelBorder[3], filled and 0.22 or 0.34 },
+      fill = slotPressure
+        and { Theme.colors.danger[1], Theme.colors.danger[2], Theme.colors.danger[3], filled and 0.10 or 0.16 }
+        or writtenInStone
+        and writtenFill
+        or spotlighted
+        and { spotlightColor[1], spotlightColor[2], spotlightColor[3], filled and 0.12 or 0.18 }
+        or fullThrottle
+        and { spotlightColor[1], spotlightColor[2], spotlightColor[3], filled and 0.08 or 0.13 }
+        or stolenIdentity
+        and { spotlightColor[1], spotlightColor[2], spotlightColor[3], filled and 0.08 or 0.13 }
+        or offTheBooks
+        and offTheBooksFill
+        or taxed
+        and taxedFill
+        or predicted
+        and { predictionColor[1], predictionColor[2], predictionColor[3], filled and 0.10 or 0.16 }
+        or { Theme.colors.accent[1], Theme.colors.accent[2], Theme.colors.accent[3], filled and 0.045 or 0.075 },
+      border = slotPressure
+        and { Theme.colors.danger[1], Theme.colors.danger[2], Theme.colors.danger[3], 0.92 }
+        or writtenInStone
+        and { writtenColor[1], writtenColor[2], writtenColor[3], 0.96 }
+        or spotlighted
+        and { spotlightColor[1], spotlightColor[2], spotlightColor[3], 0.96 }
+        or fullThrottle
+        and { spotlightColor[1], spotlightColor[2], spotlightColor[3], 0.82 }
+        or stolenIdentity
+        and { spotlightColor[1], spotlightColor[2], spotlightColor[3], 0.82 }
+        or offTheBooks
+        and { Theme.colors.success[1], Theme.colors.success[2], Theme.colors.success[3], 0.96 }
+        or taxed
+        and { Theme.colors.danger[1], Theme.colors.danger[2], Theme.colors.danger[3], 0.82 }
+        or predicted
+        and { predictionColor[1], predictionColor[2], predictionColor[3], 0.88 }
+        or { Theme.colors.panelBorder[1], Theme.colors.panelBorder[2], Theme.colors.panelBorder[3], filled and 0.22 or 0.34 },
     })
+
+    if writtenInStone then
+      love.graphics.setFont(app.fonts.small)
+      Theme.applyColor(Theme.colors.text)
+      love.graphics.printf(
+        string.format("WRITTEN %s", string.upper(writtenResult or "?")),
+        cardX + Theme.scale(5),
+        slotY + Theme.scale(7),
+        layout.cardWidth - Theme.scale(10),
+        "center"
+      )
+    end
+
+    if spotlighted then
+      love.graphics.setFont(app.fonts.small)
+      love.graphics.setColor(spotlightColor)
+      love.graphics.printf(
+        "SPOTLIGHT",
+        cardX + Theme.scale(5),
+        slotY + Theme.scale(7),
+        layout.cardWidth - Theme.scale(10),
+        "center"
+      )
+    end
+
+    if fullThrottle then
+      local throttleLabel = throttleLead and "LEAD 50%"
+        or (throttleFinish and "FINISH 150%" or "100%")
+      love.graphics.setFont(app.fonts.small)
+      love.graphics.setColor(spotlightColor)
+      love.graphics.printf(
+        throttleLabel,
+        cardX + Theme.scale(5),
+        slotY + Theme.scale(7),
+        layout.cardWidth - Theme.scale(10),
+        "center"
+      )
+    end
+
+    if identityVictim or identityImpostor then
+      love.graphics.setFont(app.fonts.small)
+      love.graphics.setColor(spotlightColor)
+      love.graphics.printf(
+        identityVictim and "VICTIM" or "IMPOSTOR",
+        cardX + Theme.scale(5),
+        slotY + Theme.scale(7),
+        layout.cardWidth - Theme.scale(10),
+        "center"
+      )
+    end
+
+    if taxman then
+      love.graphics.setFont(app.fonts.small)
+      Theme.applyColor(offTheBooks and Theme.colors.success or Theme.colors.danger)
+      love.graphics.printf(
+        offTheBooks and "OFF THE BOOKS" or string.format(
+          "TAX %d%%",
+          math.floor((bossTrickSnapshot.taxRate or 0.30) * 100 + 0.5)
+        ),
+        cardX + Theme.scale(4),
+        slotY + slotHeight - app.fonts.small:getHeight() - Theme.scale(6),
+        layout.cardWidth - Theme.scale(8),
+        "center"
+      )
+    end
+
+    if predicted and not spotlighted and not fullThrottle and not stolenIdentity and not writtenInStone then
+      love.graphics.setFont(app.fonts.small)
+      love.graphics.setColor(predictionColor)
+      love.graphics.printf(
+        string.format("PREDICTED %s", string.upper(forecast.result)),
+        cardX + Theme.scale(5),
+        slotY + Theme.scale(7),
+        layout.cardWidth - Theme.scale(10),
+        "center"
+      )
+    end
+
+    if slotPressure then
+      local label = slotPressure.kind == "lifesteal"
+        and string.format("LEECH %d%%", math.floor((slotPressure.healMaxHpOnMatch or 0.05) * 100 + 0.5))
+        or string.format("TARNISHED %d%%", math.floor((1 - (slotPressure.multiplier or 0.75)) * 100 + 0.5))
+      love.graphics.setFont(app.fonts.small)
+      Theme.applyColor(Theme.colors.danger)
+      love.graphics.printf(
+        label,
+        cardX + Theme.scale(4),
+        slotY + slotHeight - app.fonts.small:getHeight() - Theme.scale(6),
+        layout.cardWidth - Theme.scale(8),
+        "center"
+      )
+    end
   end
 
   love.graphics.setLineWidth(1)
+end
+
+function StageState:drawPredictionSlotOverlay(app, layout)
+  local forecast = app and app.stageState and app.stageState.predictionSlot or nil
+  local bossTrick = self:getVisibleBossTrickSnapshot(app)
+  if bossTrick and bossTrick.trickId == "written_in_stone" then
+    return
+  end
+  if not forecast or not layout then
+    return
+  end
+
+  local cardX = layout.startX + ((forecast.slotIndex - 1) * (layout.cardWidth + layout.cardGap))
+  local slotY = layout.centerLineY - math.floor(layout.cardHeight / 2)
+  local color = Theme.colors.tag[forecast.result] or Theme.colors.accent
+  local badgeHeight = Theme.scale(24)
+  local badgeWidth = math.min(layout.cardWidth - Theme.scale(10), Theme.scale(112))
+  local badgeX = cardX + math.floor((layout.cardWidth - badgeWidth) / 2)
+  local badgeY = slotY + Theme.scale(5)
+
+  Box.drawFrame(badgeX, badgeY, badgeWidth, badgeHeight, {
+    fill = { Theme.colors.panel[1], Theme.colors.panel[2], Theme.colors.panel[3], 0.94 },
+    border = { color[1], color[2], color[3], 0.95 },
+  })
+  love.graphics.setFont(app.fonts.small)
+  love.graphics.setColor(color)
+  love.graphics.printf(
+    string.format("PREDICTED %s", string.upper(forecast.result)),
+    badgeX + Theme.scale(3),
+    badgeY + Theme.scale(4),
+    badgeWidth - Theme.scale(6),
+    "center"
+  )
 end
 
 function StageState:getDragInsertSlotIndex(pointerX, layout, slotCount)
@@ -2004,6 +2313,55 @@ function StageState:spawnFlipSummaryFloaties(reveal, rowCenterX, rowY)
   end
 end
 
+function StageState:spawnTaxFloaties(reveal, layout)
+  if not reveal or not layout or reveal.elapsed < (reveal.feedbackTime or 0) then return end
+  local effect = nil
+  for _, candidate in ipairs(reveal.batchResult and reveal.batchResult.trace
+    and reveal.batchResult.trace.bossTrickEffects or {}) do
+    if candidate.kind == "tax_collected" then effect = candidate end
+  end
+  if not effect then return end
+
+  local batchKey = tostring(reveal.batchId or "batch")
+  for slotIndex = 1, math.max(1, tonumber(effect.slotCount) or 1) do
+    local cardX = layout.startX + ((slotIndex - 1) * (layout.cardWidth + layout.cardGap))
+    local centerX = cardX + math.floor(layout.cardWidth / 2)
+    local slotScore = tonumber((effect.slotScoreTotals or {})[slotIndex]) or 0
+    local slotTax = tonumber((effect.slotTaxes or {})[slotIndex]) or 0
+    if slotIndex == effect.offTheBooksSlotIndex and slotScore > 0 then
+      self:spawnScoreFloatyOnce(
+        string.format("%s:tax:protected:%d", batchKey, slotIndex),
+        "PROTECTED",
+        centerX,
+        layout.centerLineY - Theme.scale(76),
+        {
+          color = Theme.colors.success,
+          direction = "up",
+          fontName = "small",
+          distance = Theme.scale(44),
+          duration = 1.15,
+          popScale = 1.28,
+        }
+      )
+    elseif slotTax > 0 then
+      self:spawnScoreFloatyOnce(
+        string.format("%s:tax:slot:%d", batchKey, slotIndex),
+        string.format("-%d TAX", slotTax),
+        centerX,
+        layout.centerLineY + Theme.scale(62),
+        {
+          color = Theme.colors.danger,
+          direction = "down",
+          fontName = "heading",
+          distance = Theme.scale(46),
+          duration = 1.20,
+          popScale = 1.38,
+        }
+      )
+    end
+  end
+end
+
 local function isOverflowCoin(coin)
   return coin and (coin.smuggled == true or coin.overloadSlotIndex ~= nil)
 end
@@ -2046,8 +2404,19 @@ end
 function StageState:getCoinRowDrawPlacement(coin, displayIndex, layout, overflowLayout)
   if isOverflowCoin(coin) then
     local overflowIndex = coin.overflowDisplayIndex or 1
+    local anchorIndex = coin.anchorOverloadIndex or overflowIndex
     local coinSize = overflowLayout.coinSize
+    local anchorSlotIndex = coin.anchorSelectedSlotIndex
     local cardX = overflowLayout.x + ((overflowIndex - 1) * (coinSize + overflowLayout.gap))
+    local centerY = overflowLayout.centerY
+
+    if anchorSlotIndex then
+      local anchorCardX = layout.startX + ((anchorSlotIndex - 1) * (layout.cardWidth + layout.cardGap))
+      local anchorCenterX = anchorCardX + math.floor(layout.cardWidth / 2)
+      local fanStep = math.max(Theme.scale(14), math.floor(coinSize * 0.38))
+      cardX = anchorCenterX + (anchorIndex * fanStep) - math.floor(coinSize / 2)
+      centerY = layout.centerLineY + math.min(Theme.scale(18), anchorIndex * Theme.scale(6))
+    end
 
     return {
       layout = {
@@ -2055,7 +2424,7 @@ function StageState:getCoinRowDrawPlacement(coin, displayIndex, layout, overflow
         cardGap = overflowLayout.gap,
         cardHeight = coinSize,
         startX = overflowLayout.x,
-        centerLineY = overflowLayout.centerY,
+        centerLineY = centerY,
       },
       cardX = cardX,
       coinSize = coinSize,
@@ -2078,10 +2447,23 @@ function StageState:drawOverflowLane(app, overflowLayout, overflowCoins)
   end
 
   for index = 1, #overflowCoins do
+    local coin = overflowCoins[index]
     local coinSize = overflowLayout.coinSize
     local coinX = overflowLayout.x + ((index - 1) * (coinSize + overflowLayout.gap))
     local centerX = coinX + math.floor(coinSize / 2)
-    local shadowY = overflowLayout.centerY + math.floor(coinSize * 0.55)
+    local centerY = overflowLayout.centerY
+
+    if coin.anchorSelectedSlotIndex then
+      local anchorCardX = overflowLayout.baseLayout.startX
+        + ((coin.anchorSelectedSlotIndex - 1) * (overflowLayout.baseLayout.cardWidth + overflowLayout.baseLayout.cardGap))
+      local anchorCenterX = anchorCardX + math.floor(overflowLayout.baseLayout.cardWidth / 2)
+      local anchorIndex = coin.anchorOverloadIndex or index
+      local fanStep = math.max(Theme.scale(14), math.floor(coinSize * 0.38))
+      centerX = anchorCenterX + (anchorIndex * fanStep)
+      centerY = overflowLayout.baseLayout.centerLineY + math.min(Theme.scale(18), anchorIndex * Theme.scale(6))
+    end
+
+    local shadowY = centerY + math.floor(coinSize * 0.55)
 
     setColorWithAlpha(Theme.colors.shadow, 0.24)
     love.graphics.ellipse("fill", centerX, shadowY, math.floor(coinSize * 0.38), Theme.scale(5))
@@ -2121,13 +2503,20 @@ function StageState:drawCoinRow(app, x, y, width, height, anchors)
   local titleHeight = 0
 
   local layout = self:getCoinRowLayout(app, x, y, width, height, maxSlots, titleHeight)
+  self.threeCupsRenderContext = {
+    layout = layout,
+    area = { x = x, y = y, width = width, height = height },
+    anchors = anchors,
+  }
   local overflowLayout = self:getOverflowLaneLayout(x, y, width, height, layout, #overflowCoins)
-  self:drawFlipSlotPlaceholders(layout, maxSlots, #regularCoins)
+  overflowLayout.baseLayout = layout
+  self:drawFlipSlotPlaceholders(app, layout, maxSlots, #regularCoins)
   self:drawOverflowLane(app, overflowLayout, overflowCoins)
 
   if #coins == 0 then
     self.handCardRects = {}
     self.coinSlotTargets = {}
+    self.revealCoinPositions = nil
     self.coinRowVisuals = {}
     self.coinRowJitters = {}
     return
@@ -2138,6 +2527,13 @@ function StageState:drawCoinRow(app, x, y, width, height, anchors)
   local visibleCount = #coins
   local rowRevealActive = reveal and reveal.batchId == batchId
   local handThrowActive = self.handThrowAnimation ~= nil
+  local forgeryAssignmentByInstanceId = {}
+  local forgeryAssignments = rowRevealActive and reveal.batchResult and reveal.batchResult.trace
+    and reveal.batchResult.trace.forgeryAssignments
+    or TrickBoardSystem.getForgeryAssignmentPreview(app.runState, app.stageState)
+  for _, assignment in ipairs(forgeryAssignments or {}) do
+    if assignment.instanceId then forgeryAssignmentByInstanceId[assignment.instanceId] = assignment end
+  end
 
   if handThrowActive then
     local handSignature = self:getCurrentHandSignature(app)
@@ -2195,8 +2591,26 @@ function StageState:drawCoinRow(app, x, y, width, height, anchors)
       table.insert(drawCoins, coin)
     end
 
+    local anchored = {}
+    local unanchored = {}
     for overflowIndex, coin in ipairs(overflowCoins) do
       coin.overflowDisplayIndex = overflowIndex
+      if coin.anchorSelectedSlotIndex then
+        anchored[coin.anchorSelectedSlotIndex] = anchored[coin.anchorSelectedSlotIndex] or {}
+        table.insert(anchored[coin.anchorSelectedSlotIndex], coin)
+      else
+        table.insert(unanchored, coin)
+      end
+    end
+
+    drawCoins = {}
+    for _, coin in ipairs(regularCoins) do
+      table.insert(drawCoins, coin)
+      for _, cargo in ipairs(anchored[coin.slotIndex] or {}) do
+        table.insert(drawCoins, cargo)
+      end
+    end
+    for _, coin in ipairs(unanchored) do
       table.insert(drawCoins, coin)
     end
   end
@@ -2239,17 +2653,34 @@ function StageState:drawCoinRow(app, x, y, width, height, anchors)
     local coinSize = placement.coinSize or math.min(Theme.scale(96), math.max(Theme.scale(62), math.floor(activeCardWidth * 0.54)))
     local coinScored = didCoinScore(coin)
     local coinMotionDuration = reveal and reveal.coinMotionDuration or nil
-    local bounceOffset = math.min(
-      getScoreBounceOffset(revealAge, coinMotionDuration, coinSize, coinScored),
-      getTriggeredScoreBounceOffset(reveal and reveal.revealTimeline or nil, resolutionIndex, reveal and reveal.elapsed or 0, coinMotionDuration, coinSize)
-    )
     local impactAge = revealAge and revealAge >= 0 and revealAge - ((reveal.coinMotionDuration or 0.46) * 0.78) or nil
     local impactPunch = impactAge and impactAge >= 0 and math.max(0, 1 - (impactAge / 0.26)) or 0
     local animatedCoinSize = math.floor(coinSize * (motionScale + (impactPunch * 0.08)))
     local visualKey = self:getCoinRowVisualKey(coin, index, batchId)
     local jitterX, jitterY = self:getCoinRowJitter(visualKey, activeCardWidth, coinSize)
+    local _, bounceY = getScoreBounceOffset(
+      revealAge,
+      coinMotionDuration,
+      coinSize,
+      activeCardWidth,
+      visualKey,
+      coinScored,
+      coin.scoreContribution,
+      coin.chainDepth
+    )
+    local _, triggeredBounceY = getTriggeredScoreBounceOffset(
+      reveal and reveal.revealTimeline or nil,
+      resolutionIndex,
+      reveal and reveal.elapsed or 0,
+      coinMotionDuration,
+      coinSize,
+      activeCardWidth,
+      visualKey,
+      coin.scoreContribution,
+      coin.chainDepth
+    )
     local coinCenterX = cardX + math.floor(activeCardWidth / 2) + jitterX
-    local coinCenterY = activeCenterLineY + jitterY + liftOffset + bounceOffset
+    local coinCenterY = activeCenterLineY + jitterY + liftOffset + math.min(bounceY, triggeredBounceY)
     local rowVisual = self:updateCoinRowVisual(visualKey, coinCenterX, coinCenterY, animatedCoinSize, not rowRevealActive and not hasResult)
     activeVisualKeys[visualKey] = true
 
@@ -2326,13 +2757,6 @@ function StageState:drawCoinRow(app, x, y, width, height, anchors)
       hasResult = hasResult,
     }
 
-    if rowRevealActive and RevealTimeline.isCoinActive(reveal.revealTimeline, resolutionIndex, reveal.elapsed) then
-      RevealEffects.drawActiveCoinSpotlight(revealPositions[resolutionIndex], {
-        age = math.max(0, revealAge or 0),
-        didMatch = resultSettled and coin.didMatch or nil,
-      })
-    end
-
     local hoverScale = hovered and 1.10 or 1.0
     local visualCoinSize = math.floor(animatedCoinSize * hoverScale)
     local visualCoinDrawX = coinCenterX - math.floor(visualCoinSize / 2)
@@ -2357,6 +2781,22 @@ function StageState:drawCoinRow(app, x, y, width, height, anchors)
       glow = false,
       shadow = false,
     })
+
+    local forgeryAssignment = coin.instanceId and forgeryAssignmentByInstanceId[coin.instanceId] or nil
+    if forgeryAssignment and forgeryAssignment.actingFamily then
+      local badgeText = string.format("← %s", string.upper(forgeryAssignment.actingFamily))
+      local badgeWidth = math.min(activeCardWidth - Theme.scale(8), Theme.scale(96))
+      local badgeHeight = Theme.scale(18)
+      local badgeX = coinCenterX - math.floor(badgeWidth / 2)
+      local badgeY = visualCoinDrawY - Theme.scale(21)
+      Box.drawFrame(badgeX, badgeY, badgeWidth, badgeHeight, {
+        fill = { Theme.colors.panel[1], Theme.colors.panel[2], Theme.colors.panel[3], 0.94 * throwAlpha },
+        border = { Theme.colors.warning[1], Theme.colors.warning[2], Theme.colors.warning[3], 0.92 * throwAlpha },
+      })
+      love.graphics.setFont(app.fonts.small)
+      setColorWithAlpha(Theme.colors.warning, throwAlpha * selectionTravelAlpha)
+      love.graphics.printf(badgeText, badgeX + Theme.scale(2), badgeY + Theme.scale(2), badgeWidth - Theme.scale(4), "center")
+    end
 
     if hasResult and impactAge and impactAge >= 0 and impactAge <= 0.60 then
       self:drawRevealImpact(coinDrawX, coinDrawY, animatedCoinSize, animatedCoinSize, impactAge, coin.didMatch)
@@ -2393,11 +2833,14 @@ function StageState:drawCoinRow(app, x, y, width, height, anchors)
   if rowRevealActive then
     self:spawnRevealEventFloaties(reveal, revealPositions, x + math.floor(width / 2), y, anchors)
     RevealEffects.drawLinks(reveal.revealTimeline, reveal.elapsed, revealPositions, app.fonts)
+    self:spawnTaxFloaties(reveal, layout)
   end
 
   if rowRevealActive then
     self:spawnFlipSummaryFloaties(reveal, x + math.floor(width / 2), y)
   end
+
+  self.revealCoinPositions = rowRevealActive and revealPositions or nil
 
   for key in pairs(self.coinRowVisuals or {}) do
     if not activeVisualKeys[key] and key ~= self.draggingHandVisualKey then
@@ -2410,6 +2853,8 @@ function StageState:drawCoinRow(app, x, y, width, height, anchors)
       self.coinRowJitters[key] = nil
     end
   end
+
+  self:drawPredictionSlotOverlay(app, layout)
 
   return hoveredCoinId
 end
@@ -2442,6 +2887,100 @@ function StageState:drawDraggedHandCoin()
   })
 end
 
+local function drawTravelingCoin(coinId, source, target, progress, options)
+  if not coinId or not source or not target then
+    return false
+  end
+
+  options = options or {}
+  local clampedProgress = clamp(progress or 0, 0, 1)
+  local eased = easeOutCubic(clampedProgress)
+  local startX = source.x or target.x
+  local startY = source.y or target.y
+  local startSize = source.size or target.size or Theme.scale(58)
+  local targetSize = target.size or startSize
+  local arcHeight = math.max(Theme.scale(22), math.abs((target.y or startY) - startY) * 0.18)
+  local landingCurveScale = clampedProgress > 0.60 and lerp(1, 0.60, (clampedProgress - 0.60) / 0.40) or 1
+  local arc = math.sin(clampedProgress * math.pi) * arcHeight * landingCurveScale
+  local x = lerp(startX, target.x or startX, eased)
+  local y = lerp(startY, target.y or startY, eased) - arc
+  local size = math.floor(lerp(startSize, targetSize, eased) * (1 + (math.sin(clampedProgress * math.pi) * 0.10)))
+  local alpha = options.alpha or 0.94
+  local shadowAlpha = (options.shadowAlpha or 0.18) + (0.12 * clampedProgress)
+
+  setColorWithAlpha(Theme.colors.shadow, shadowAlpha * alpha)
+  love.graphics.ellipse("fill", x, y + math.floor(size * 0.55), math.floor(size * 0.42), Theme.scale(7))
+  CoinArt.draw(coinId, x - math.floor(size / 2), y - math.floor(size / 2), size, {
+    selected = options.selected == true,
+    alpha = alpha,
+    tilt = math.sin(clampedProgress * math.pi * 2) * 0.18,
+    glow = false,
+    shadow = false,
+  })
+
+  return true
+end
+
+function StageState:getSleightHandAnchor(anchors, fallbackSize)
+  local anchor = anchors and (anchors.handCenter or anchors.handBorder) or nil
+
+  if not anchor then
+    return nil
+  end
+
+  return {
+    x = anchor.x,
+    y = anchor.y,
+    size = anchor.size or fallbackSize or Theme.scale(58),
+  }
+end
+
+function StageState:getSleightTravelEndpoint(travel, endpoint, positions, anchors)
+  local kind = endpoint == "source" and travel.sourceKind or travel.targetKind
+
+  if kind == "hand" then
+    return self:getSleightHandAnchor(anchors, Theme.scale(58))
+  end
+
+  local resolutionIndex = endpoint == "source" and travel.sourceResolutionIndex or travel.targetResolutionIndex
+  local position = positions and positions[resolutionIndex] or nil
+
+  if not position then
+    return nil
+  end
+
+  return {
+    x = position.x,
+    y = position.y,
+    size = position.size,
+  }
+end
+
+function StageState:drawSleightTravelAnimations(anchors)
+  local reveal = self.coinRowReveal
+  local timeline = reveal and reveal.revealTimeline or nil
+  local activeTravels = RevealTimeline.getActiveSleightTravels(timeline, reveal and reveal.elapsed or 0)
+
+  if #activeTravels == 0 then
+    return
+  end
+
+  local positions = self.revealCoinPositions or {}
+
+  for _, travel in ipairs(activeTravels) do
+    drawTravelingCoin(
+      travel.coinId,
+      self:getSleightTravelEndpoint(travel, "source", positions, anchors),
+      self:getSleightTravelEndpoint(travel, "target", positions, anchors),
+      travel.progress,
+      {
+        selected = travel.targetKind ~= "hand",
+        alpha = 0.94,
+      }
+    )
+  end
+end
+
 function StageState:drawSelectionTravelAnimations()
   for _, animation in ipairs(self.selectionTravelAnimations or {}) do
     local target = self.coinSlotTargets and self.coinSlotTargets[animation.instanceId] or nil
@@ -2456,28 +2995,12 @@ function StageState:drawSelectionTravelAnimations()
     end
 
     if target then
-      local duration = math.max(0.001, animation.duration or SELECT_COIN_TRAVEL_DURATION)
-      local progress = clamp((animation.elapsed or 0) / duration, 0, 1)
-      local eased = easeOutCubic(progress)
-      local startX = animation.startX or target.x
-      local startY = animation.startY or target.y
-      local startSize = animation.startSize or target.size
-      local arcHeight = math.max(Theme.scale(22), math.abs(target.y - startY) * 0.18)
-      local landingCurveScale = progress > 0.60 and lerp(1, 0.60, (progress - 0.60) / 0.40) or 1
-      local arc = math.sin(progress * math.pi) * arcHeight * landingCurveScale
-      local x = lerp(startX, target.x, eased)
-      local y = lerp(startY, target.y, eased) - arc
-      local size = math.floor(lerp(startSize, target.size, eased) * (1 + (math.sin(progress * math.pi) * 0.10)))
-      local shadowAlpha = 0.18 + (0.12 * progress)
-
-      setColorWithAlpha(Theme.colors.shadow, shadowAlpha)
-      love.graphics.ellipse("fill", x, y + math.floor(size * 0.55), math.floor(size * 0.42), Theme.scale(7))
-      CoinArt.draw(animation.coinId, x - math.floor(size / 2), y - math.floor(size / 2), size, {
+      drawTravelingCoin(animation.coinId, {
+        x = animation.startX,
+        y = animation.startY,
+        size = animation.startSize,
+      }, target, clamp((animation.elapsed or 0) / math.max(0.001, animation.duration or SELECT_COIN_TRAVEL_DURATION), 0, 1), {
         selected = animation.direction ~= "to_hand",
-        alpha = 0.94,
-        tilt = math.sin(progress * math.pi * 2) * 0.18,
-        glow = false,
-        shadow = false,
       })
     end
   end
@@ -2504,7 +3027,8 @@ function StageState:drawDealtCoinWindow(app, x, y, width, height)
   Theme.applyColor(Theme.colors.accent)
   love.graphics.printf("Hand", x + 10, y + 4, math.max(1, width - 20), "left")
   Theme.applyColor(Theme.colors.mutedText)
-  love.graphics.printf(string.format("%d/%d slots", selectedCount, maxSlots), x + 10, y + 4, math.max(1, width - 20), "right")
+  local replacements = app.stageState and app.stageState.trickBoard and app.stageState.trickBoard.replacementsRemaining or 0
+  love.graphics.printf(string.format("%d/%d slots  •  %d replacements", selectedCount, maxSlots, replacements), x + 10, y + 4, math.max(1, width - 20), "right")
 
   local contentY = y + titleHeight
   local contentHeight = math.max(1, height - titleHeight - 4)
@@ -2632,6 +3156,47 @@ end
 
 function StageState:drawTrickCharmStrip(app, area)
   local charms = app.getTrickCharmData and app:getTrickCharmData() or {}
+  local preview = TrickBoardSystem.getActivationPreview(app.runState, app.stageState)
+  local revealSnapshot = self:isRevealActive()
+    and app.lastBatchResult and app.lastBatchResult.trace
+    and app.lastBatchResult.trace.trickBoardSnapshot or nil
+  for index, charm in ipairs(charms) do
+    local activation = preview[index] or {}
+    if revealSnapshot and revealSnapshot[index] then
+      activation = {
+        activationCount = activation.activationCount,
+        forgedActivationCount = activation.forgedActivationCount,
+        pressure = revealSnapshot[index].pressure,
+        effectiveness = revealSnapshot[index].pressure
+          and revealSnapshot[index].pressure.kind == "blocked" and 0
+          or (revealSnapshot[index].pressure
+            and revealSnapshot[index].pressure.kind == "weakened"
+            and (revealSnapshot[index].pressure.multiplier or 0.5) or 1),
+      }
+    end
+    charm.activationCount = activation.activationCount or 0
+    charm.forgedActivationCount = activation.forgedActivationCount or 0
+    charm.pressure = activation.pressure
+    charm.effectiveness = activation.effectiveness or 1
+    if charm.forgedActivationCount > 0 then
+      charm.description = string.format("FORGED +%d activation%s. %s",
+        charm.forgedActivationCount,
+        charm.forgedActivationCount == 1 and "" or "s",
+        charm.description or "")
+    end
+    if activation.pressure then
+      local label = activation.pressure.kind == "blocked" and "BLOCKED: does not activate."
+        or (activation.pressure.kind == "weakened"
+          and string.format("WEAKENED: effects resolve at %d%%.", math.floor((activation.pressure.multiplier or 0.75) * 100 + 0.5))
+          or (activation.pressure.kind == "poisoned"
+            and string.format("POISONED: lose %d%% of this Flip's Score per activation, up to %d%%.",
+              math.floor((activation.pressure.scoreLossPerActivation or 0.10) * 100 + 0.5),
+              math.floor((activation.pressure.scoreLossPerActivation or 0.10)
+                * (activation.pressure.maxStacks or 3) * 100 + 0.5))
+            or "JAMMED: only its first activation resolves."))
+      charm.description = label .. " " .. (charm.description or "")
+    end
+  end
   local result = TrickCharmDrawer.drawTrigger(app, area, charms, {
     open = self.trickCharmDrawerOpen,
   })
@@ -2798,6 +3363,8 @@ function StageState:enter(app, payload, previousName)
   self.selectionTravelAnimations = {}
   self.dealtCardRects = {}
   self.coinSlotTargets = {}
+  self.revealCoinPositions = nil
+  self.threeCupsRenderContext = nil
   self.coinRowVisuals = {}
   self.coinRowJitters = {}
   self.scoreFloaties = {}
@@ -3197,12 +3764,19 @@ function StageState:draw(app)
     }
   end
 
-  local hoveredCoinId = self:drawCoinRow(app, coinPlayArea.x, coinPlayArea.y, coinPlayArea.width, coinPlayArea.height, {
+  local revealAnchors = {
     handBorder = {
       x = dealtCoinsLayout.x + math.floor(dealtCoinsLayout.width / 2),
       y = dealtCoinsLayout.y - Theme.scale(8),
     },
-  })
+    handCenter = {
+      x = dealtCoinsLayout.x + math.floor(dealtCoinsLayout.width / 2),
+      y = dealtCoinsLayout.y + math.floor(dealtCoinsLayout.height / 2),
+      size = Theme.scale(58),
+    },
+  }
+
+  local hoveredCoinId = self:drawCoinRow(app, coinPlayArea.x, coinPlayArea.y, coinPlayArea.width, coinPlayArea.height, revealAnchors)
 
   local hoveredTrickCharm = self:drawTrickCharmStrip(app, charmStripArea)
 
@@ -3223,6 +3797,16 @@ function StageState:draw(app)
   Button.drawButtons({ self:getLogButtonLayout(app), self:getPurseButtonLayout(app), self:getHelpButtonLayout(app) }, mouseX, mouseY)
   ScoreFloaty.drawAll(self.scoreFloaties, app.fonts)
 
+  if ThreeCupsEffect.isActive(self.coinRowReveal) and self.threeCupsRenderContext then
+    ThreeCupsEffect.draw(
+      self.coinRowReveal,
+      self.threeCupsRenderContext.layout,
+      self.threeCupsRenderContext.area,
+      self.threeCupsRenderContext.anchors,
+      app.fonts
+    )
+  end
+
   if scoreFeedArea then
     ScoreFeed.draw(revealTimeline.scoreFeed, app.fonts, scoreFeedArea.x, scoreFeedArea.y + Theme.scale(8), scoreFeedArea.width, {
       elapsed = self.coinRowReveal.elapsed,
@@ -3231,6 +3815,7 @@ function StageState:draw(app)
     })
   end
 
+  self:drawSleightTravelAnimations(revealAnchors)
   self:drawSelectionTravelAnimations()
   self:drawDraggedHandCoin()
 
@@ -3269,6 +3854,19 @@ function StageState:draw(app)
 end
 
 function StageState:mousepressed(app, x, y, button)
+  if button == 2 then
+    local dealtCard = self:getDealtCardAtPoint(x, y)
+    if dealtCard then
+      local ok, result = app:replaceHeldCoin(dealtCard.dealtIndex)
+      if ok then
+        self.statusMessage = string.format("Replaced coin. %d replacement(s) remain.", result.replacementsRemaining or 0)
+      else
+        self.statusMessage = tostring(result)
+      end
+    end
+    return
+  end
+
   if button ~= 1 then
     return
   end

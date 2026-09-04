@@ -63,6 +63,11 @@ EffectiveValueSystem.KNOWN_KEYS = {
     basePath = "economy.shopPointMultiplier",
     min = 0,
   },
+  ["luck.generationMultiplier"] = {
+    defaultMode = "multiply",
+    basePath = "luck.generationMultiplier",
+    min = 0,
+  },
   ["shop.offerCount"] = {
     defaultMode = "override",
     basePath = "shop.offerCount",

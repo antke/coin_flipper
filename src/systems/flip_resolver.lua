@@ -1,16 +1,21 @@
 local ActionQueue = require("src.core.action_queue")
 local EffectiveValueSystem = require("src.systems.effective_value_system")
+local EnemySkillSystem = require("src.systems.enemy_skill_system")
+local BossTrickSystem = require("src.systems.boss_trick_system")
 local FlipBatch = require("src.domain.flip_batch")
 local HookRegistry = require("src.core.hook_registry")
 local LuckSystem = require("src.systems.luck_system")
 local PurseHookSystem = require("src.systems.purse_hook_system")
 local PurseSystem = require("src.systems.purse_system")
+local PredictionSlotSystem = require("src.systems.prediction_slot_system")
 local ScoreBreakdown = require("src.domain.score_breakdown")
 local ScoringSystem = require("src.systems.scoring_system")
 local Validator = require("src.core.validator")
 local GameConfig = require("src.app.config")
 local RNG = require("src.core.rng")
 local Utils = require("src.core.utils")
+local TrickBoardSystem = require("src.systems.trick_board_system")
+local TrickActivationSystem = require("src.systems.trick_activation_system")
 
 local FlipResolver = {}
 
@@ -43,6 +48,8 @@ function FlipResolver.buildResolutionContext(runState, stageState, metaProjectio
     batchFlags = {},
     scoreBreakdown = ScoreBreakdown.new(),
     pendingScoreScaling = 1.0,
+    scoreAppliedToHpBefore = stageState.scoreAppliedToHp or 0,
+    runScoreBefore = runState.runTotalScore or 0,
     actionMetrics = {
       appliedCount = 0,
       maxAppliedCount = GameConfig.get("engine.maxAppliedActionsPerBatch"),
@@ -93,8 +100,17 @@ function FlipResolver.prepareCoinRollState(runState, stageState, metaProjection,
       dealtIndex = resolutionEntry.dealtIndex,
       boardSlotIndex = resolutionEntry.boardSlotIndex,
       overloadSlotIndex = resolutionEntry.overloadSlotIndex,
+      anchorSelectedSlotIndex = resolutionEntry.anchorSelectedSlotIndex,
+      anchorInstanceId = resolutionEntry.anchorInstanceId,
+      anchorCoinId = resolutionEntry.anchorCoinId,
+      anchorOverloadIndex = resolutionEntry.anchorOverloadIndex,
+      palmed = resolutionEntry.palmed == true,
+      sleightSaved = resolutionEntry.sleightSaved == true,
       smuggled = resolutionEntry.smuggled == true,
       smuggledBy = resolutionEntry.smuggledBy,
+      contrabandCopy = resolutionEntry.contrabandCopy == true,
+      copiedFromCoinId = resolutionEntry.copiedFromCoinId,
+      copiedFromInstanceId = resolutionEntry.copiedFromInstanceId,
       originalDrawIndex = resolutionEntry.originalDrawIndex,
       resolutionIndex = resolutionEntry.resolutionIndex,
       foretold = resolutionEntry.foretold == true,
@@ -109,6 +125,8 @@ function FlipResolver.prepareCoinRollState(runState, stageState, metaProjection,
       rngRoll = nil,
       flags = {},
     })
+    TrickActivationSystem.applyForgeryAssignment(context, perCoin[#perCoin])
+    PredictionSlotSystem.applyToCoin(runState, stageState, perCoin[#perCoin])
   end
 
   return perCoin, resolutionEntries
@@ -127,6 +145,12 @@ function FlipResolver.resolveCoinOutcome(coinRollState, context)
   elseif context.runState and type(context.runState.pendingForcedCoinResults) == "table" and #context.runState.pendingForcedCoinResults > 0 then
     forcedResult = table.remove(context.runState.pendingForcedCoinResults, 1)
     forcedReason = "pending_forced_result"
+  elseif coinRollState.bossForcedResult == "heads" or coinRollState.bossForcedResult == "tails" then
+    forcedResult = coinRollState.bossForcedResult
+    forcedReason = coinRollState.bossForcedReason or "boss_trick"
+  elseif coinRollState.predictionSlotForced == true then
+    forcedResult = coinRollState.foretoldResult
+    forcedReason = "prediction_slot"
   end
 
   coinRollState.rngRoll = roll
@@ -142,8 +166,17 @@ function FlipResolver.resolveCoinOutcome(coinRollState, context)
     dealtIndex = coinRollState.dealtIndex,
     boardSlotIndex = coinRollState.boardSlotIndex,
     overloadSlotIndex = coinRollState.overloadSlotIndex,
+    anchorSelectedSlotIndex = coinRollState.anchorSelectedSlotIndex,
+    anchorInstanceId = coinRollState.anchorInstanceId,
+    anchorCoinId = coinRollState.anchorCoinId,
+    anchorOverloadIndex = coinRollState.anchorOverloadIndex,
+    palmed = coinRollState.palmed == true,
+    sleightSaved = coinRollState.sleightSaved == true,
     smuggled = coinRollState.smuggled == true,
     smuggledBy = coinRollState.smuggledBy,
+    contrabandCopy = coinRollState.contrabandCopy == true,
+    copiedFromCoinId = coinRollState.copiedFromCoinId,
+    copiedFromInstanceId = coinRollState.copiedFromInstanceId,
     resolutionIndex = coinRollState.resolutionIndex,
     baseHeadsWeight = coinRollState.baseHeadsWeight,
     baseTailsWeight = coinRollState.baseTailsWeight,
@@ -155,6 +188,20 @@ function FlipResolver.resolveCoinOutcome(coinRollState, context)
     foretoldResult = coinRollState.foretoldResult,
     foretoldBy = coinRollState.foretoldBy,
     foretoldRngRoll = coinRollState.foretoldRngRoll,
+    predictionSlotForced = coinRollState.predictionSlotForced == true,
+    predictionSlotIndex = coinRollState.predictionSlotIndex,
+    bossForcedResult = coinRollState.bossForcedResult,
+    bossForcedReason = coinRollState.bossForcedReason,
+    writtenSlotIndex = coinRollState.writtenSlotIndex,
+    actingFamily = coinRollState.actingFamily,
+    bossActivationFamily = coinRollState.bossActivationFamily,
+    originalActivationFamily = coinRollState.originalActivationFamily,
+    stolenIdentity = coinRollState.stolenIdentity == true,
+    stolenFromSlotIndex = coinRollState.stolenFromSlotIndex,
+    forgeryDirection = coinRollState.forgeryDirection,
+    forgerySourceCoinId = coinRollState.forgerySourceCoinId,
+    forgerySourceInstanceId = coinRollState.forgerySourceInstanceId,
+    forgerySourceResolutionIndex = coinRollState.forgerySourceResolutionIndex,
     forcedResult = forcedResult,
     forcedReason = forcedReason,
   })
@@ -238,6 +285,7 @@ function FlipResolver.buildBatchResult(runState, stageState, context, resolution
   batch.dealtHand = Utils.clone(context.trace.dealtHand or {})
   batch.selectedSlots = Utils.clone(context.trace.selectedSlots or {})
   batch.boardSlots = Utils.clone(context.trace.boardSlots or {})
+  batch.replacements = Utils.clone(context.trace.replacements or {})
   batch.refillEvent = Utils.clone(context.trace.refillEvent or nil)
   batch.actions = context.trace.actions
   batch.trace = context.trace
@@ -302,7 +350,15 @@ end
 
 function FlipResolver.projectBatchBeforeRoll(runState, stageState, metaProjection, call, rng)
   local context = FlipResolver.buildResolutionContext(runState, stageState, metaProjection, call, rng)
-  context.activeSources = HookRegistry.collectSources(runState, stageState, metaProjection)
+  context.activeSources = HookRegistry.collectGlobalSources(runState, stageState, metaProjection)
+  TrickActivationSystem.initialize(context, runState, stageState)
+  context.trickBoardSnapshot = TrickBoardSystem.snapshot(runState, stageState)
+  context.trace.trickBoardSnapshot = Utils.clone(context.trickBoardSnapshot)
+  context.enemySkillSnapshot = EnemySkillSystem.snapshot(stageState)
+  context.trace.enemySkillSnapshot = Utils.clone(context.enemySkillSnapshot)
+  context.bossTrickSnapshot = BossTrickSystem.snapshot(stageState)
+  context.trace.bossTrickSnapshot = Utils.clone(context.bossTrickSnapshot)
+  context.trace.predictionSlot = PredictionSlotSystem.snapshot(runState, stageState)
 
   FlipResolver.runPhase(runState, stageState, context, "on_batch_start")
   FlipResolver.runPhase(runState, stageState, context, "before_batch_validation")
@@ -310,15 +366,95 @@ function FlipResolver.projectBatchBeforeRoll(runState, stageState, metaProjectio
   context.purseEventCoins = PurseHookSystem.buildHandCoinStates(runState, stageState)
   FlipResolver.runPhase(runState, stageState, context, "after_call_before_flip")
   context.purseEventCoins = nil
-  context.activeSources = HookRegistry.collectSources(runState, stageState, metaProjection)
+
+  context.perCoin = PurseHookSystem.buildHandCoinStates(runState, stageState)
+  context.perCoin = BossTrickSystem.applyPreFlipCoinMovement(context, context.perCoin)
+  BossTrickSystem.applyPreFlipCoinIdentities(context)
+  TrickActivationSystem.lockForgeryAssignments(context)
+  TrickActivationSystem.buildRootActivations(context)
+  FlipResolver.runRootTrickPhase(runState, stageState, context, "after_call_before_flip")
+
+  context.activeSources = HookRegistry.collectGlobalSources(runState, stageState, metaProjection)
 
   context.perCoin, context.resolutionOrder = FlipResolver.prepareCoinRollState(runState, stageState, metaProjection, context)
+  context.perCoin, context.resolutionOrder = BossTrickSystem.applyPreFlipCoinMovement(
+    context,
+    context.perCoin,
+    context.resolutionOrder
+  )
+  BossTrickSystem.applyPreFlipCoinIdentities(context)
+  TrickActivationSystem.buildRootActivations(context)
   context.purseEventCoins = context.perCoin
   FlipResolver.runPhase(runState, stageState, context, "before_hand_flip")
   context.purseEventCoins = nil
   FlipResolver.runPhase(runState, stageState, context, "before_coin_roll")
 
+  for index, activation in ipairs(context.rootActivations or {}) do
+    TrickActivationSystem.runTrickPhase(
+      runState,
+      stageState,
+      context,
+      activation,
+      context.perCoin[index],
+      "before_coin_roll"
+    )
+  end
+
+  ActionQueue.applyAll(runState, stageState, context,
+    BossTrickSystem.buildBeforeRollActions(context))
+  BossTrickSystem.applyPreFlipForcedOutcomes(context)
+
   return context
+end
+
+function FlipResolver.drainActivationQueue(runState, stageState, context)
+  local resolved = 0
+  while #(context.activationQueue or {}) > 0 and resolved < (context.maxActivationEvents or 24) do
+    local activation = table.remove(context.activationQueue, 1)
+    local coinState = TrickActivationSystem.getCoin(context, activation)
+    if coinState and (activation.chainDepth or 0) <= 3 then
+      resolved = resolved + 1
+      if activation.kind == "repeat" then
+        TrickActivationSystem.runRepeatedTrick(runState, stageState, context, activation, coinState)
+      else
+        local actions = ScoringSystem.buildCoinActivationScoreActions(context, coinState, activation, {
+          runCoinScorePhase = function(phaseName, scoreEvent)
+            local previousCoin = context.currentCoin
+            local previousScoreEvent = context.currentScoreEvent
+            local previousActivation = context.currentActivation
+            context.currentCoin = coinState
+            context.currentScoreEvent = scoreEvent
+            context.currentActivation = activation
+            if phaseName == "before_coin_score" then
+              ActionQueue.applyAll(runState, stageState, context,
+                BossTrickSystem.buildCoinScoreActions(context, coinState))
+              ActionQueue.applyAll(runState, stageState, context,
+                EnemySkillSystem.buildCoinScoreActions(context, coinState))
+            end
+            FlipResolver.runPhase(runState, stageState, context, phaseName)
+            TrickActivationSystem.runTrickPhase(runState, stageState, context, activation, coinState, phaseName)
+            context.currentCoin = previousCoin
+            context.currentScoreEvent = previousScoreEvent
+            context.currentActivation = previousActivation
+          end,
+        })
+        FlipResolver.applyPhaseActions(runState, stageState, context, "reactivation_score", actions, activation.chainDepth)
+        TrickActivationSystem.runTrickPhase(runState, stageState, context, activation, coinState, "after_all_effects")
+      end
+    end
+  end
+
+  if #(context.activationQueue or {}) > 0 then
+    context.trace.activationStopReason = "activation_event_limit"
+    context.activationQueue = {}
+  end
+  context.trace.activationEventsResolved = resolved
+end
+
+function FlipResolver.runRootTrickPhase(runState, stageState, context, phaseName)
+  for index, activation in ipairs(context.rootActivations or {}) do
+    TrickActivationSystem.runTrickPhase(runState, stageState, context, activation, context.perCoin[index], phaseName)
+  end
 end
 
 function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, rng)
@@ -348,7 +484,7 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
     call,
     RNG.new(rng:getSeed())
   )
-  preValidationContext.activeSources = HookRegistry.collectSources(preValidationRunState, preValidationStageState, metaProjection)
+  preValidationContext.activeSources = HookRegistry.collectGlobalSources(preValidationRunState, preValidationStageState, metaProjection)
 
   FlipResolver.runPhase(preValidationRunState, preValidationStageState, preValidationContext, "on_batch_start")
   FlipResolver.runPhase(preValidationRunState, preValidationStageState, preValidationContext, "before_batch_validation")
@@ -359,14 +495,25 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
     return nil, validationResult
   end
 
+  TrickBoardSystem.setPhase(stageState, "locked")
+
   context = FlipResolver.projectBatchBeforeRoll(runState, stageState, metaProjection, call, rng)
+  TrickBoardSystem.setPhase(stageState, "resolving")
   context.trace.dealtHand = PurseSystem.getDealtHandEntries(runState, stageState)
-  context.trace.selectedSlots = PurseSystem.getSelectedSlotEntries(runState, stageState)
+  context.trace.selectedSlots = context.trace.threeCups
+    and Utils.clone(context.trace.threeCups.originalCoins)
+    or PurseSystem.getSelectedSlotEntries(runState, stageState)
   context.trace.boardSlots = PurseSystem.getBoardSlotEntries(runState, stageState)
   context.trace.drawnInstanceIds = PurseSystem.getDealtInstanceIds(stageState)
   context.trace.sleightHistory = Utils.clone(stageState.purse and stageState.purse.sleightHistory or {})
   context.trace.reorderHistory = Utils.clone(stageState.purse and stageState.purse.reorderHistory or {})
   context.trace.purseHookHistory = Utils.clone(stageState.purse and stageState.purse.hookHistory or {})
+  context.trace.replacements = {}
+  for _, replacement in ipairs(stageState.purse and stageState.purse.replacementHistory or {}) do
+    if replacement.batchIndex == context.batchId then
+      table.insert(context.trace.replacements, Utils.clone(replacement))
+    end
+  end
 
   if drawWarning then
     table.insert(context.trace.warnings, drawWarning)
@@ -377,8 +524,11 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
   end
 
   FlipResolver.runPhase(runState, stageState, context, "after_coin_roll")
+  FlipResolver.runRootTrickPhase(runState, stageState, context, "after_coin_roll")
   FlipResolver.runPhase(runState, stageState, context, "after_flip_before_score")
+  FlipResolver.runRootTrickPhase(runState, stageState, context, "after_flip_before_score")
   FlipResolver.runPhase(runState, stageState, context, "before_scoring")
+  FlipResolver.runRootTrickPhase(runState, stageState, context, "before_scoring")
 
   local scoringActions = ScoringSystem.buildScoreActions(context, {
     runCoinScorePhase = function(phaseName, scoreEvent, coinState)
@@ -387,7 +537,23 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
 
       context.currentCoin = coinState
       context.currentScoreEvent = scoreEvent
+      if phaseName == "before_coin_score" then
+        ActionQueue.applyAll(runState, stageState, context,
+          BossTrickSystem.buildCoinScoreActions(context, coinState))
+        ActionQueue.applyAll(runState, stageState, context,
+          EnemySkillSystem.buildCoinScoreActions(context, coinState))
+      end
       FlipResolver.runPhase(runState, stageState, context, phaseName)
+      if phaseName == "before_coin_score"
+        and coinState.smuggled == true
+        and context.batchFlags.contraband_riches == true then
+        ActionQueue.applyAll(runState, stageState, context, {
+          { op = "apply_score_scaling", value = 1.5, target = "current_coin_score",
+            _trace = { phase = phaseName, sourceId = "embarrassment_of_riches", sourceType = "trick" } },
+        })
+      end
+      local activation = context.rootActivations and context.rootActivations[coinState.resolutionIndex]
+      TrickActivationSystem.runTrickPhase(runState, stageState, context, activation, coinState, phaseName)
       context.currentCoin = previousCoin
       context.currentScoreEvent = previousScoreEvent
     end,
@@ -395,12 +561,20 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
   FlipResolver.applyPhaseActions(runState, stageState, context, "score_assembly", scoringActions, 0)
 
   FlipResolver.runPhase(runState, stageState, context, "after_scoring")
+  FlipResolver.runRootTrickPhase(runState, stageState, context, "after_scoring")
   LuckSystem.applyBaseMatchLuck(runState, context)
   FlipResolver.runPhase(runState, stageState, context, "after_all_effects")
+  FlipResolver.runRootTrickPhase(runState, stageState, context, "after_all_effects")
+  FlipResolver.drainActivationQueue(runState, stageState, context)
+  FlipResolver.applyPhaseActions(runState, stageState, context, "boss_trick_resolution",
+    BossTrickSystem.buildAfterEffectsActions(context), 0)
+  FlipResolver.applyPhaseActions(runState, stageState, context, "enemy_skill_resolution",
+    EnemySkillSystem.buildAfterEffectsActions(context, stageState), 0)
   FlipResolver.updateCounters(runState, stageState, context)
   FlipResolver.runPhase(runState, stageState, context, "before_stage_end_check")
   FlipResolver.evaluateStageEnd(stageState, context)
   FlipResolver.runPhase(runState, stageState, context, "on_batch_end")
+  FlipResolver.runRootTrickPhase(runState, stageState, context, "on_batch_end")
   LuckSystem.consumeFatedFlip(runState, context)
 
   if GameConfig.get("scoring.clearOnThresholdAtBatchEnd", true) == true and stageState.scoreAppliedToHp >= stageState.opponentHp then
@@ -408,8 +582,13 @@ function FlipResolver.resolveBatch(runState, stageState, metaProjection, call, r
   end
 
   FlipResolver.updateTraceTerminalState(stageState, context)
-  context.trace.refillEvent = PurseSystem.refillHand(stageState)
+  context.trace.refillEvent = PurseSystem.refillHand(stageState, runState, rng)
   context.trace.exhaustedInstanceIds = Utils.copyArray(context.trace.refillEvent.exhaustedInstanceIds or {})
+  if stageState.stageStatus == "active" then
+    TrickBoardSystem.applyOpponentPressure(runState, stageState)
+    BossTrickSystem.prepareIntent(runState, stageState)
+  end
+  TrickBoardSystem.setPhase(stageState, stageState.stageStatus == "active" and "setup" or "complete")
 
   local undrainedPendingPhases = {}
 

@@ -39,15 +39,14 @@ local function buildTargetedQueueReplayRun(baseSeed)
     local runState, metaProjection = RunInitializer.createNewRun(metaState, {
       seed = seed,
       starterCollection = { "copper_weighted_coin" },
-      ownedTrickIds = { "heads_varnish", "echo_cache" },
+      ownedTrickIds = { "heads_varnish", "weighted_palm", "weighted_tail_coating" },
     })
     local stageState = RunInitializer.createStageForCurrentRound(runState)
     local selection, errorMessage = LoadoutSystem.commitLoadout(runState, { [1] = "copper_weighted_coin" })
     assert(selection, errorMessage)
 
     local rng = RNG.new(seed)
-    local sawGrant = false
-    local sawConsume = false
+    local sawActivation = false
 
     while stageState.stageStatus == "active" do
       selectDefaultFlipSlots(runState, stageState, metaProjection, "heads", rng)
@@ -55,13 +54,12 @@ local function buildTargetedQueueReplayRun(baseSeed)
       assert(batchResult, batchError)
       table.insert(runState.history.flipBatches, Utils.clone(batchResult.batch))
 
-      sawGrant = sawGrant or #(batchResult.trace.temporaryEffectsGranted or {}) > 0
-      sawConsume = sawConsume or #(batchResult.trace.temporaryEffectsConsumed or {}) > 0
+      sawActivation = sawActivation or #(batchResult.trace.activationLedger or {}) > 0
     end
 
     RunHistorySystem.finalizeStage(runState, stageState, metaState)
 
-    if sawGrant and sawConsume then
+    if sawActivation then
       return seed, runState
     end
   end
@@ -135,8 +133,7 @@ local targetedOk, targetedResult = pcall(function()
   local sawSlotMetadata = false
   local sawSlotAwareTraceSignature = false
   for _, batchSignature in ipairs(transcript.expected.batchSignatures or {}) do
-    if #(batchSignature.temporaryEffectsGranted or {}) > 0
-      and #(batchSignature.temporaryEffectsConsumed or {}) > 0 then
+    if #(batchSignature.activationLedger or {}) > 0 then
       sawDetailedSignature = true
     end
 
@@ -186,7 +183,7 @@ local targetedOk, targetedResult = pcall(function()
     end
   end
 
-  assert(sawDetailedSignature, "targeted transcript missing temporary effect trace signature")
+  assert(sawDetailedSignature, "targeted transcript missing family activation ledger signature")
   assert(sawSlotMetadata, "targeted transcript missing slot-aware resolution metadata")
   assert(sawSlotAwareTraceSignature, "targeted transcript missing slot-aware trace/action signature")
 

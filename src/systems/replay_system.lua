@@ -30,6 +30,7 @@ local function copyBatchCall(batch)
     dealtHand = Utils.clone(batch.dealtHand or {}),
     selectedSlots = Utils.clone(batch.selectedSlots or {}),
     boardSlots = Utils.clone(batch.boardSlots or {}),
+    replacements = Utils.clone(batch.replacements or {}),
     resolutionEntries = Utils.clone(batch.resolutionEntries or {}),
     forcedResults = Utils.clone(batch.forcedResults or {}),
     refillEvent = Utils.clone(batch.refillEvent or {}),
@@ -82,8 +83,10 @@ local function buildActionSignature(action)
     amount = action.amount,
     value = action.value,
     chance = action.chance,
+    rngRoll = action.rngRoll,
     headsChance = action.headsChance,
     side = action.side,
+    appliedSide = action.appliedSide,
     target = action.target,
     flag = action.flag,
     coinId = action.coinId,
@@ -104,53 +107,103 @@ local function buildActionSignature(action)
     dealtIndex = action.dealtIndex,
     boardSlotIndex = action.boardSlotIndex,
     overloadSlotIndex = action.overloadSlotIndex,
+    anchorSelectedSlotIndex = action.anchorSelectedSlotIndex,
+    anchorInstanceId = action.anchorInstanceId,
+    anchorCoinId = action.anchorCoinId,
+    anchorOverloadIndex = action.anchorOverloadIndex,
     resolutionIndex = action.resolutionIndex,
     smuggled = action.smuggled,
     smuggledBy = action.smuggledBy,
     smuggledInstanceId = action.smuggledInstanceId,
     smuggledCoinId = action.smuggledCoinId,
+    contrabandCopy = action.contrabandCopy,
+    copiedFromCoinId = action.copiedFromCoinId,
+    copiedFromInstanceId = action.copiedFromInstanceId,
     forged = action.forged,
     forgedBy = action.forgedBy,
     forgeMode = action.forgeMode,
     forgeScope = action.forgeScope,
     forgedCoinId = action.forgedCoinId,
+    scoringCoinId = action.scoringCoinId,
+    effectiveIdentityIds = Utils.clone(action.effectiveIdentityIds or nil),
+    forgedPayout = action.forgedPayout,
+    forgedOutcomeCopy = action.forgedOutcomeCopy,
+    forgedOutcomeCopyBy = action.forgedOutcomeCopyBy,
+    forgedFamily = action.forgedFamily,
+    forgedTrickIds = Utils.clone(action.forgedTrickIds or nil),
+    forgedActivationCount = action.forgedActivationCount,
+    forgeryEffectiveness = action.forgeryEffectiveness,
+    forgeryDirection = action.forgeryDirection,
+    targetTrickIds = Utils.clone(action.targetTrickIds or nil),
+    maxTier = action.maxTier,
+    maxTricks = action.maxTricks,
     sourceCoinId = action.sourceCoinId,
+    sourceCoinIds = Utils.clone(action.sourceCoinIds or nil),
     sourceInstanceId = action.sourceInstanceId,
+    sourceInstanceIds = Utils.clone(action.sourceInstanceIds or nil),
     sourceSlotIndex = action.sourceSlotIndex,
     sourceResolutionIndex = action.sourceResolutionIndex,
+    sourceResolutionIndices = Utils.clone(action.sourceResolutionIndices or nil),
+    affectedCoinIds = Utils.clone(action.affectedCoinIds or nil),
+    affectedInstanceIds = Utils.clone(action.affectedInstanceIds or nil),
+    affectedResolutionIndices = Utils.clone(action.affectedResolutionIndices or nil),
+    sourceSacrificed = action.sourceSacrificed,
     targetCoinId = action.targetCoinId,
     targetInstanceId = action.targetInstanceId,
     targetSlotIndex = action.targetSlotIndex,
+    targetSelectedSlotIndex = action.targetSelectedSlotIndex,
     targetResolutionIndex = action.targetResolutionIndex,
-    spotlightCoinId = action.spotlightCoinId,
-    spotlightInstanceId = action.spotlightInstanceId,
-    spotlightSlotIndex = action.spotlightSlotIndex,
-    spotlightResolutionIndex = action.spotlightResolutionIndex,
-    scoreCreditCoinId = action.scoreCreditCoinId,
-    scoreCreditInstanceId = action.scoreCreditInstanceId,
-    scoreCreditSlotIndex = action.scoreCreditSlotIndex,
-    scoreCreditResolutionIndex = action.scoreCreditResolutionIndex,
-    redirectedCredit = action.redirectedCredit,
-    redirectedCreditBy = action.redirectedCreditBy,
-    redirectMode = action.redirectMode,
-    redirectScope = action.redirectScope,
+    savedCoinId = action.savedCoinId,
+    savedInstanceId = action.savedInstanceId,
+    savedMaterialRank = action.savedMaterialRank,
+    replacementCoinId = action.replacementCoinId,
+    replacementInstanceId = action.replacementInstanceId,
+    replacementMaterialRank = action.replacementMaterialRank,
+    replacementDealtIndex = action.replacementDealtIndex,
+    targetDealtIndex = action.targetDealtIndex,
+    targetMode = action.targetMode,
+    mode = action.mode,
+    palmed = action.palmed,
+    beforeScore = action.beforeScore,
+    afterScore = action.afterScore,
+    moves = Utils.clone(action.moves or nil),
     packetId = action.packetId,
+    packetIds = Utils.clone(action.packetIds or nil),
     packetCoinId = action.packetCoinId,
+    packetCoinIds = Utils.clone(action.packetCoinIds or nil),
     packetInstanceId = action.packetInstanceId,
+    packetInstanceIds = Utils.clone(action.packetInstanceIds or nil),
     packetSlotIndex = action.packetSlotIndex,
+    packetSlotIndices = Utils.clone(action.packetSlotIndices or nil),
     packetSelectedSlotIndex = action.packetSelectedSlotIndex,
+    packetSelectedSlotIndices = Utils.clone(action.packetSelectedSlotIndices or nil),
     packetResolutionIndex = action.packetResolutionIndex,
+    packetResolutionIndices = Utils.clone(action.packetResolutionIndices or nil),
     packetFinalScoreContribution = action.packetFinalScoreContribution,
+    packetFinalScoreContributions = Utils.clone(action.packetFinalScoreContributions or nil),
     prestigeReplay = action.prestigeReplay,
     prestigeReplayBy = action.prestigeReplayBy,
     prestigeScale = action.prestigeScale,
+    prestigeScales = Utils.clone(action.prestigeScales or nil),
     rawReplayedScore = action.rawReplayedScore,
+    rawReplayedScores = Utils.clone(action.rawReplayedScores or nil),
     replayedScore = action.replayedScore,
+    replayedScores = Utils.clone(action.replayedScores or nil),
+    replayedPacketCount = action.replayedPacketCount,
     replayMode = action.replayMode,
     replayScope = action.replayScope,
     chosenPacketIndex = action.chosenPacketIndex,
+    chosenPacketIndices = Utils.clone(action.chosenPacketIndices or nil),
     scale = action.scale,
+    selectionMode = action.selectionMode,
+    selection = action.selection,
+    count = action.count,
+    preferFamily = action.preferFamily,
+    preferArchetype = action.preferArchetype,
     chainChance = action.chainChance,
+    continuationChance = action.continuationChance,
+    direction = action.direction,
+    directions = Utils.clone(action.directions or nil),
     maxChainDepth = action.maxChainDepth,
     maxTriggers = action.maxTriggers,
     chainTriggered = action.chainTriggered,
@@ -163,6 +216,11 @@ local function buildActionSignature(action)
     chainedInstanceId = action.chainedInstanceId,
     chainedSlotIndex = action.chainedSlotIndex,
     chainedResolutionIndex = action.chainedResolutionIndex,
+    chainDepthBonus = action.chainDepthBonus,
+    momentumDepthBonus = action.momentumDepthBonus,
+    appliedChainDepth = action.appliedChainDepth,
+    appliedMomentumDepth = action.appliedMomentumDepth,
+    appliedValue = action.appliedValue,
     identitySourceCoinId = action.identitySourceCoinId,
     identitySourceInstanceId = action.identitySourceInstanceId,
     failedSlotIndex = action.failedSlotIndex,
@@ -173,6 +231,18 @@ local function buildActionSignature(action)
     successInstanceId = action.successInstanceId,
     failedCoinId = action.failedCoinId,
     successCoinId = action.successCoinId,
+    failedBaseScore = action.failedBaseScore,
+    successBaseScore = action.successBaseScore,
+    requireSourceBaseScoreGreaterThanTarget = action.requireSourceBaseScoreGreaterThanTarget,
+    targetBaseScore = action.targetBaseScore,
+    replacementBaseScore = action.replacementBaseScore,
+    replacementCoinId = action.replacementCoinId,
+    replacementInstanceId = action.replacementInstanceId,
+    replacementSlotIndex = action.replacementSlotIndex,
+    replacementDealtIndex = action.replacementDealtIndex,
+    requireReplacementBaseScoreGreaterThanTarget = action.requireReplacementBaseScoreGreaterThanTarget,
+    skipped = action.skipped,
+    skipReason = action.skipReason,
     foretoldResult = action.foretoldResult,
     foretoldRngRoll = action.foretoldRngRoll,
     trace = action._trace and buildTriggeredSourceSignature(action._trace) or nil,
@@ -187,6 +257,7 @@ local function buildShopTraceSignature(trace)
     warnings = Utils.copyArray(trace and trace.warnings or {}),
     messages = Utils.copyArray(trace and trace.messages or {}),
     notes = Utils.copyArray(trace and trace.notes or {}),
+    extortionEffects = Utils.clone(trace and trace.extortionEffects or nil),
     resolvedShopRules = Utils.clone(trace and trace.resolvedShopRules or nil),
     finalPrice = trace and trace.finalPrice or nil,
     offerCount = trace and trace.offerCount or nil,
@@ -221,6 +292,12 @@ local function buildBatchSignature(batch)
       dealtIndex = coinRoll.dealtIndex,
       boardSlotIndex = coinRoll.boardSlotIndex,
       overloadSlotIndex = coinRoll.overloadSlotIndex,
+      anchorSelectedSlotIndex = coinRoll.anchorSelectedSlotIndex,
+      anchorInstanceId = coinRoll.anchorInstanceId,
+      anchorCoinId = coinRoll.anchorCoinId,
+      anchorOverloadIndex = coinRoll.anchorOverloadIndex,
+      palmed = coinRoll.palmed,
+      sleightSaved = coinRoll.sleightSaved,
       smuggled = coinRoll.smuggled,
       smuggledBy = coinRoll.smuggledBy,
       resolutionIndex = coinRoll.resolutionIndex,
@@ -232,21 +309,27 @@ local function buildBatchSignature(batch)
       foretoldResult = coinRoll.foretoldResult,
       foretoldBy = coinRoll.foretoldBy,
       foretoldRngRoll = coinRoll.foretoldRngRoll,
+      predictionSlotForced = coinRoll.predictionSlotForced,
+      predictionSlotIndex = coinRoll.predictionSlotIndex,
+      bossForcedResult = coinRoll.bossForcedResult,
+      bossForcedReason = coinRoll.bossForcedReason,
+      writtenSlotIndex = coinRoll.writtenSlotIndex,
+      actingFamily = coinRoll.actingFamily,
+      forgeryDirection = coinRoll.forgeryDirection,
+      forgerySourceCoinId = coinRoll.forgerySourceCoinId,
+      forgerySourceInstanceId = coinRoll.forgerySourceInstanceId,
+      forgerySourceResolutionIndex = coinRoll.forgerySourceResolutionIndex,
       forged = coinRoll.forged,
       forgedBy = coinRoll.forgedBy,
       forgedCoinId = coinRoll.forgedCoinId,
+      scoringCoinId = coinRoll.scoringCoinId,
+      effectiveIdentityIds = Utils.clone(coinRoll.effectiveIdentityIds or nil),
+      forgedPayout = coinRoll.forgedPayout,
       identitySourceCoinId = coinRoll.identitySourceCoinId,
       identitySourceInstanceId = coinRoll.identitySourceInstanceId,
-      spotlight = coinRoll.spotlight,
-      spotlightBy = coinRoll.spotlightBy,
-      redirectedCredit = coinRoll.redirectedCredit,
-      redirectedCreditBy = coinRoll.redirectedCreditBy,
-      redirectedCreditTargetCoinId = coinRoll.redirectedCreditTargetCoinId,
-      redirectedCreditTargetInstanceId = coinRoll.redirectedCreditTargetInstanceId,
-      redirectedCreditTargetSlotIndex = coinRoll.redirectedCreditTargetSlotIndex,
-      redirectedCreditTargetResolutionIndex = coinRoll.redirectedCreditTargetResolutionIndex,
-      spotlightCoinId = coinRoll.spotlightCoinId,
-      spotlightInstanceId = coinRoll.spotlightInstanceId,
+      sourceCoinIds = Utils.clone(coinRoll.sourceCoinIds or nil),
+      sourceInstanceIds = Utils.clone(coinRoll.sourceInstanceIds or nil),
+      sourceResolutionIndices = Utils.clone(coinRoll.sourceResolutionIndices or nil),
       chained = coinRoll.chained,
       chainedBy = coinRoll.chainedBy,
       chainDepth = coinRoll.chainDepth,
@@ -276,6 +359,7 @@ local function buildBatchSignature(batch)
     dealtHand = Utils.clone(batch.dealtHand or {}),
     selectedSlots = Utils.clone(batch.selectedSlots or {}),
     boardSlots = Utils.clone(batch.boardSlots or {}),
+    replacements = Utils.clone(batch.replacements or {}),
     refillEvent = Utils.clone(batch.refillEvent or {}),
     results = table.concat(results, "|"),
     status = batch.trace and batch.trace.stageStatusAfter or nil,
@@ -289,14 +373,29 @@ local function buildBatchSignature(batch)
     luck = Utils.clone(batch.trace and batch.trace.luck or {}),
     sleightMoves = Utils.clone(batch.trace and batch.trace.sleightMoves or {}),
     smugglingMoves = Utils.clone(batch.trace and batch.trace.smugglingMoves or {}),
+    smugglingExtractions = Utils.clone(batch.trace and batch.trace.smugglingExtractions or {}),
     forgedIdentities = Utils.clone(batch.trace and batch.trace.forgedIdentities or {}),
-    redirectedScoreCredits = Utils.clone(batch.trace and batch.trace.redirectedScoreCredits or {}),
+    forgedOutcomeCopies = Utils.clone(batch.trace and batch.trace.forgedOutcomeCopies or {}),
+    forgedActivations = Utils.clone(batch.trace and batch.trace.forgedActivations or {}),
+    forgeryAssignments = Utils.clone(batch.trace and batch.trace.forgeryAssignments or {}),
     prestigeReplays = Utils.clone(batch.trace and batch.trace.prestigeReplays or {}),
     chainLinks = Utils.clone(batch.trace and batch.trace.chainLinks or {}),
     purseHookHistory = Utils.clone(batch.trace and batch.trace.purseHookHistory or {}),
     foretoldResults = Utils.clone(batch.trace and batch.trace.foretoldResults or {}),
     queuedActions = Utils.clone(batch.trace and batch.trace.queuedActions or {}),
     forcedResults = Utils.clone(batch.trace and batch.trace.forcedResults or {}),
+    activationLedger = Utils.clone(batch.trace and batch.trace.activationLedger or {}),
+    activationRolls = Utils.clone(batch.trace and batch.trace.activationRolls or {}),
+    activationEventsResolved = batch.trace and batch.trace.activationEventsResolved or 0,
+    activationStopReason = batch.trace and batch.trace.activationStopReason or nil,
+    trickBoardSnapshot = Utils.clone(batch.trace and batch.trace.trickBoardSnapshot or {}),
+    enemySkillSnapshot = Utils.clone(batch.trace and batch.trace.enemySkillSnapshot or {}),
+    enemySkillEffects = Utils.clone(batch.trace and batch.trace.enemySkillEffects or {}),
+    bossTrickSnapshot = Utils.clone(batch.trace and batch.trace.bossTrickSnapshot or {}),
+    bossTrickEffects = Utils.clone(batch.trace and batch.trace.bossTrickEffects or {}),
+    threeCups = Utils.clone(batch.trace and batch.trace.threeCups or {}),
+    predictionSlot = Utils.clone(batch.trace and batch.trace.predictionSlot or {}),
+    preventedActivations = Utils.clone(batch.trace and batch.trace.preventedActivations or {}),
     temporaryEffectsGranted = Utils.clone(batch.trace and batch.trace.temporaryEffectsGranted or {}),
     temporaryEffectsConsumed = Utils.clone(batch.trace and batch.trace.temporaryEffectsConsumed or {}),
     warnings = Utils.copyArray(batch.trace and batch.trace.warnings or {}),
@@ -721,6 +820,10 @@ local function replayShopVisit(runState, stageState, stageRecord, metaProjection
         return false, string.format("missing_offer:%s:%s", tostring(action.offerType), tostring(action.contentId))
       end
 
+      if action.replacePosition ~= nil then
+        shopFlow.offers[offerIndex].replacePosition = action.replacePosition
+      end
+
       local purchased, result, offer = ShopFlowSystem.purchase(shopFlow, offerIndex)
       local expectedPurchaseTrace = (shopTranscript.purchaseTraces or {})[purchaseTraceIndex]
 
@@ -819,6 +922,19 @@ local function replayRewardChoice(runState, stageRecord, rng, rewardTranscript, 
     return true
   end
 
+  if rewardTranscript.choice.type == "currency"
+    and rewardTranscript.choice.contentId == "skip_influence" then
+    local ok, choiceOrError = RewardSystem.claimSkip(runState, session)
+    if not ok then
+      return false, choiceOrError or "reward_skip_failed"
+    end
+    RunHistorySystem.recordStageRewardChoice(stageRecord, choiceOrError)
+    if not valuesEqual(rewardTranscript.choice, stageRecord.rewardChoice) then
+      return false, "reward_choice_mismatch"
+    end
+    return true
+  end
+
   local choiceIndex = nil
   for index, option in ipairs(session.options or {}) do
     if option.type == rewardTranscript.choice.type and option.contentId == rewardTranscript.choice.contentId then
@@ -836,6 +952,10 @@ local function replayRewardChoice(runState, stageRecord, rng, rewardTranscript, 
   end
 
   RewardSystem.selectOption(session, choiceIndex)
+  if rewardTranscript.choice.replacedTrickPosition ~= nil then
+    session.replacementRequired = true
+    session.replacePosition = rewardTranscript.choice.replacedTrickPosition
+  end
   local ok, choiceOrError = RewardSystem.claimSelection(runState, session)
 
   if not ok then
@@ -911,7 +1031,10 @@ local function replayEncounterChoice(runState, stageRecord, encounterTranscript,
     return false, string.format("missing_encounter_option:%s", tostring(encounterTranscript.choice.id))
   end
 
-  EncounterSystem.selectChoice(session, choiceIndex)
+  EncounterSystem.selectChoice(session, choiceIndex, runState)
+  if session.replacementRequired then
+    session.replacePosition = encounterTranscript.choice.replacedTrickPosition
+  end
   local ok, choiceOrError = EncounterSystem.claimChoice(runState, session)
   if not ok then
     return false, choiceOrError or "encounter_claim_failed"
@@ -1080,13 +1203,30 @@ function ReplaySystem.replayTranscript(transcript)
       runState.pendingForcedCoinResults = {}
 
       for _, forcedEntry in ipairs(batchInput.forcedResults or {}) do
-        table.insert(runState.pendingForcedCoinResults, forcedEntry.result)
+        if forcedEntry.reason == nil or forcedEntry.reason == "pending_forced_result" then
+          table.insert(runState.pendingForcedCoinResults, forcedEntry.result)
+        end
       end
 
       local _, dealWarning = PurseSystem.dealHand(runState, stageState, rng)
       PurseHookSystem.runAfterDealBeforeSelection(runState, stageState, metaProjection, { call = batchInput.call, rng = rng })
 
       if dealWarning ~= "purse_empty" then
+        for _, replacement in ipairs(batchInput.replacements or {}) do
+          local replaceOk, replaceError = PurseSystem.replaceHeldCoin(
+            runState,
+            stageState,
+            replacement.spentInstanceId or replacement.handPosition,
+            rng
+          )
+          if not replaceOk then
+            return {
+              ok = false,
+              error = replaceError or "batch_replacement_failed",
+              mismatches = { tostring(replaceError or "batch_replacement_failed") },
+            }
+          end
+        end
         local selectedOk, selectedError = PurseSystem.setSelectedSlotsFromEntries(runState, stageState, batchInput.selectedSlots or {}, {
           rule = "replay_transcript_selection",
         })

@@ -1840,6 +1840,21 @@ function Game:toggleDealtCoinSelection(selector)
   return true, result, action
 end
 
+function Game:replaceHeldCoin(selector)
+  if not self.runState or not self.stageState then
+    return false, "run or stage has not been initialized"
+  end
+
+  local ok, result = PurseSystem.replaceHeldCoin(self.runState, self.stageState, selector, self.runRng)
+  if not ok then
+    return false, result
+  end
+
+  self:assertRuntimeInvariants("game.replaceHeldCoin", { history = true })
+  self:saveActiveRun("replace_held_coin", "stage")
+  return true, result
+end
+
 function Game:applyHandReorderHook(reorderResult)
   if not reorderResult then
     return nil
@@ -2065,7 +2080,8 @@ function Game:debugGrantNextUpgrade()
   local nextUpgradeId = nil
 
   for _, definition in ipairs(Upgrades.getAll()) do
-    if not Utils.contains(self.runState.ownedTrickIds or self.runState.ownedUpgradeIds, definition.id) then
+    if definition.familyTriggerStatus == "converted"
+      and not Utils.contains(self.runState.ownedTrickIds or self.runState.ownedUpgradeIds, definition.id) then
       nextUpgradeId = definition.id
       break
     end
@@ -2076,6 +2092,9 @@ function Game:debugGrantNextUpgrade()
   end
 
   local ok, result = ShopSystem.grantUpgrade(self.runState, nextUpgradeId)
+  if not ok and type(result) == "table" and result.code == "trick_board_full" then
+    ok, result = ShopSystem.grantUpgrade(self.runState, nextUpgradeId, { replacePosition = 1 })
+  end
 
   if not ok then
     return false, result
@@ -2455,12 +2474,15 @@ function Game:rerollShopOffers()
   return true, rerollMode
 end
 
-function Game:purchaseShopOffer(index)
+function Game:purchaseShopOffer(index, replacePosition)
   local prepared, prepareError = self:prepareShopOffers()
   if prepared == false then
     return false, prepareError
   end
 
+  if replacePosition ~= nil and self.shopOffers and self.shopOffers[index] then
+    self.shopOffers[index].replacePosition = replacePosition
+  end
   local shopFlow = self:createShopFlow()
   local ok, result, offer = ShopFlowSystem.purchase(shopFlow, index)
   self:applyShopFlow(shopFlow)
@@ -2670,8 +2692,8 @@ function Game:getEffectiveValueLines(effectiveValues)
 
     if path == "shop.guaranteedUpgradeOffers" then
       return mode == "override"
-        and string.format("Guaranteed Trick offers = %d", value)
-        or string.format("Guaranteed Trick offers %s", formatSignedNumber(value))
+        and string.format("Guaranteed Charm offers = %d", value)
+        or string.format("Guaranteed Charm offers %s", formatSignedNumber(value))
     end
 
     if path == "shop.rerollCost" then
@@ -3203,7 +3225,7 @@ function Game:getPostResultDestinationLabel()
   local destination = self:getPostResultNextState()
 
   if destination == "reward_preview" then
-    return "reward preview"
+    return "Spoils"
   end
 
   if destination == "post_stage_analytics" then
@@ -3211,7 +3233,7 @@ function Game:getPostResultDestinationLabel()
   end
 
   if destination == "boss_reward" then
-    return "victory reward"
+    return "victory Spoils"
   end
 
   if destination == "fountain" then
@@ -3225,7 +3247,7 @@ function Game:getPostStageReviewFollowupLine()
   local destination = self:getPostResultNextState()
 
   if destination == "boss_reward" then
-    return "Victory reward follows."
+    return "Victory Spoils follow."
   end
 
   if destination == "shop" then
@@ -3296,11 +3318,11 @@ function Game:getRewardPreviewLines()
   table.insert(lines, "")
 
   if rewardSession and rewardSession.claimed and rewardSession.choice then
-    table.insert(lines, string.format("Chosen: %s", rewardSession.choice.name or rewardSession.choice.contentId or "n/a"))
+    table.insert(lines, string.format("Seized: %s", rewardSession.choice.name or rewardSession.choice.contentId or "n/a"))
   elseif rewardSession and #(rewardSession.options or {}) == 0 then
-    table.insert(lines, "No rewards remain.")
+    table.insert(lines, "No Spoils remain.")
   else
-    table.insert(lines, "Choose one reward.")
+    table.insert(lines, "Spend Influence to Seize one Charm from the Spoils.")
   end
 
   return lines
@@ -3364,7 +3386,7 @@ function Game:selectEncounterChoice(index)
     return false, "encounter_unavailable"
   end
 
-  local ok, result = EncounterSystem.selectChoice(session, index)
+  local ok, result = EncounterSystem.selectChoice(session, index, self.runState)
 
   if ok then
     local currentStateName = self.stateGraph and self.stateGraph:getCurrentName() or nil
@@ -3374,6 +3396,27 @@ function Game:selectEncounterChoice(index)
   end
 
   return ok, result
+end
+
+function Game:selectEncounterReplacementPosition(position)
+  local session = self:getEncounterSession()
+  local activeCount = #(self.runState and (self.runState.ownedTrickIds or self.runState.ownedUpgradeIds) or {})
+  return EncounterSystem.selectReplacementPosition(session, position, activeCount)
+end
+
+function Game:getEncounterReplacementCards()
+  local session = self:getEncounterSession()
+  if not session or session.replacementRequired ~= true then return {} end
+  local cards = {}
+  for position, charm in ipairs(self:getTrickCharmData()) do
+    table.insert(cards, {
+      position = position,
+      name = charm.name,
+      familyLabel = charm.familyLabel,
+      selected = session.replacePosition == position,
+    })
+  end
+  return cards
 end
 
 function Game:canContinueEncounter()
@@ -3524,7 +3567,7 @@ function Game:getProjectedEncounterImpactLines(projected)
   if choice and choice.type == "coin" then
     table.insert(lines, "On continue, the coin is added to your collection before the Black Market opens.")
   elseif choice and (choice.type == "trick" or choice.type == "upgrade") then
-    table.insert(lines, "On continue, the Trick becomes active immediately before the Black Market opens.")
+    table.insert(lines, "On continue, the Charm becomes active immediately.")
   elseif #(session and session.choices or {}) == 0 then
     table.insert(lines, "No encounter reward will be added; the Black Market continues unchanged.")
   end
@@ -3671,22 +3714,25 @@ function Game:getProjectedRewardImpactLines(options, projected)
   if option then
     table.insert(lines, string.format("Selected: %s", option.name or option.contentId or "Unknown"))
   elseif session and #(session.options or {}) > 0 and session.claimed ~= true then
-    table.insert(lines, previewOptions.finalReward == true and "Choose a final reward." or "Choose a reward.")
+    table.insert(lines, previewOptions.finalReward == true and "Choose a final reward." or "Choose one Charm to Seize.")
   else
-    table.insert(lines, "No reward will be added.")
+    table.insert(lines, "No Charm will be Seized.")
   end
 
-  if option and option.type == "coin" then
-    if previewOptions.finalReward == true then
-      table.insert(lines, "Coin recorded for this victory.")
-    else
-      table.insert(lines, "Coin joins the pouch.")
-    end
-  elseif option then
+  if option and previewOptions.finalReward ~= true then
+    table.insert(lines, string.format(
+      "Influence: %d → %d (%+d)",
+      projectedOutcome.influenceBefore,
+      projectedOutcome.influenceAfter,
+      projectedOutcome.influenceAfter - projectedOutcome.influenceBefore
+    ))
+  end
+
+  if option then
     if previewOptions.finalReward == true then
       table.insert(lines, "Trick recorded for this victory.")
     else
-      table.insert(lines, "Trick becomes active.")
+      table.insert(lines, "Seized Charm becomes active.")
     end
   end
 
@@ -3835,6 +3881,15 @@ function Game:selectRewardOption(index)
   local ok, result = RewardSystem.selectOption(session, index)
 
   if ok then
+    session.replacementRequired = false
+    session.replacePosition = nil
+    if result and (result.type == "trick" or result.type == "upgrade") then
+      local canAcquire, acquisition = require("src.systems.trick_board_system").canAcquire(self.runState, result.contentId)
+      if not canAcquire and type(acquisition) == "table" and acquisition.code == "trick_board_full" then
+        session.replacementRequired = true
+        session.replacementMetadata = acquisition
+      end
+    end
     local currentStateName = self.stateGraph and self.stateGraph:getCurrentName() or nil
     if currentStateName == "reward_preview" or currentStateName == "boss_reward" then
       self:saveActiveRun("reward_selection", currentStateName)
@@ -3842,6 +3897,27 @@ function Game:selectRewardOption(index)
   end
 
   return ok, result
+end
+
+function Game:selectRewardReplacementPosition(position)
+  local session = self:getRewardSession()
+  local activeCount = #(self.runState and (self.runState.ownedTrickIds or self.runState.ownedUpgradeIds) or {})
+  return RewardSystem.selectReplacementPosition(session, position, activeCount)
+end
+
+function Game:getRewardReplacementCards()
+  local session = self:getRewardSession()
+  if not session or session.replacementRequired ~= true then return {} end
+  local cards = {}
+  for position, charm in ipairs(self:getTrickCharmData()) do
+    table.insert(cards, {
+      position = position,
+      name = charm.name,
+      familyLabel = charm.familyLabel,
+      selected = session.replacePosition == position,
+    })
+  end
+  return cards
 end
 
 function Game:rerollRewardOptions()
@@ -3900,7 +3976,7 @@ function Game:getRewardPreviewOptionCards()
   local cards = {}
 
   for index, option in ipairs(session and session.options or {}) do
-    local displayType = tostring(option.type or "Reward")
+    local displayType = tostring(option.type or "Charm")
 
     if option.type == "trick" or option.type == "upgrade" then
       displayType = TrickCharm.getFamilyLabel(option.trickCategory)
@@ -3920,6 +3996,10 @@ function Game:getRewardPreviewOptionCards()
       enemyClassLabel = option.enemyClassLabel,
       wildcard = option.wildcard == true,
       trickCategory = option.trickCategory,
+      baseSeizeCost = option.baseSeizeCost,
+      seizeCost = option.seizeCost,
+      seizeDiscount = option.seizeDiscount,
+      seizeDiscountSourceId = option.seizeDiscountSourceId,
       selected = session.selectedIndex == index,
       claimed = session.claimed == true and session.choice and session.choice.contentId == option.contentId,
     })
@@ -3939,7 +4019,7 @@ function Game:getRewardPreviewContinueLabel()
     return self:shouldUseEncounterEvent() and "Continue to Encounter" or "Continue to Black Market"
   end
 
-  return self:shouldUseEncounterEvent() and "Claim Reward & Continue to Encounter" or "Claim Reward & Continue"
+  return self:shouldUseEncounterEvent() and "Seize Charm & Continue to Encounter" or "Seize Charm & Continue"
 end
 
 function Game:getBossRewardContinueLabel()
@@ -4033,21 +4113,21 @@ function Game:claimSelectedReward()
   self:assertRuntimeInvariants("game.claimSelectedReward", { history = true })
 
   if result then
-    self.logger:info("Claimed stage reward", {
+    self.logger:info("Seized stage charm", {
       type = result.type,
       contentId = result.contentId,
     })
-    local feedbackMessage = string.format("%s joined the run.", result.name or result.contentId or "Reward")
+    local feedbackMessage = string.format("%s was Seized.", result.name or result.contentId or "Charm")
 
     if result.type == "currency" and result.currency == "influence" then
-      feedbackMessage = string.format("Skipped reward for +%d Influence.", result.amount or 0)
+      feedbackMessage = string.format("Skipped Spoils for +%d Influence.", result.amount or 0)
     end
 
     if self:shouldUseBossRewardEvent() then
       feedbackMessage = string.format("%s was recorded for this victory.", result.name or result.contentId or "Reward")
     end
 
-    self:showFeedback("success", "Reward Claimed", feedbackMessage, {
+    self:showFeedback("success", "Charm Seized", feedbackMessage, {
       duration = 1.05,
       flashAlpha = 0.05,
       soundCue = "shop_purchase",
@@ -4102,6 +4182,8 @@ function Game:describeTriggeredSource(source)
     label = self:getStageModifierName(source.sourceId)
   elseif source.sourceType == "boss modifier" then
     label = self:getBossModifierName(source.sourceId)
+  elseif source.sourceType == "boss trick" then
+    label = self:getBossModifierName(source.sourceId)
   end
 
   if source.coinId and source.coinId ~= source.sourceId then
@@ -4137,24 +4219,41 @@ function Game:describeAction(action)
     return string.format("%s %s", action.op, string.upper(action.foretoldResult or "?"))
   end
 
-  if action.op == "forge_identity" then
-    return string.format("%s S%d<-S%d", action.op, action.targetSlotIndex or action.slotIndex or 0, action.sourceSlotIndex or 0)
-  end
-
-  if action.op == "redirect_score_credit" then
-    return string.format("%s S%d->S%d", action.op, action.sourceSlotIndex or action.slotIndex or 0, action.spotlightSlotIndex or action.targetSlotIndex or 0)
+  if action.op == "forge_trick_activations" then
+    return string.format("Rig ← %s: %d Trick%s", tostring(action.forgedFamily or "?"),
+      action.forgedActivationCount or 0, (action.forgedActivationCount or 0) == 1 and "" or "s")
   end
 
   if action.op == "swap_coins" then
     return string.format("%s S%d<->S%d", action.op, action.failedSlotIndex or 0, action.successSlotIndex or 0)
   end
 
+  if action.op == "replace_coin_from_hand" then
+    return string.format("%s S%d<-H%d", action.op, action.targetSlotIndex or action.slotIndex or 0, action.replacementDealtIndex or 0)
+  end
+
+  if action.op == "extract_failed_smuggling_coin" then
+    return string.format("%s S%d<-H%d", action.op, action.targetSlotIndex or action.slotIndex or 0, action.replacementDealtIndex or 0)
+  end
+
+  if action.op == "palm_failed_coin" then
+    return string.format("%s S%d->HAND", action.op, action.targetSelectedSlotIndex or action.targetSlotIndex or 0)
+  end
+
+  if action.op == "monte_rearrange" then
+    return string.format("%s %.0f->%.0f", action.op, action.beforeScore or 0, action.afterScore or 0)
+  end
+
   if action.op == "smuggle_coin_from_hand" then
     return string.format("%s B%d", action.op, action.boardSlotIndex or 0)
   end
 
+  if action.op == "copy_outcome" then
+    return string.format("Copy Outcome %s +%d", tostring(action.packetId or "?"), action.replayedScore or action.amount or 0)
+  end
+
   if action.op == "replay_resolution_packet" then
-    return string.format("%s %s +%d", action.op, tostring(action.packetId or "packet"), action.replayedScore or action.amount or 0)
+    return string.format("Replay Outcome %s +%d", tostring(action.packetId or "?"), action.replayedScore or action.amount or 0)
   end
 
   if action.op == "trigger_random_neighbor" then
@@ -4358,7 +4457,7 @@ function Game:getFlipLogLines(limit)
   local specialLines = {}
   local seenSpecialEvents = {}
 
-  local function addSmuggleLine(coinId, instanceId, overloadSlotIndex, sourceName)
+  local function addSmuggleLine(coinId, instanceId, overloadSlotIndex, sourceName, anchorSelectedSlotIndex)
     local key = string.format("smuggle:%s:%s:%s", tostring(instanceId), tostring(coinId), tostring(overloadSlotIndex))
 
     if seenSpecialEvents[key] then
@@ -4367,21 +4466,42 @@ function Game:getFlipLogLines(limit)
 
     seenSpecialEvents[key] = true
     table.insert(specialLines, string.format(
-      "COIN SMUGGLED: %s added to overload slot %s%s",
+      "COIN SMUGGLED: %s hidden beside slot %s%s",
       self:getCoinName(coinId),
-      tostring(overloadSlotIndex or "?"),
+      tostring(anchorSelectedSlotIndex or overloadSlotIndex or "?"),
       sourceName and string.format(" by %s", sourceName) or ""
     ))
   end
 
   for _, move in ipairs(batchResult.trace and batchResult.trace.smugglingMoves or {}) do
-    addSmuggleLine(move.coinId, move.instanceId, move.overloadSlotIndex, move.sourceName)
+    if move.op == "smuggle_coin_from_hand" or move.op == "copy_smuggled_coin" then
+      addSmuggleLine(move.coinId, move.instanceId, move.overloadSlotIndex, move.sourceName, move.anchorSelectedSlotIndex)
+    end
   end
 
   for _, action in ipairs(batchResult.trace and batchResult.trace.actions or {}) do
     if action.op == "smuggle_coin_from_hand" then
       local trace = action._trace or {}
-      addSmuggleLine(action.smuggledCoinId or action.coinId, action.smuggledInstanceId or action.instanceId, action.overloadSlotIndex, trace.sourceName)
+      addSmuggleLine(action.smuggledCoinId or action.coinId, action.smuggledInstanceId or action.instanceId, action.overloadSlotIndex, trace.sourceName, action.anchorSelectedSlotIndex)
+    elseif action.op == "extract_failed_smuggling_coin" and action.skipped ~= true then
+      table.insert(specialLines, string.format(
+        "VALUABLE COIN EXTRACTED: %s saved; %s took its Miss in slot %s",
+        self:getCoinName(action.savedCoinId),
+        self:getCoinName(action.replacementCoinId),
+        tostring(action.targetSelectedSlotIndex or action.targetSlotIndex or "?")
+      ))
+    elseif action.op == "palm_failed_coin" and action.skipped ~= true then
+      table.insert(specialLines, string.format(
+        "COIN PALMED: %s saved from slot %s",
+        self:getCoinName(action.targetCoinId or action.coinId),
+        tostring(action.targetSelectedSlotIndex or action.targetSlotIndex or "?")
+      ))
+    elseif action.op == "monte_rearrange" and action.skipped ~= true then
+      table.insert(specialLines, string.format(
+        "THREE-CARD MONTE: immediate score %.0f -> %.0f",
+        action.beforeScore or 0,
+        action.afterScore or 0
+      ))
     end
   end
 

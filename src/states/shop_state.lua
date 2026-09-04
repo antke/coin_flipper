@@ -26,6 +26,8 @@ function ShopState.new()
     selectedFountainCoinId = nil,
     selectedFountainInstanceId = nil,
     fountainStatusMessage = "",
+    pendingReplacementOfferIndex = nil,
+    replacementButtons = {},
   }, ShopState)
 end
 
@@ -33,7 +35,7 @@ function ShopState:canBuyOffer(app, offer)
   return offer and not offer.purchased and app.runState.influence >= offer.price
 end
 
-function ShopState:tryBuyOffer(app, offerIndex)
+function ShopState:tryBuyOffer(app, offerIndex, replacePosition)
   local offer = app.shopOffers and app.shopOffers[offerIndex] or nil
 
   if not offer then
@@ -51,16 +53,73 @@ function ShopState:tryBuyOffer(app, offerIndex)
     return false, "not_enough_shop_points"
   end
 
-  local ok, result = app:purchaseShopOffer(offerIndex)
+  local ok, result = app:purchaseShopOffer(offerIndex, replacePosition)
 
   if ok then
+    self.pendingReplacementOfferIndex = nil
     local traceMessages = result and result.trace and result.trace.messages or {}
     self.statusMessage = traceMessages[1] or string.format("Purchased offer %d.", offerIndex)
+  elseif result == "trick_board_full" then
+    self.pendingReplacementOfferIndex = offerIndex
+    self.statusMessage = "Your Trick board is full. Choose one active Trick to replace."
   else
     self.statusMessage = result
   end
 
   return ok, result
+end
+
+function ShopState:getReplacementOverlayLayout()
+  local width = math.min(720, love.graphics.getWidth() - (Theme.spacing.screenPadding * 2))
+  local height = 230
+  return {
+    x = math.floor((love.graphics.getWidth() - width) / 2),
+    y = math.floor((love.graphics.getHeight() - height) / 2),
+    width = width,
+    height = height,
+  }
+end
+
+function ShopState:buildReplacementButtons(app, layout)
+  local charms = app:getTrickCharmData()
+  local content = Panel.getContentArea(layout.x, layout.y, layout.width, layout.height, "Replace an Active Trick")
+  local gap = Theme.spacing.itemGap
+  local buttonWidth = math.floor((content.width - (gap * math.max(0, #charms - 1))) / math.max(1, #charms))
+  local buttons = {}
+  for position, charm in ipairs(charms) do
+    table.insert(buttons, {
+      x = content.x + ((position - 1) * (buttonWidth + gap)),
+      y = content.y + Theme.scale(54),
+      width = buttonWidth,
+      height = Theme.scale(72),
+      label = string.format("%d. %s", position, charm.name or charm.trickId),
+      variant = "warning",
+      onClick = function()
+        return self:tryBuyOffer(app, self.pendingReplacementOfferIndex, position)
+      end,
+    })
+  end
+  self.replacementButtons = buttons
+  return buttons
+end
+
+function ShopState:drawReplacementOverlay(app)
+  if not self.pendingReplacementOfferIndex then return end
+  local layout = self:getReplacementOverlayLayout()
+  love.graphics.setColor(0, 0, 0, 0.68)
+  love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+  Panel.draw(layout.x, layout.y, layout.width, layout.height, "Replace an Active Trick")
+  local content = Panel.getContentArea(layout.x, layout.y, layout.width, layout.height, "Replace an Active Trick")
+  love.graphics.setFont(app.fonts.small)
+  Theme.applyColor(Theme.colors.text)
+  love.graphics.printf(
+    "Buying this Trick requires discarding one active Charm. Press 1–5 or choose below; Esc cancels.",
+    content.x,
+    content.y,
+    content.width,
+    "center"
+  )
+  Button.drawButtons(self:buildReplacementButtons(app, layout), love.mouse.getPosition())
 end
 
 function ShopState:canReroll(app)
@@ -616,6 +675,19 @@ function ShopState:keypressed(app, key)
     return
   end
 
+  if self.pendingReplacementOfferIndex then
+    if key == "escape" then
+      self.pendingReplacementOfferIndex = nil
+      self.statusMessage = "Trick purchase cancelled."
+      return
+    end
+    local position = tonumber(key)
+    if position and position >= 1 and position <= #(app:getTrickCharmData() or {}) then
+      self:tryBuyOffer(app, self.pendingReplacementOfferIndex, position)
+    end
+    return
+  end
+
   local offerIndex = tonumber(key)
 
   if offerIndex and offerIndex >= 1 and offerIndex <= #app.shopOffers then
@@ -709,6 +781,7 @@ function ShopState:draw(app)
   end
   self:drawPurseDialog(app)
   self:drawFountainOverlay(app)
+  self:drawReplacementOverlay(app)
 end
 
 function ShopState:wheelmoved(app, _, y)
@@ -739,6 +812,12 @@ end
 
 function ShopState:mousepressed(app, x, y, button)
   if button ~= 1 then
+    return
+  end
+
+  if self.pendingReplacementOfferIndex then
+    local layout = self:getReplacementOverlayLayout()
+    Button.handleMousePressed(self:buildReplacementButtons(app, layout), x, y)
     return
   end
 

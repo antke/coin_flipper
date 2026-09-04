@@ -11,7 +11,7 @@ The game now behaves like a small coin-purse deckbuilder wrapped in coin-flip sh
 - duplicate coins are allowed
 - each flip draws a hand from the purse
 - the player chooses a call after seeing the hand
-- Sleight-style effects can physically swap, substitute or reposition coins without changing flip results
+- Sleight of Hand-style effects can physically swap or substitute coins without changing flip results
 - the player can reorder the final hand before flipping
 - flipped coins exhaust until the next stage
 - shop purchases add new coin instances to the purse
@@ -46,7 +46,7 @@ Ordered by likely value for the game right now, considering impact, implementati
    Luck has a sharper Fate identity now: fill the Luck Meter, boost Fountain Favor, and cash out Fated Flip payoffs/chains. Karma/failure builds remain a separate future question.
 
 8. **Mulligan Option**  
-     Too generic as a universal rule because Sleight already covers the main “fix this hand” fantasy. Better as a coin, character passive, or rare intervention.
+     Too generic as a universal rule because Sleight of Hand already covers the main “fix this hand” fantasy. Better as a coin, character passive, or rare intervention.
 
 9. **Player Characters**  
      Valuable later, once the purse loop has proven build archetypes for characters to modify.
@@ -70,13 +70,13 @@ The purse model is no longer an alternate prototype branch. It is the current co
 
 The game is now framed as coin-flip showdowns against opponents:
 
-> Build a growing purse, draw a tactical hand, arrange the coins, call Heads or Tails, flip, then let Sleight-style tricks physically move coin bodies through the resolved result slots to deal enough damage to defeat the opponent.
+> Build a growing purse, draw a tactical hand, arrange the coins, call Heads or Tails, flip, then let Sleight of Hand-style tricks physically move coin bodies through the resolved result slots to deal enough damage to defeat the opponent.
 
 ### Current pillars
 
 - **Opponent HP:** encounters are cleared by dealing damage until the opponent HP threshold is reached.
 - **Purse growth:** buying coins adds more coin instances instead of replacing a small fixed loadout.
-- **Variance with agency:** draws create variety, while Sleight and reordering give the player control.
+- **Variance with agency:** draws create variety, while Sleight of Hand and reordering give the player control.
 - **Hand-first play:** the current drawn hand should be the main decision object.
 - **Ordered resolution:** final left-to-right order matters for neighbour effects and pattern checks.
 - **Stage exhaustion:** flipped coins leave the available purse until the next stage.
@@ -86,7 +86,7 @@ The game is now framed as coin-flip showdowns against opponents:
 
 - Opponent names, HP, encounter variants, and boss encounters.
 - Starting purse plus draft picks that add special coin instances.
-- Purse draw, hand reorder, Sleight-style physical manipulation, and stage exhaustion.
+- Purse draw, hand reorder, Sleight of Hand-style physical manipulation, and stage exhaustion.
 - Duplicate coin purchases from the shop.
 - Shop rerolls, pricing by rarity, victory Chips, remaining-flip Chips, and overkill Chip rewards.
 - Neighbour/edge effects and ordered resolution.
@@ -96,12 +96,12 @@ The game is now framed as coin-flip showdowns against opponents:
 
 ### Design consequences
 
-- Future mechanics should usually interact with drawn hands, Sleight, final order, exhausted coins, opponent HP, overkill, or purse quality.
+- Future mechanics should usually interact with drawn hands, Sleight of Hand, final order, exhausted coins, opponent HP, overkill, or purse quality.
 - Avoid “score target” language in player-facing docs. Use damage, HP, opponent, defeat, overkill, and Chips.
 - Internal code still has legacy names such as `stageScore` and `targetScore`; docs should translate those to damage and opponent HP.
 - Fixed-slot language should be avoided unless explicitly discussing old/historical behavior.
 - Coin removal, thinning, merging, and upgrades are now purse-quality tools.
-- Interventions, mulligans, offerings, and non-Fate meters must avoid duplicating Sleight, Weighted or Fate’s Luck Meter role.
+- Interventions, mulligans, offerings, and non-Fate meters must avoid duplicating Sleight of Hand, Weighted or Fate’s Luck Meter role.
 
 ### Known cleanup issue
 
@@ -195,7 +195,7 @@ A basic flip log exists and can show coin outcomes, weight details, damage detai
 ### Future improvements
 
 - Show hand draw events.
-- Show Sleight movement, swap, substitution and moved-layout rescore events.
+- Show Sleight of Hand swap and substitution events.
 - Show reorder events and final order.
 - Show triggered coin hooks in player-readable language.
 - Show neighbour effects and their targets.
@@ -208,11 +208,11 @@ A basic flip log exists and can show coin outcomes, weight details, damage detai
 - Keep the log hidden by default.
 - Use concise player-facing descriptions instead of raw internal hook names wherever possible.
 - Preserve enough detail to debug confusing damage outcomes.
-- Keep chronology clear: draw → select/reorder → flip → Sleight movement/effects → damage/rewards → opponent check.
+- Keep chronology clear: draw → select/reorder → flip → Sleight of Hand effects → damage/rewards → opponent check.
 
 ### Technical notes
 
-- Current history already tracks draw, Sleight, reorder, hook, and flip data in several places.
+- Current history already tracks draw, Sleight of Hand, reorder, hook, and flip data in several places.
 - The log should combine those into a chronological resolution story.
 - Long-term, replay/debug logs and player-facing logs may need different formatting layers.
 
@@ -232,11 +232,11 @@ A basic flip log exists and can show coin outcomes, weight details, damage detai
 
 - Can a player answer “why did that happen?” after opening the log?
 - Does the main stage view stay clean when the log is closed?
-- Are combo/neighbour/Sleight events understandable without reading code-like terms?
+- Are combo/neighbour/Sleight of Hand events understandable without reading code-like terms?
 
 ### Comment
 
-This should be incremental. The log exists; the next upgrade should be better event wording for Sleight/reorder/hook triggers rather than a large new interface.
+This should be incremental. The log exists; the next upgrade should be better event wording for Sleight of Hand/reorder/hook triggers rather than a large new interface.
 
 ---
 
@@ -252,7 +252,7 @@ The presentation foundation already exists. The next step is not “add feedback
 
 - Coin reveal motion.
 - Match/miss particles.
-- Sleight animation.
+- Sleight of Hand animation.
 - Central outcome burst labels.
 - Current labels include ideas such as `COMBO`, `OVERKILL`, `CLUTCH`, `JACKPOT`, and match-count based praise.
 
@@ -270,7 +270,7 @@ The presentation foundation already exists. The next step is not “add feedback
 ### Requirements
 
 - Detect notable hand outcomes, not just stage clear/fail.
-- Detect when Sleight materially improves a moved layout or triggers a valuable effect.
+- Detect when Sleight of Hand materially improves a fixed result slot.
 - Detect high-value reorder/neighbour/pattern outcomes.
 - Keep messages short and rare enough to feel special.
 - Avoid duplicating information already visible in the opponent/damage panel.
@@ -279,7 +279,7 @@ The presentation foundation already exists. The next step is not “add feedback
 
 - Extend the existing outcome burst before adding a new presentation system.
 - Feedback should be driven by scoring/resolution facts, not UI guesses.
-- Useful trigger inputs include match count, damage delta, Chips delta, overkill amount, final hand pattern, Sleight history, reorder history, and triggered sources.
+- Useful trigger inputs include match count, damage delta, Chips delta, overkill amount, final hand pattern, Sleight of Hand history, reorder history, and triggered sources.
 - Label priority matters: a combo overkill clutch hand should not spam three competing banners.
 
 ### Risks
@@ -429,7 +429,7 @@ This is now implemented as a baseline direction. Future work should be content e
 
 Reward specific final hand patterns as combo goals, such as `HHH`, `HTH`, all same, alternating results, edge matches, or call-aligned sequences.
 
-Pattern checks happen after reordering, coin flips, Sleight movement, and any result-modifying effects.
+Pattern checks happen after reordering, coin flips, Sleight of Hand movement, and any result-modifying effects.
 
 ### Current baseline
 
@@ -463,7 +463,7 @@ Pattern checks happen after reordering, coin flips, Sleight movement, and any re
 ### Design effect
 
 - Adds build variety beyond simply calling Heads or Tails.
-- Gives Sleight and reorder more concrete goals.
+- Gives Sleight of Hand and reorder more concrete goals.
 - Creates exciting “can I line this up?” moments.
 
 ### Risks
@@ -500,7 +500,7 @@ Add rare special actions that manipulate results, protect against a bad outcome,
 
 ### Requirements
 
-- Interventions must be clearly distinct from Sleight.
+- Interventions must be clearly distinct from Sleight of Hand.
 - They should probably be rare, charged, or expensive.
 - UI must show when they can be activated.
 - Effects must resolve at a clear point: likely after reveal but before final scoring, or at a special failure-prevention window.
@@ -521,7 +521,7 @@ Add rare special actions that manipulate results, protect against a bad outcome,
 
 - Post-flip manipulation is extremely powerful because it uses full information.
 - Too many interventions can make the initial flip feel less important.
-- It can overlap with Sleight, Weighted result manipulation, Fate/Luck Meter payoffs, Karma, and mulligans.
+- It can overlap with Sleight of Hand, Weighted result manipulation, Fate/Luck Meter payoffs, Karma, and mulligans.
 
 ### Evaluation criteria
 
@@ -557,7 +557,7 @@ Fate now owns Luck Meter direction: correct guesses and Fate Tricks fill Luck, F
 ### Requirements
 
 - Luck and Karma must have distinct identities; Luck is Fate/Fated Flip, Karma is failure space if it exists.
-- Define when meters are gained and spent: before hand, after draw, after Sleight, after flip, or between stages.
+- Define when meters are gained and spent: before hand, after draw, after Sleight of Hand, after flip, or between stages.
 - UI must be small enough not to compete with the hand.
 - Spending must not become an automatic always-correct action.
 
@@ -576,7 +576,7 @@ Fate now owns Luck Meter direction: correct guesses and Fate Tricks fill Luck, F
 ### Risks
 
 - If both meters just “improve odds,” the system adds UI without much payoff.
-- Meter spending can overlap with Sleight, Weighted and interventions if it starts fixing individual coins.
+- Meter spending can overlap with Sleight of Hand, Weighted and interventions if it starts fixing individual coins.
 - Too many manipulation layers can make the game feel overcontrolled.
 
 ### Evaluation criteria
@@ -600,7 +600,7 @@ Allow a limited reroll/redraw/reset action.
 ### Possible versions
 
 - Redraw one hand slot before flip.
-- Grant one extra Sleight movement or substitution on a resolved slot.
+- Grant one extra Sleight of Hand swap or substitution on a resolved slot.
 - Reroll one revealed coin after the flip.
 - Redraw one shop offer.
 - Replace the whole hand at a major cost.
@@ -609,11 +609,11 @@ Allow a limited reroll/redraw/reset action.
 
 - The mulligan target must be specific.
 - Uses must be tracked clearly.
-- It should not duplicate normal Sleight.
+- It should not duplicate normal Sleight of Hand.
 
 ### Technical notes
 
-- A pre-flip hand-slot mulligan is close to the old draw-fixing version of Sleight and probably should be a coin/passive, not a universal rule.
+- A pre-flip hand-slot mulligan is close to the old draw-fixing version of Sleight of Hand and probably should be a coin/passive, not a universal rule.
 - A post-flip reroll requires result transformation and replay logging.
 - A shop mulligan could be implemented through existing reroll systems.
 
@@ -630,7 +630,7 @@ Allow a limited reroll/redraw/reset action.
 ### Evaluation criteria
 
 - Does the mulligan solve a specific frustration?
-- Is it different enough from Sleight?
+- Is it different enough from Sleight of Hand?
 - Does it feel valuable without becoming mandatory?
 
 ### Comment
@@ -648,7 +648,7 @@ At the beginning of a run, let the player choose a character. Each character cha
 ### Example characters
 
 - **Gambler:** higher payouts on perfect hands, harsher penalties on misses.
-- **Magician:** one extra Sleight movement per stage or improved substitution targeting.
+- **Magician:** one extra Sleight of Hand swap per stage or improved substitution targeting.
 - **Collector:** starts with more special coins but a larger/weaker purse.
 - **Oracle:** sees limited damage/odds previews.
 - **Scoundrel:** starts with extra shop rerolls or better information about offers.
@@ -664,7 +664,7 @@ At the beginning of a run, let the player choose a character. Each character cha
 
 - Character definitions need id, name, description, unlock condition, and passive effect.
 - Run state should reference selected character.
-- Passive effects may touch starter purse, Sleight movement/rescore count, shop generation, scoring, or feedback.
+- Passive effects may touch starter purse, Sleight of Hand swap/substitution count, shop generation, scoring, or feedback.
 
 ### Design effect
 
@@ -706,7 +706,7 @@ Show a damage estimate or explanation when hovering over a possible action, hand
 
 ### Requirements
 
-- Decide whether previews explain current hand, possible Sleight outcomes, or shop purchases.
+- Decide whether previews explain current hand, possible Sleight of Hand outcomes, or shop purchases.
 - Avoid revealing so much that the hand puzzle becomes solved automatically.
 - Preview must stay accurate enough to be trusted.
 
@@ -755,7 +755,7 @@ Before a flip, the player can sacrifice damage, Chips, coins, meter value, or an
 
 ### Requirements
 
-- Offerings must be meaningfully different from normal betting, Sleight, and interventions.
+- Offerings must be meaningfully different from normal betting, Sleight of Hand, and interventions.
 - The sacrifice and effect must be shown clearly.
 - The player must be able to skip.
 - Choices should be dramatic, not automatic expected-value calculations.
@@ -776,7 +776,7 @@ Before a flip, the player can sacrifice damage, Chips, coins, meter value, or an
 
 - “Pay Chips to improve odds” may be too solvable.
 - Overlaps with Luck/Karma and interventions.
-- Adds another pre-flip step to a loop that already has draw, select/reorder, call, flip, Sleight movement, and score.
+- Adds another pre-flip step to a loop that already has draw, select/reorder, call, flip, Sleight of Hand movement, and score.
 
 ### Evaluation criteria
 
@@ -856,7 +856,7 @@ Keep this as a future run-structure layer. It should wait until the hand loop, p
 
 This idea has effectively graduated into the current hybrid purse baseline.
 
-The original version asked whether the game should replace fixed slots with a purse/deckbuilder model. That decision has now been made in a hybrid form: the player builds a purse, draws hands, arranges selected coins, flips them, and can support the result with Sleight-style physical movement.
+The original version asked whether the game should replace fixed slots with a purse/deckbuilder model. That decision has now been made in a hybrid form: the player builds a purse, draws hands, arranges selected coins, flips them, and can support the result with Sleight of Hand-style physical movement.
 
 ### Remaining follow-ups
 

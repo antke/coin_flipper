@@ -1,43 +1,21 @@
-local batchQueueEffectStageClear = require("scripts.fixtures.engine.scenarios.batch_queue_effect_stage_clear")
-local blackMarketCoinBiasedOffers = require("scripts.fixtures.engine.scenarios.black_market_coin_biased_offers")
-local chainDominoLinePropagation = require("scripts.fixtures.engine.scenarios.chain_domino_line_propagation")
-local dealSelectRefillRoundFlow = require("scripts.fixtures.engine.scenarios.deal_select_refill_round_flow")
-local enemyClassTrickRewardPool = require("scripts.fixtures.engine.scenarios.enemy_class_trick_reward_pool")
-local fateOmenEngineLuckGain = require("scripts.fixtures.engine.scenarios.fate_omen_engine_luck_gain")
-local forgeryBorrowedNameIdentity = require("scripts.fixtures.engine.scenarios.forgery_borrowed_name_identity")
-local weightedTrickWeightActions = require("scripts.fixtures.engine.scenarios.weighted_trick_weight_actions")
-local misdirectionCrookedSpotlightCredit = require("scripts.fixtures.engine.scenarios.misdirection_crooked_spotlight_credit")
-local mechanicsArchitectureContracts = require("scripts.fixtures.engine.scenarios.mechanics_architecture_contracts")
-local perCoinScoreEvents = require("scripts.fixtures.engine.scenarios.per_coin_score_events")
-local preparedBuildBootstrap = require("scripts.fixtures.engine.scenarios.prepared_build_bootstrap")
-local prestigeEncoreReplayPacket = require("scripts.fixtures.engine.scenarios.prestige_encore_replay_packet")
-local predictionForetoldScore = require("scripts.fixtures.engine.scenarios.prediction_foretold_score")
-local shopPurchaseBoundary = require("scripts.fixtures.engine.scenarios.shop_purchase_boundary")
-local sleightSwitcherooSwap = require("scripts.fixtures.engine.scenarios.sleight_switcheroo_swap")
-local smugglingSelectedScopeContracts = require("scripts.fixtures.engine.scenarios.smuggling_selected_scope_contracts")
-local smugglingSleevePocketOverload = require("scripts.fixtures.engine.scenarios.smuggling_sleeve_pocket_overload")
-local unorderedSlotIdentityReplay = require("scripts.fixtures.engine.scenarios.unordered_slot_identity_replay")
-local bootstrapAndShopRules = require("scripts.fixtures.engine.scenarios.bootstrap_and_shop_rules")
-
+-- The family-trigger migration intentionally retires fixtures that assert the
+-- superseded global-passive, Fate-Trick, Extortion, or fresh-hand rules. Their
+-- files remain as historical specifications; this registry contains the live
+-- engine contract.
 return {
-  batchQueueEffectStageClear,
-  blackMarketCoinBiasedOffers,
-  chainDominoLinePropagation,
-  dealSelectRefillRoundFlow,
-  enemyClassTrickRewardPool,
-  fateOmenEngineLuckGain,
-  forgeryBorrowedNameIdentity,
-  weightedTrickWeightActions,
-  misdirectionCrookedSpotlightCredit,
-  mechanicsArchitectureContracts,
-  perCoinScoreEvents,
-  preparedBuildBootstrap,
-  prestigeEncoreReplayPacket,
-  predictionForetoldScore,
-  shopPurchaseBoundary,
-  sleightSwitcherooSwap,
-  smugglingSelectedScopeContracts,
-  smugglingSleevePocketOverload,
-  unorderedSlotIdentityReplay,
-  bootstrapAndShopRules,
+  require("scripts.fixtures.engine.scenarios.black_market_coin_biased_offers"),
+  require("scripts.fixtures.engine.scenarios.bootstrap_and_shop_rules"),
+  require("scripts.fixtures.engine.scenarios.deal_select_refill_round_flow"),
+  require("scripts.fixtures.engine.scenarios.enemy_class_trick_reward_pool"),
+  require("scripts.fixtures.engine.scenarios.family_trigger_content_contracts"),
+  require("scripts.fixtures.engine.scenarios.forgery_fake_credentials_outcome"),
+  require("scripts.fixtures.engine.scenarios.forgery_hybrid_activations"),
+  require("scripts.fixtures.engine.scenarios.mechanics_architecture_contracts"),
+  require("scripts.fixtures.engine.scenarios.per_coin_score_events"),
+  require("scripts.fixtures.engine.scenarios.prepared_build_bootstrap"),
+  require("scripts.fixtures.engine.scenarios.seeded_content_distribution"),
+  require("scripts.fixtures.engine.scenarios.simulation_policy_contracts"),
+  require("scripts.fixtures.engine.scenarios.sleight_of_hand_value_actions"),
+  require("scripts.fixtures.engine.scenarios.smuggling_quality_and_extraction"),
+  require("scripts.fixtures.engine.scenarios.unordered_slot_identity_replay"),
 }

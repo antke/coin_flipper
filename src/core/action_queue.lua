@@ -1,6 +1,8 @@
 local Coins = require("src.content.coins")
+local ActivationActions = require("src.core.actions.activation_actions")
 local ChainActions = require("src.core.actions.chain_actions")
 local CoinChanceActions = require("src.core.actions.coin_chance_actions")
+local CrumbleSystem = require("src.systems.crumble_system")
 local EconomyActions = require("src.core.actions.economy_actions")
 local EffectiveValueSystem = require("src.systems.effective_value_system")
 local GameConfig = require("src.app.config")
@@ -14,6 +16,7 @@ local ScoreBreakdown = require("src.domain.score_breakdown")
 local ScoreActions = require("src.core.actions.score_actions")
 local ShopActions = require("src.core.actions.shop_actions")
 local TargetSelectors = require("src.core.target_selectors")
+local TrickBoardActions = require("src.core.actions.trick_board_actions")
 local Upgrades = require("src.content.upgrades")
 local Utils = require("src.core.utils")
 
@@ -36,18 +39,29 @@ ActionQueue.ACQUISITION_SAFE_OPS = {
 ActionQueue.KNOWN_OPS = {
   add_stage_score = true,
   add_run_score = true,
+  heal_opponent = true,
   add_influence = true,
   add_shop_points = true,
   add_luck = true,
   add_weight = true,
   set_call_match_chance = true,
   foretell_coin_result = true,
-  forge_identity = true,
-  redirect_score_credit = true,
+  amplify_foretold_neighbors = true,
+  forge_trick_activations = true,
   swap_coins = true,
+  replace_coin_from_hand = true,
+  extract_failed_smuggling_coin = true,
+  palm_failed_coin = true,
+  monte_rearrange = true,
+  add_next_hand_draws = true,
+  copy_smuggled_coin = true,
+  copy_outcome = true,
   smuggle_coin_from_hand = true,
   replay_resolution_packet = true,
   trigger_random_neighbor = true,
+  reactivate_coin = true,
+  repeat_trick = true,
+  set_trick_pressure = true,
   modify_coin_weight = true,
   apply_score_scaling = true,
   apply_score_multiplier = true,
@@ -107,9 +121,22 @@ local function recordWarning(context, message)
   table.insert(context.trace.notes, message)
 end
 
-local function getOnceKey(action, defaultKey)
+local function getOnceKey(context, action, defaultKey)
   if type(action.onceKey) == "string" and action.onceKey ~= "" then
     return action.onceKey
+  end
+
+  local trace = action._trace or nil
+  if trace and trace.sourceId ~= nil then
+    return table.concat({
+      tostring(defaultKey),
+      tostring(trace.phase or context.currentPhase or "phase"),
+      tostring(trace.sourceType or "source"),
+      tostring(trace.sourceId),
+      tostring(trace.triggerIndex or 0),
+      tostring(trace.effectIndex or 0),
+      tostring((context.currentActivation and context.currentActivation.activationId) or trace.activationId or "no_activation"),
+    }, "|")
   end
 
   return defaultKey
@@ -377,11 +404,21 @@ local function grantUpgradeFromAction(runState, stageState, context, action)
     error("unknown_upgrade")
   end
 
-  runState.ownedTrickIds = runState.ownedTrickIds or runState.ownedUpgradeIds or {}
-  runState.ownedUpgradeIds = runState.ownedTrickIds
+  local TrickBoardSystem = require("src.systems.trick_board_system")
+  local acquired, result = TrickBoardSystem.acquire(runState, trickId, action.replacePosition)
+  if not acquired then
+    action.skipped = true
+    action.skipReason = type(result) == "table" and result.code or result
+    action.replacementRequired = type(result) == "table" and Utils.clone(result) or nil
+    return definition
+  end
 
-  if not Utils.contains(runState.ownedTrickIds, trickId) then
-    table.insert(runState.ownedTrickIds, trickId)
+  action.acquisitionMode = result.mode
+  action.replacedTrickIds = result.replacedTrickId and { result.replacedTrickId } or {}
+  if result.replacedTrickId then
+    CrumbleSystem.clearState(runState, result.replacedTrickId)
+  end
+  if result.mode ~= "already_owned" then
     ActionQueue.applyAll(runState, stageState, context, cloneOnAcquireActions(definition.onAcquire))
   end
 
@@ -463,6 +500,14 @@ function ActionQueue.validateAction(action)
     end
   end
 
+  if ActivationActions.isActivationOp(action.op) then
+    return ActivationActions.validate(action)
+  end
+
+  if TrickBoardActions.isTrickBoardOp(action.op) then
+    return TrickBoardActions.validate(action)
+  end
+
   if action.op == "grant_coin" and (type(action.coinId) ~= "string" or action.coinId == "") then
     return false, "grant_coin requires coinId"
   end
@@ -531,7 +576,9 @@ function ActionQueue.apply(runState, stageState, context, action)
     IdentityActions.apply(context, action, {
       recordWarning = recordWarning,
       claimOnce = claimOnce,
-      getOnceKey = getOnceKey,
+      getOnceKey = function(candidate, defaultKey)
+        return getOnceKey(context, candidate, defaultKey)
+      end,
     })
   elseif PurseActions.isPurseOp(action.op) then
     PurseActions.apply(runState, stageState, context, action, { recordWarning = recordWarning })
@@ -539,14 +586,23 @@ function ActionQueue.apply(runState, stageState, context, action)
     ReplayActions.apply(runState, stageState, context, action, {
       recordWarning = recordWarning,
       claimOnce = claimOnce,
-      getOnceKey = getOnceKey,
+      getOnceKey = function(candidate, defaultKey)
+        return getOnceKey(context, candidate, defaultKey)
+      end,
     })
   elseif ChainActions.isChainOp(action.op) then
     ChainActions.apply(context, action, {
       recordWarning = recordWarning,
       claimOnce = claimOnce,
-      getOnceKey = getOnceKey,
+      getOnceKey = function(candidate, defaultKey)
+        return getOnceKey(context, candidate, defaultKey)
+      end,
     })
+  elseif ActivationActions.isActivationOp(action.op) then
+    ActivationActions.apply(runState, stageState, context, action)
+  elseif TrickBoardActions.isTrickBoardOp(action.op) then
+    requireStageState(stageState, action.op)
+    TrickBoardActions.apply(runState, stageState, context, action, { recordWarning = recordWarning })
   elseif action.op == "set_batch_flag" then
     context.batchFlags[action.flag] = action.value ~= false
   elseif action.op == "set_shop_flag" then

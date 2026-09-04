@@ -48,6 +48,11 @@ local function currentPurchaseIdentity(context)
   }, ":") or nil
 end
 
+local function currentActivationIdentity(context)
+  local activation = context and context.currentActivation or nil
+  return activation and activation.activationId or nil
+end
+
 local function claim(context, key, limit)
   context.triggerScopeCounts = context.triggerScopeCounts or {}
 
@@ -73,6 +78,13 @@ function TriggerScope.shouldRun(phaseName, source, trigger, triggerIndex, contex
   local definition = source and source.definition or nil
   local scope = definition and ((definition.trick and definition.trick.scope) or definition.scope) or {}
   local baseKey = triggerKey(phaseName, source, triggerIndex)
+
+  if scope.oncePerActivation == true then
+    local activationIdentity = currentActivationIdentity(context)
+    if activationIdentity and not claimLimit(context, baseKey, "oncePerActivation", activationIdentity, 1) then
+      return false
+    end
+  end
 
   if scope.maxTriggersPerCoin ~= nil then
     local coinIdentity = currentCoinIdentity(context)

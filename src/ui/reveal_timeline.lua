@@ -8,6 +8,8 @@ local DEFAULTS = {
   effectHoldDuration = 0.128,
   scoreHoldDuration = 0.056,
   linkDuration = 0.208,
+  sleightMoveDuration = 0.160,
+  threeCupsDuration = 1.48,
 }
 
 local ALLOWED_SOURCE_TYPES = {
@@ -17,15 +19,24 @@ local ALLOWED_SOURCE_TYPES = {
 }
 
 local LINK_ACTION_OPS = {
-  forge_identity = true,
-  redirect_score_credit = true,
+  copy_outcome = true,
+  forge_trick_activations = true,
   replay_resolution_packet = true,
   swap_coins = true,
+  replace_coin_from_hand = true,
+  extract_failed_smuggling_coin = true,
+  palm_failed_coin = true,
+  monte_rearrange = true,
   trigger_random_neighbor = true,
 }
 
 local SPECIAL_ACTION_LABELS = {
+  copy_outcome = "OUTCOME COUNTERFEITED",
+  forge_trick_activations = "TRICK IMITATED",
   smuggle_coin_from_hand = "COIN SMUGGLED",
+  extract_failed_smuggling_coin = "VALUABLE COIN EXTRACTED",
+  palm_failed_coin = "COIN PALMED",
+  monte_rearrange = "THREE-CARD MONTE",
 }
 
 local function clamp(value, minimum, maximum)
@@ -169,8 +180,6 @@ local function collectLinks(batchResult, lookup)
       local sourceIndex = action.sourceResolutionIndex or (action._trace and action._trace.resolutionIndex) or action.resolutionIndex
 
       addLink(links, seen, sourceIndex, action.targetResolutionIndex, action, lookup, action.op, order)
-      addLink(links, seen, sourceIndex, action.spotlightResolutionIndex, action, lookup, action.op, order)
-      addLink(links, seen, sourceIndex, action.scoreCreditResolutionIndex, action, lookup, action.op, order)
       addLink(links, seen, sourceIndex, action.packetResolutionIndex, action, lookup, action.op, order)
       addLink(links, seen, sourceIndex, action.chainedResolutionIndex, action, lookup, action.op, order)
 
@@ -258,13 +267,20 @@ local function collectSpecialEvents(batchResult, timeline)
   for _, action in ipairs(trace and trace.actions or {}) do
     if SPECIAL_ACTION_LABELS[action.op] then
       local resolutionIndex = getResolutionIndex(action.resolutionIndex or action.boardSlotIndex)
+      local range = timeline and timeline.coinRangesByResolution and timeline.coinRangesByResolution[resolutionIndex] or nil
+      local isPostFlipMove = action.op == "extract_failed_smuggling_coin"
+        or action.op == "palm_failed_coin"
+        or action.op == "monte_rearrange"
+      local startTime = isPostFlipMove
+        and ((range and range.startTime or 0) + ((timeline and timeline.coinMotionDuration or DEFAULTS.coinMotionDuration) * 0.82))
+        or 0
       addSpecialEvent(events, seen, {
         kind = action.op,
         label = SPECIAL_ACTION_LABELS[action.op],
         coinId = action.smuggledCoinId or action.coinId,
         instanceId = action.smuggledInstanceId or action.instanceId,
         resolutionIndex = resolutionIndex,
-        startTime = 0,
+        startTime = startTime,
       })
     end
   end
@@ -274,6 +290,119 @@ local function collectSpecialEvents(batchResult, timeline)
   end)
 
   return events
+end
+
+local function addSleightTravel(travels, move, fields)
+  local coinId = fields.coinId
+
+  if not coinId then
+    return false
+  end
+
+  table.insert(travels, {
+    op = move.op,
+    coinId = coinId,
+    instanceId = fields.instanceId,
+    sourceResolutionIndex = getResolutionIndex(fields.sourceResolutionIndex),
+    targetResolutionIndex = getResolutionIndex(fields.targetResolutionIndex),
+    sourceKind = fields.sourceKind,
+    targetKind = fields.targetKind,
+    sourceDealtIndex = fields.sourceDealtIndex,
+    targetDealtIndex = fields.targetDealtIndex,
+    order = fields.order or 0,
+  })
+
+  return true
+end
+
+local function collectSleightTravels(batchResult)
+  local trace = batchResult and batchResult.trace or nil
+  local travels = {}
+  local order = 0
+
+  for _, move in ipairs(trace and trace.sleightMoves or {}) do
+    if move.op == "swap_coins" then
+      order = order + 1
+
+      addSleightTravel(travels, move, {
+        coinId = move.failedCoinId,
+        instanceId = move.failedInstanceId,
+        sourceResolutionIndex = move.failedResolutionIndex,
+        targetResolutionIndex = move.successResolutionIndex,
+        order = order,
+      })
+      addSleightTravel(travels, move, {
+        coinId = move.successCoinId,
+        instanceId = move.successInstanceId,
+        sourceResolutionIndex = move.successResolutionIndex,
+        targetResolutionIndex = move.failedResolutionIndex,
+        order = order,
+      })
+    elseif move.op == "replace_coin_from_hand" then
+      order = order + 1
+
+      addSleightTravel(travels, move, {
+        coinId = move.replacementCoinId,
+        instanceId = move.replacementInstanceId,
+        sourceKind = "hand",
+        sourceDealtIndex = move.replacementDealtIndex,
+        targetResolutionIndex = move.targetResolutionIndex,
+        order = order,
+      })
+      addSleightTravel(travels, move, {
+        coinId = move.targetCoinId,
+        instanceId = move.targetInstanceId,
+        sourceResolutionIndex = move.targetResolutionIndex,
+        targetKind = "hand",
+        targetDealtIndex = move.replacementDealtIndex,
+        order = order,
+      })
+    elseif move.op == "palm_failed_coin" then
+      order = order + 1
+      addSleightTravel(travels, move, {
+        coinId = move.coinId,
+        instanceId = move.instanceId,
+        sourceResolutionIndex = move.targetResolutionIndex,
+        targetKind = "hand",
+        targetDealtIndex = move.targetDealtIndex,
+        order = order,
+      })
+    elseif move.op == "monte_rearrange" then
+      order = order + 1
+      for _, bodyMove in ipairs(move.moves or {}) do
+        addSleightTravel(travels, move, {
+          coinId = bodyMove.coinId,
+          instanceId = bodyMove.instanceId,
+          sourceResolutionIndex = bodyMove.sourceResolutionIndex,
+          targetResolutionIndex = bodyMove.targetResolutionIndex,
+          order = order,
+        })
+      end
+    end
+  end
+
+  for _, move in ipairs(trace and trace.smugglingExtractions or {}) do
+    order = order + 1
+
+    addSleightTravel(travels, move, {
+      coinId = move.replacementCoinId,
+      instanceId = move.replacementInstanceId,
+      sourceKind = "hand",
+      sourceDealtIndex = move.replacementDealtIndex,
+      targetResolutionIndex = move.targetResolutionIndex,
+      order = order,
+    })
+    addSleightTravel(travels, move, {
+      coinId = move.savedCoinId,
+      instanceId = move.savedInstanceId,
+      sourceResolutionIndex = move.targetResolutionIndex,
+      targetKind = "hand",
+      targetDealtIndex = move.replacementDealtIndex,
+      order = order,
+    })
+  end
+
+  return travels
 end
 
 local function hasSmuggleEvent(batchResult)
@@ -312,8 +441,56 @@ local function buildOptions(options)
     effectHoldDuration = tonumber(source.effectHoldDuration) or DEFAULTS.effectHoldDuration,
     scoreHoldDuration = tonumber(source.scoreHoldDuration) or DEFAULTS.scoreHoldDuration,
     linkDuration = tonumber(source.linkDuration) or DEFAULTS.linkDuration,
+    sleightMoveDuration = tonumber(source.sleightMoveDuration) or DEFAULTS.sleightMoveDuration,
+    threeCupsDuration = tonumber(source.threeCupsDuration) or DEFAULTS.threeCupsDuration,
     trickCallouts = source.trickCallouts,
   }
+end
+
+local function getLandTime(timeline, resolutionIndex)
+  local normalizedResolutionIndex = getResolutionIndex(resolutionIndex)
+
+  if not normalizedResolutionIndex then
+    return nil
+  end
+
+  local startTime = timeline.coinStartsByResolution[normalizedResolutionIndex]
+
+  if startTime == nil then
+    return nil
+  end
+
+  return startTime + ((timeline.coinMotionDuration or DEFAULTS.coinMotionDuration) * 0.78)
+end
+
+local function resolveSleightStartTime(timeline, travel, holdDuration)
+  local sourceLandTime = getLandTime(timeline, travel.sourceResolutionIndex)
+  local targetLandTime = getLandTime(timeline, travel.targetResolutionIndex)
+  local startTime = math.max(sourceLandTime or 0, targetLandTime or 0)
+
+  return startTime + ((holdDuration or DEFAULTS.effectHoldDuration) * 0.34)
+end
+
+local function scheduleSleightTravels(timeline, travels, options)
+  local latestEndTime = timeline.displayDuration or 0
+
+  for _, travel in ipairs(travels or {}) do
+    local speedFactor = getEventSpeedFactor(travel.order or 1)
+    travel.startTime = resolveSleightStartTime(timeline, travel, options.effectHoldDuration)
+    travel.duration = (options.sleightMoveDuration or DEFAULTS.sleightMoveDuration) * speedFactor
+    latestEndTime = math.max(latestEndTime, travel.startTime + travel.duration)
+    table.insert(timeline.sleightTravels, travel)
+  end
+
+  table.sort(timeline.sleightTravels, function(left, right)
+    if (left.startTime or 0) == (right.startTime or 0) then
+      return (left.order or 0) < (right.order or 0)
+    end
+
+    return (left.startTime or 0) < (right.startTime or 0)
+  end)
+
+  timeline.displayDuration = math.max(timeline.displayDuration or 0, latestEndTime + 0.24)
 end
 
 function RevealTimeline.build(batchResult, options)
@@ -321,6 +498,7 @@ function RevealTimeline.build(batchResult, options)
   local trace = batchResult and batchResult.trace or nil
   local lookup = buildSourceLookup(trace)
   local links = collectLinks(batchResult, lookup)
+  local sleightTravels = collectSleightTravels(batchResult)
   local linksBySource = groupLinksBySource(links)
   local scoreEntriesByResolution = collectScoreEntries(batchResult, timelineOptions.trickCallouts)
   local timeline = {
@@ -329,13 +507,17 @@ function RevealTimeline.build(batchResult, options)
     coinStartsByResolution = {},
     coinRangesByResolution = {},
     links = {},
+    sleightTravels = {},
     scoreBounces = {},
     scoreFeed = {},
     eventFeed = {},
     revealDuration = 0,
     displayDuration = 0,
+    threeCupsDuration = trace and trace.threeCups and trace.threeCups.palmed
+      and timelineOptions.threeCupsDuration or 0,
   }
-  local currentTime = hasSmuggleEvent(batchResult) and (timelineOptions.baseHoldDuration + timelineOptions.effectHoldDuration) or 0
+  local currentTime = timeline.threeCupsDuration
+    + (hasSmuggleEvent(batchResult) and (timelineOptions.baseHoldDuration + timelineOptions.effectHoldDuration) or 0)
   local perCoin = batchResult and batchResult.perCoin or {}
 
   for index, coinState in ipairs(perCoin) do
@@ -409,6 +591,7 @@ function RevealTimeline.build(batchResult, options)
 
   timeline.revealDuration = timeline.coinStarts[#perCoin] or 0
   timeline.displayDuration = currentTime + 0.82
+  scheduleSleightTravels(timeline, sleightTravels, timelineOptions)
   timeline.eventFeed = collectSpecialEvents(batchResult, timeline)
 
   return timeline
@@ -451,6 +634,28 @@ function RevealTimeline.getActiveLinks(timeline, elapsed)
 
       copy.age = age
       copy.progress = clamp(age / math.max(0.001, link.duration or DEFAULTS.linkDuration), 0, 1)
+      table.insert(active, copy)
+    end
+  end
+
+  return active
+end
+
+function RevealTimeline.getActiveSleightTravels(timeline, elapsed)
+  local active = {}
+
+  for _, travel in ipairs(timeline and timeline.sleightTravels or {}) do
+    local age = (elapsed or 0) - (travel.startTime or 0)
+
+    if age >= 0 and age < (travel.duration or DEFAULTS.sleightMoveDuration) then
+      local copy = {}
+
+      for key, value in pairs(travel) do
+        copy[key] = value
+      end
+
+      copy.age = age
+      copy.progress = clamp(age / math.max(0.001, travel.duration or DEFAULTS.sleightMoveDuration), 0, 1)
       table.insert(active, copy)
     end
   end

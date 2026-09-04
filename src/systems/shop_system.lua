@@ -1,6 +1,7 @@
 local AcquisitionSystem = require("src.systems.acquisition_system")
 local ActionQueue = require("src.core.action_queue")
 local Coins = require("src.content.coins")
+local CrumbleSystem = require("src.systems.crumble_system")
 local EffectiveValueSystem = require("src.systems.effective_value_system")
 local GameConfig = require("src.app.config")
 local HookRegistry = require("src.core.hook_registry")
@@ -12,6 +13,10 @@ local Validator = require("src.core.validator")
 local ShopSystem = {}
 
 local MAX_BLACK_MARKET_TRICK_OFFERS = 1
+local UNCOMMON_OR_BETTER = {
+  uncommon = true,
+  rare = true,
+}
 
 local function isTrickType(offerType)
   return offerType == "trick" or offerType == "upgrade"
@@ -31,8 +36,15 @@ local function buildUnownedPool(runState, definitions, offerType)
 
   for _, definition in ipairs(definitions) do
     local offerEligible = not isTrickType(offerType) or definition.shopEligible == true
+    local grantable = true
 
-    if offerEligible and isUnlocked(definition, unlockedIds) and not ownedIndex[definition.id] then
+    if isTrickType(offerType) then
+      grantable = Upgrades.canGrantUpgrade(ownedList, definition.id)
+    else
+      grantable = not ownedIndex[definition.id]
+    end
+
+    if offerEligible and isUnlocked(definition, unlockedIds) and grantable then
       table.insert(pool, {
         type = offerType,
         contentId = definition.id,
@@ -111,6 +123,78 @@ local function normalizeOffers(offers)
   end
 end
 
+local function ensureExtortionTrace(context)
+  context.trace.extortionEffects = context.trace.extortionEffects or {}
+  return context.trace.extortionEffects
+end
+
+local function recordExtortionEffect(context, effect)
+  table.insert(ensureExtortionTrace(context), effect)
+end
+
+local function isInitialGeneration(options)
+  return options == nil or options.reason == nil or options.reason == "initial"
+end
+
+local function isRerollGeneration(options)
+  return type(options and options.reason) == "string" and string.sub(options.reason, 1, 7) == "reroll_"
+end
+
+local function getRerollCount(options)
+  local sessionCount = options and options.shopSession and options.shopSession.rerollsUsed or nil
+  return math.max(0, math.floor(tonumber(options and options.rerollCount or sessionCount) or 0))
+end
+
+local function getUsedOfferIds(offers)
+  local usedIds = {}
+
+  for _, offer in ipairs(offers or {}) do
+    usedIds[offer.contentId] = true
+  end
+
+  return usedIds
+end
+
+local function cloneOffer(offer)
+  return offer and Utils.clone(offer) or nil
+end
+
+local function chooseUncommonOrBetterCoin(runState, rng, usedIds, rarityWeights)
+  local candidates = {}
+
+  for _, offer in ipairs(buildUnownedPool(runState, Coins.getAll(), "coin")) do
+    if UNCOMMON_OR_BETTER[offer.rarity] and not usedIds[offer.contentId] then
+      table.insert(candidates, offer)
+    end
+  end
+
+  return takeRandomOffer(candidates, rng, usedIds, rarityWeights)
+end
+
+local function findCheapestCoinOffer(offers)
+  local bestOffer = nil
+
+  for _, offer in ipairs(offers or {}) do
+    if offer.type == "coin" and offer.purchased ~= true then
+      if not bestOffer
+        or (offer.price or 0) < (bestOffer.price or 0) then
+        bestOffer = offer
+      end
+    end
+  end
+
+  return bestOffer
+end
+
+local function consumeExtortionUse(runState, source, reason)
+  if not source or not source.trickId then
+    return nil
+  end
+
+  local crumble = CrumbleSystem.consumeUse(runState, source.trickId, reason)
+  return crumble
+end
+
 local function buildShopTrace(mode)
   return {
     mode = mode,
@@ -132,6 +216,8 @@ local function createShopContext(runState, stageState, metaProjection, offers, c
       type = currentOffer.type,
       contentId = currentOffer.contentId,
       rarity = currentOffer.rarity,
+      extorted = currentOffer.extorted == true,
+      stolen = currentOffer.stolen == true,
     } or nil,
     shopMessages = {},
     trace = buildShopTrace(mode),
@@ -179,7 +265,7 @@ local function buildPurchaseActions(offer, chargedPrice)
   if offer.type == "coin" then
     table.insert(actions, 2, { op = "grant_coin", coinId = offer.contentId })
   else
-    table.insert(actions, 2, { op = "grant_trick", trickId = offer.contentId })
+    table.insert(actions, 2, { op = "grant_trick", trickId = offer.contentId, replacePosition = offer.replacePosition })
   end
 
   return actions
@@ -198,10 +284,8 @@ local function buildBaseOffers(runState, stageState, metaProjection, rng, offers
   end
 
   local coinPool = buildUnownedPool(runState, Coins.getAll(), "coin")
-  local upgradePool = buildUnownedPool(runState, Upgrades.getAll(), "trick")
 
   local neededCoinOffers = math.max(0, shopRules.guaranteedCoinOffers - countOffersByType(offers, "coin"))
-  local neededUpgradeOffers = math.max(0, shopRules.guaranteedUpgradeOffers - countOffersByType(offers, "trick") - countOffersByType(offers, "upgrade"))
 
   for _ = 1, neededCoinOffers do
     local offer = takeRandomOffer(coinPool, rng, usedIds, shopRules.rarityWeights)
@@ -211,21 +295,9 @@ local function buildBaseOffers(runState, stageState, metaProjection, rng, offers
     end
   end
 
-  for _ = 1, neededUpgradeOffers do
-    local offer = takeRandomOffer(upgradePool, rng, usedIds, shopRules.rarityWeights)
-
-    if offer then
-      table.insert(offers, offer)
-    end
-  end
-
   while #offers < (shopRules.offerCount + bonusOfferCount) do
     local mixedPool = {}
     Utils.appendAll(mixedPool, coinPool)
-
-    if (countOffersByType(offers, "trick") + countOffersByType(offers, "upgrade")) < MAX_BLACK_MARKET_TRICK_OFFERS then
-      Utils.appendAll(mixedPool, upgradePool)
-    end
 
     local offer = takeRandomOffer(mixedPool, rng, usedIds, shopRules.rarityWeights)
 
@@ -239,15 +311,182 @@ local function buildBaseOffers(runState, stageState, metaProjection, rng, offers
   return shopRules
 end
 
-function ShopSystem.generateOffers(runState, stageState, metaProjection, rng)
+local function applyLoadedShelves(runState, context, rng, shopRules, options)
+  if not isInitialGeneration(options) then
+    return
+  end
+
+  local source = CrumbleSystem.findOwnedEffectSource(runState, "guarantee_uncommon_coin")
+  if not source then
+    return
+  end
+
+  for _, offer in ipairs(context.shopOffers or {}) do
+    if offer.type == "coin" and UNCOMMON_OR_BETTER[offer.rarity] then
+      recordExtortionEffect(context, {
+        effect = "guarantee_uncommon_coin",
+        sourceId = source.trickId,
+        natural = true,
+        crumble = consumeExtortionUse(runState, source, "black_market_visit"),
+      })
+      return
+    end
+  end
+
+  local usedIds = getUsedOfferIds(context.shopOffers)
+  local guaranteedOffer = chooseUncommonOrBetterCoin(runState, rng, usedIds, shopRules and shopRules.rarityWeights or nil)
+
+  if not guaranteedOffer then
+    recordExtortionEffect(context, {
+      effect = "guarantee_uncommon_coin",
+      sourceId = source.trickId,
+      skipped = true,
+      skipReason = "no_uncommon_coin_available",
+    })
+    return
+  end
+
+  local replacedOffer = nil
+  local replacedIndex = nil
+
+  for index, offer in ipairs(context.shopOffers or {}) do
+    if offer.type == "coin" and not UNCOMMON_OR_BETTER[offer.rarity] then
+      replacedOffer = offer
+      replacedIndex = index
+      break
+    end
+  end
+
+  if replacedIndex then
+    context.shopOffers[replacedIndex] = guaranteedOffer
+  else
+    table.insert(context.shopOffers, guaranteedOffer)
+  end
+
+  guaranteedOffer.guaranteedByExtortion = true
+  guaranteedOffer.extortionSourceId = source.trickId
+
+  recordExtortionEffect(context, {
+    effect = "guarantee_uncommon_coin",
+    sourceId = source.trickId,
+    contentId = guaranteedOffer.contentId,
+    rarity = guaranteedOffer.rarity,
+    replacedContentId = replacedOffer and replacedOffer.contentId or nil,
+    crumble = consumeExtortionUse(runState, source, "black_market_visit"),
+  })
+end
+
+local function applyFiveFingerDiscount(runState, context, options)
+  if not isInitialGeneration(options) then
+    return
+  end
+
+  local source = CrumbleSystem.findOwnedEffectSource(runState, "extort_cheapest_coin")
+  local offer = source and findCheapestCoinOffer(context.shopOffers) or nil
+
+  if not source or not offer then
+    return
+  end
+
+  local previousPrice = offer.price or 0
+  offer.extorted = true
+  offer.stolen = true
+  offer.priceBeforeExtortion = previousPrice
+  offer.extortionSourceId = source.trickId
+  offer.extortionEffect = "extort_cheapest_coin"
+  offer.price = 0
+
+  recordExtortionEffect(context, {
+    effect = "extort_cheapest_coin",
+    sourceId = source.trickId,
+    contentId = offer.contentId,
+    priceBefore = previousPrice,
+    priceAfter = offer.price,
+    crumble = consumeExtortionUse(runState, source, "black_market_visit"),
+  })
+end
+
+local function applyPressureSale(runState, context, options)
+  if not isRerollGeneration(options) then
+    return
+  end
+
+  local source = CrumbleSystem.findOwnedEffectSource(runState, "pressure_reroll_discount")
+  local rerollCount = getRerollCount(options)
+  local discount = math.max(1, rerollCount)
+  local adjustedOffers = {}
+
+  if not source then
+    return
+  end
+
+  for _, offer in ipairs(context.shopOffers or {}) do
+    if offer.type == "coin" and offer.purchased ~= true then
+      local priceBefore = offer.price or 0
+      offer.priceBeforePressureSale = priceBefore
+      offer.pressureSaleDiscount = discount
+      offer.pressureSaleSourceId = source.trickId
+      offer.price = math.max(0, priceBefore - discount)
+      table.insert(adjustedOffers, {
+        contentId = offer.contentId,
+        priceBefore = priceBefore,
+        priceAfter = offer.price,
+      })
+    end
+  end
+
+  if #adjustedOffers == 0 then
+    return
+  end
+
+  recordExtortionEffect(context, {
+    effect = "pressure_reroll_discount",
+    sourceId = source.trickId,
+    rerollCount = rerollCount,
+    discount = discount,
+    offers = adjustedOffers,
+    crumble = consumeExtortionUse(runState, source, "black_market_reroll"),
+  })
+end
+
+local function applyNoQuestionsAsked(runState, stageState, context, offer)
+  if not (offer and offer.type == "coin" and offer.extorted == true) then
+    return
+  end
+
+  local source = CrumbleSystem.findOwnedEffectSource(runState, "extorted_coin_reroll")
+
+  if not source then
+    return
+  end
+
+  ActionQueue.applyAll(runState, stageState, context, {
+    { op = "add_shop_rerolls", amount = 1, reason = "no_questions_asked", trickId = source.trickId },
+  })
+
+  recordExtortionEffect(context, {
+    effect = "extorted_coin_reroll",
+    sourceId = source.trickId,
+    contentId = offer.contentId,
+    amount = 1,
+    shopRerollsAfter = runState.shopRerollsRemaining or 0,
+    crumble = consumeExtortionUse(runState, source, "extorted_coin_taken"),
+  })
+end
+
+function ShopSystem.generateOffers(runState, stageState, metaProjection, rng, options)
+  options = options or {}
   local sources = HookRegistry.collectSources(runState, stageState, metaProjection)
   local context = createShopContext(runState, stageState, metaProjection, {}, nil, "generation")
   context.activeSources = sources
 
   runHookPhase("before_shop_generation", sources, context)
   local shopRules = buildBaseOffers(runState, stageState, metaProjection, rng, context.shopOffers, context)
+  applyLoadedShelves(runState, context, rng, shopRules, options)
   normalizeOffers(context.shopOffers)
   runHookPhase("after_shop_generation", sources, context)
+  applyFiveFingerDiscount(runState, context, options)
+  applyPressureSale(runState, context, options)
   normalizeOffers(context.shopOffers)
 
   finalizeShopTrace(context)
@@ -284,13 +523,18 @@ function ShopSystem.purchaseOffer(runState, offer, stageState, metaProjection)
   end
 
   local chargedPrice = offer.price
-  local grantOk, grantResult = AcquisitionSystem.canGrantByType(runState, offer.type, offer.contentId)
+  local grantOk, grantResult, grantMetadata = AcquisitionSystem.canGrantByType(runState, offer.type, offer.contentId)
 
   if not grantOk then
     return failPurchase(grantResult, context)
   end
+  if type(grantMetadata) == "table" and grantMetadata.code == "trick_board_full"
+    and offer.replacePosition == nil then
+    return failPurchase("trick_board_full", context)
+  end
 
   ActionQueue.applyAll(runState, stageState, context, buildPurchaseActions(offer, chargedPrice))
+  applyNoQuestionsAsked(runState, stageState, context, offer)
 
   -- Intentionally reuse the pre-purchase source snapshot here so the newly acquired
   -- upgrade starts affecting later shop visits or purchases, not the transaction that bought it.
@@ -348,8 +592,8 @@ function ShopSystem.consumeReroll(runState, stageState, metaProjection)
   return "paid"
 end
 
-function ShopSystem.grantUpgrade(runState, upgradeId)
-  return AcquisitionSystem.grantUpgrade(runState, upgradeId)
+function ShopSystem.grantUpgrade(runState, upgradeId, options)
+  return AcquisitionSystem.grantUpgrade(runState, upgradeId, nil, options)
 end
 
 function ShopSystem.grantCoin(runState, coinId)

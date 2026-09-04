@@ -1,4 +1,5 @@
 local GameConfig = require("src.app.config")
+local EffectiveValueSystem = require("src.systems.effective_value_system")
 local Utils = require("src.core.utils")
 
 local LuckSystem = {}
@@ -183,21 +184,32 @@ function LuckSystem.canGeneratePositiveLuck(context, options)
   return context.luck.fatedFlipGeneratesLuck == true
 end
 
+local function getGenerationMultiplier(runState, context)
+  return math.max(0, toNumber(EffectiveValueSystem.getEffectiveValue(
+    "luck.generationMultiplier",
+    runState,
+    context and context.stageState or nil,
+    context or {}
+  ), 1.0))
+end
+
 function LuckSystem.addLuck(runState, context, amount, options)
   local luck = LuckSystem.normalize(runState)
-  local delta = toNumber(amount, 0)
+  local baseDelta = toNumber(amount, 0)
+  local delta = baseDelta
   local trace = LuckSystem.ensureTrace(context)
   local before = luck.value
-  local suppressed = delta > 0 and not LuckSystem.canGeneratePositiveLuck(context, options)
+  local suppressed = baseDelta > 0 and not LuckSystem.canGeneratePositiveLuck(context, options)
   local source = options and options.source or nil
   local reason = options and options.reason or nil
+  local generationMultiplier = 1.0
 
   if suppressed then
     if trace then
       local eventId = string.format("luck_%02d", #(trace.deltas or {}) + 1)
       table.insert(trace.deltas, {
         eventId = eventId,
-        amount = delta,
+        amount = baseDelta,
         appliedAmount = 0,
         before = before,
         after = before,
@@ -212,6 +224,11 @@ function LuckSystem.addLuck(runState, context, amount, options)
     return 0, luck.value
   end
 
+  if baseDelta > 0 then
+    generationMultiplier = getGenerationMultiplier(runState, context)
+    delta = baseDelta * generationMultiplier
+  end
+
   luck.value = Utils.clamp(luck.value + delta, 0, luck.max)
   luck.fatedFlipActive = luck.value >= luck.max
   local appliedAmount = luck.value - before
@@ -221,6 +238,8 @@ function LuckSystem.addLuck(runState, context, amount, options)
     event = {
       eventId = string.format("luck_%02d", #(trace.deltas or {}) + 1),
       amount = delta,
+      baseAmount = generationMultiplier ~= 1.0 and baseDelta or nil,
+      generationMultiplier = generationMultiplier ~= 1.0 and generationMultiplier or nil,
       appliedAmount = appliedAmount,
       before = before,
       after = luck.value,
@@ -235,6 +254,8 @@ function LuckSystem.addLuck(runState, context, amount, options)
 
   event = event or {
     amount = delta,
+    baseAmount = generationMultiplier ~= 1.0 and baseDelta or nil,
+    generationMultiplier = generationMultiplier ~= 1.0 and generationMultiplier or nil,
     appliedAmount = appliedAmount,
     before = before,
     after = luck.value,
